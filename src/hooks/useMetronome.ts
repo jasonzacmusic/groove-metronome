@@ -2,14 +2,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as Tone from "tone";
 
 import {
-  ACCENT_VOLUME,
-  buildAccents,
+  buildDefaultPattern,
+  nextSubdivision,
+  PULSE_ACCENT_CYCLE,
+  PULSE_ACCENT_VOLUME,
   SOUND_ENVELOPES,
   SOUND_FREQS,
-  SUBDIVISION_COUNTS,
-  type AccentLevel,
+  withSubdivision,
+  type BeatPattern,
   type BeatSound,
-  type Subdivision,
+  type PulseAccent,
+  type SubdivisionCount,
   type TimeSignature,
 } from "@/lib/metronome-types";
 import { clamp } from "@/lib/utils";
@@ -31,10 +34,10 @@ export interface MetronomeState {
   isPlaying: boolean;
   timeSignature: TimeSignature;
   beatSound: BeatSound;
-  accents: AccentLevel[];
-  subdivision: Subdivision;
+  pattern: BeatPattern[];
   swing: number;
   currentBeat: number;
+  currentPulse: number;
   barCount: number;
   trainerEnabled: boolean;
   trainerPhase: "playing" | "muted";
@@ -44,42 +47,36 @@ export interface MetronomeState {
   rampProgress: { bar: number; currentBpm: number } | null;
   practiceSeconds: number;
   toneStarted: boolean;
+  tapInfo: { count: number; avgBpm: number | null };
 }
 
 /**
- * Sample-accurate metronome engine driven by Tone.Transport.
- * Returns state + setters + transport controls. Mirrors the Pro-Metronome feature set:
- * accents, swing, subdivisions up to septuplets, tempo ramp, mute trainer, practice timer.
+ * Per-beat metronome engine. Each beat in the bar carries its own subdivision count
+ * (1–8) plus a per-pulse accent (normal / accent / ghost / mute). Tone.Transport
+ * schedules one event per beat; sub-pulses fan out within the beat span.
  */
 export function useMetronome() {
-  // --- Core state ---
   const [bpm, setBpm] = useState(120);
   const [isPlaying, setIsPlaying] = useState(false);
   const [timeSignature, setTimeSignature] = useState<TimeSignature>({ numerator: 4, denominator: 4 });
   const [currentBeat, setCurrentBeat] = useState(-1);
+  const [currentPulse, setCurrentPulse] = useState(-1);
   const [beatSound, setBeatSound] = useState<BeatSound>("click");
-  const [accents, setAccents] = useState<AccentLevel[]>(buildAccents(4));
-  const [subdivision, setSubdivision] = useState<Subdivision>("none");
+  const [pattern, setPattern] = useState<BeatPattern[]>(() => buildDefaultPattern(4, 1));
   const [swing, setSwing] = useState(0);
   const [barCount, setBarCount] = useState(0);
 
-  // --- Trainer ---
   const [trainerEnabled, setTrainerEnabled] = useState(false);
   const [trainerConfig, setTrainerConfig] = useState<TrainerConfig>({ playBars: 2, muteBars: 2 });
   const [trainerPhase, setTrainerPhase] = useState<"playing" | "muted">("playing");
 
-  // --- Ramp ---
   const [rampEnabled, setRampEnabled] = useState(false);
   const [rampConfig, setRampConfig] = useState<RampConfig>({ startBpm: 80, endBpm: 160, durationBars: 8, loop: false });
   const [rampProgress, setRampProgress] = useState<MetronomeState["rampProgress"]>(null);
 
-  // --- Practice timer ---
   const [practiceSeconds, setPracticeSeconds] = useState(0);
-
-  // --- Tone ---
   const [toneStarted, setToneStarted] = useState(false);
 
-  // --- Refs ---
   const synthRef = useRef<Tone.Synth | null>(null);
   const scheduleIdRef = useRef<number | null>(null);
   const beatRef = useRef(0);
@@ -87,8 +84,7 @@ export function useMetronome() {
   const rampIntervalRef = useRef<number | null>(null);
   const practiceIntervalRef = useRef<number | null>(null);
 
-  const accentsRef = useRef(accents);
-  const subdivisionRef = useRef(subdivision);
+  const patternRef = useRef(pattern);
   const swingRef = useRef(swing);
   const beatSoundRef = useRef(beatSound);
   const timeSignatureRef = useRef(timeSignature);
@@ -98,8 +94,7 @@ export function useMetronome() {
   const rampEnabledRef = useRef(rampEnabled);
   const rampConfigRef = useRef(rampConfig);
 
-  useEffect(() => { accentsRef.current = accents; }, [accents]);
-  useEffect(() => { subdivisionRef.current = subdivision; }, [subdivision]);
+  useEffect(() => { patternRef.current = pattern; }, [pattern]);
   useEffect(() => { swingRef.current = swing; }, [swing]);
   useEffect(() => { beatSoundRef.current = beatSound; }, [beatSound]);
   useEffect(() => { timeSignatureRef.current = timeSignature; }, [timeSignature]);
@@ -109,14 +104,19 @@ export function useMetronome() {
   useEffect(() => { rampEnabledRef.current = rampEnabled; }, [rampEnabled]);
   useEffect(() => { rampConfigRef.current = rampConfig; }, [rampConfig]);
 
-  // Sync accents length when numerator changes
+  // Resize pattern when numerator changes
   useEffect(() => {
-    setAccents((prev) => {
+    setPattern((prev) => {
       const n = timeSignature.numerator;
       if (prev.length === n) return prev;
-      const next = buildAccents(n);
-      for (let i = 0; i < Math.min(prev.length, n); i++) next[i] = prev[i];
-      if (next[0] !== "f" && next[0] !== "mute") next[0] = "f";
+      const next: BeatPattern[] = [];
+      for (let i = 0; i < n; i++) {
+        if (i < prev.length) next.push(prev[i]);
+        else next.push({ pulses: 1, accents: ["normal"] });
+      }
+      if (next.length > 0 && next[0].accents[0] === "ghost") {
+        next[0] = { ...next[0], accents: ["accent", ...next[0].accents.slice(1)] };
+      }
       return next;
     });
   }, [timeSignature.numerator]);
@@ -128,7 +128,6 @@ export function useMetronome() {
       oscillator: { type: beatSoundRef.current === "cowbell" ? "square" : "sine" },
       envelope: env,
     }).toDestination();
-    // Warm up synth to avoid first-note latency
     synthRef.current.triggerAttackRelease(1, "128n", Tone.now(), 0);
   }, []);
 
@@ -143,13 +142,14 @@ export function useMetronome() {
 
   const scheduleLoop = useCallback(() => {
     const id = Tone.getTransport().scheduleRepeat((time) => {
-      const beat = beatRef.current;
+      const beatIdx = beatRef.current;
       const ts = timeSignatureRef.current;
-      const accs = accentsRef.current;
+      const pat = patternRef.current;
       const sound = beatSoundRef.current;
       const freqs = SOUND_FREQS[sound];
       const sw = swingRef.current;
-      const subCount = SUBDIVISION_COUNTS[subdivisionRef.current];
+      const beatPat = pat[beatIdx] ?? { pulses: 1 as SubdivisionCount, accents: ["normal" as PulseAccent] };
+      const beatDuration = 60 / bpmRef.current;
 
       let muted = false;
       if (trainerEnabledRef.current) {
@@ -157,32 +157,34 @@ export function useMetronome() {
         const total = Math.max(1, playBars + muteBars);
         const phaseIdx = barCountRef.current % total;
         muted = phaseIdx >= playBars;
-        if (beat === 0) {
+        if (beatIdx === 0) {
           const phase: "playing" | "muted" = muted ? "muted" : "playing";
           Tone.Draw.schedule(() => setTrainerPhase(phase), time);
         }
       }
 
-      const accentLevel = accs[beat] ?? "mf";
-      const isAccent = beat === 0;
-      const freq = isAccent ? freqs.accent : freqs.normal;
-      const vol = ACCENT_VOLUME[accentLevel];
-      if (!muted) playClick(time, freq, vol);
-
-      if (subCount > 1 && !muted) {
-        const beatDuration = 60 / bpmRef.current;
-        for (let s = 1; s < subCount; s++) {
-          let offset = (beatDuration / subCount) * s;
-          if (sw !== 0 && s % 2 === 1 && subCount === 2) {
-            offset += (sw / 100) * (beatDuration / 6);
-          }
-          playClick(time + offset, freqs.sub, vol - 6);
+      const pulses = beatPat.pulses;
+      for (let p = 0; p < pulses; p++) {
+        let offset = (beatDuration / pulses) * p;
+        // Apply swing only when there are exactly 2 pulses (8th-note feel)
+        if (sw !== 0 && pulses === 2 && p === 1) {
+          offset += (sw / 100) * (beatDuration / 6);
         }
+        const accent: PulseAccent = beatPat.accents[p] ?? "normal";
+        const isFirstPulse = p === 0;
+        const freq = isFirstPulse
+          ? (accent === "accent" ? freqs.accent : freqs.normal)
+          : freqs.sub;
+        const vol = PULSE_ACCENT_VOLUME[accent];
+        if (!muted) playClick(time + offset, freq, vol);
+
+        const pulseIndex = p;
+        Tone.Draw.schedule(() => setCurrentPulse(pulseIndex), time + offset);
       }
 
-      Tone.Draw.schedule(() => setCurrentBeat(beat), time);
+      Tone.Draw.schedule(() => setCurrentBeat(beatIdx), time);
 
-      beatRef.current = (beat + 1) % ts.numerator;
+      beatRef.current = (beatIdx + 1) % ts.numerator;
       if (beatRef.current === 0) {
         barCountRef.current++;
         const bc = barCountRef.current;
@@ -235,6 +237,7 @@ export function useMetronome() {
     beatRef.current = 0;
     barCountRef.current = 0;
     setCurrentBeat(-1);
+    setCurrentPulse(-1);
 
     const transport = Tone.getTransport();
     transport.bpm.value = bpmRef.current;
@@ -270,6 +273,7 @@ export function useMetronome() {
     }
     setIsPlaying(false);
     setCurrentBeat(-1);
+    setCurrentPulse(-1);
     setBarCount(0);
     setRampProgress(null);
     setTrainerPhase("playing");
@@ -280,14 +284,13 @@ export function useMetronome() {
     else void start();
   }, [isPlaying, start, stop]);
 
-  // Live BPM updates while playing (and not ramping)
   useEffect(() => {
     if (isPlaying && !rampEnabled) {
       Tone.getTransport().bpm.value = bpm;
     }
   }, [bpm, isPlaying, rampEnabled]);
 
-  // Reschedule when subdivision/time signature changes mid-play
+  // Reschedule when time signature changes mid-play (subdivisions are read live from ref)
   useEffect(() => {
     if (!isPlaying) return;
     const transport = Tone.getTransport();
@@ -297,14 +300,13 @@ export function useMetronome() {
     transport.timeSignature = timeSignature.numerator;
     scheduleLoop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subdivision, timeSignature.numerator, timeSignature.denominator]);
+  }, [timeSignature.numerator, timeSignature.denominator]);
 
-  // Recreate synth when sound changes during playback
   useEffect(() => {
     if (isPlaying) ensureSynth();
   }, [beatSound, isPlaying, ensureSynth]);
 
-  // Pre-init Tone on first user gesture so the very first start is instant
+  // Pre-init Tone on first user gesture
   useEffect(() => {
     const init = () => {
       if (!toneStarted) {
@@ -325,7 +327,6 @@ export function useMetronome() {
     };
   }, [toneStarted, ensureSynth]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       const transport = Tone.getTransport();
@@ -378,18 +379,60 @@ export function useMetronome() {
     }
   }, [toneStarted, ensureSynth, isPlaying, rampEnabled]);
 
-  // --- Helpers ---
+  // --- Pattern setters ---
   const adjustBpm = useCallback((delta: number) => {
     setBpm((b) => clamp(Math.round((b + delta) * 10) / 10, 20, 300));
   }, []);
 
-  const cycleAccent = useCallback((index: number, cycle: AccentLevel[]) => {
-    setAccents((prev) => {
+  const setBeatSubdivision = useCallback((beatIndex: number, pulses: SubdivisionCount) => {
+    setPattern((prev) => {
+      if (beatIndex < 0 || beatIndex >= prev.length) return prev;
       const next = [...prev];
-      const idx = cycle.indexOf(next[index]);
-      next[index] = cycle[(idx + 1) % cycle.length];
+      next[beatIndex] = withSubdivision(prev[beatIndex], pulses);
       return next;
     });
+  }, []);
+
+  const cycleBeatSubdivision = useCallback((beatIndex: number) => {
+    setPattern((prev) => {
+      if (beatIndex < 0 || beatIndex >= prev.length) return prev;
+      const next = [...prev];
+      const cur = prev[beatIndex];
+      next[beatIndex] = withSubdivision(cur, nextSubdivision(cur.pulses));
+      return next;
+    });
+  }, []);
+
+  const cyclePulse = useCallback((beatIndex: number, pulseIndex: number) => {
+    setPattern((prev) => {
+      if (beatIndex < 0 || beatIndex >= prev.length) return prev;
+      const beat = prev[beatIndex];
+      if (pulseIndex < 0 || pulseIndex >= beat.accents.length) return prev;
+      const accents = [...beat.accents];
+      const cur = accents[pulseIndex];
+      const idx = PULSE_ACCENT_CYCLE.indexOf(cur);
+      accents[pulseIndex] = PULSE_ACCENT_CYCLE[(idx + 1) % PULSE_ACCENT_CYCLE.length];
+      const next = [...prev];
+      next[beatIndex] = { ...beat, accents };
+      return next;
+    });
+  }, []);
+
+  const setGlobalSubdivision = useCallback((pulses: SubdivisionCount) => {
+    setPattern((prev) => prev.map((beat) => withSubdivision(beat, pulses)));
+  }, []);
+
+  const resetAccents = useCallback(() => {
+    setPattern((prev) =>
+      prev.map((beat, i) => ({
+        pulses: beat.pulses,
+        accents: Array.from({ length: beat.pulses }, (_, p) => {
+          if (i === 0 && p === 0) return "accent" as PulseAccent;
+          if (p === 0) return "normal" as PulseAccent;
+          return "ghost" as PulseAccent;
+        }),
+      })),
+    );
   }, []);
 
   return {
@@ -398,10 +441,10 @@ export function useMetronome() {
       isPlaying,
       timeSignature,
       beatSound,
-      accents,
-      subdivision,
+      pattern,
       swing,
       currentBeat,
+      currentPulse,
       barCount,
       trainerEnabled,
       trainerConfig,
@@ -412,12 +455,11 @@ export function useMetronome() {
       practiceSeconds,
       toneStarted,
       tapInfo,
-    },
+    } as MetronomeState,
     setBpm,
     setTimeSignature,
     setBeatSound,
-    setAccents,
-    setSubdivision,
+    setPattern,
     setSwing,
     setTrainerEnabled,
     setTrainerConfig,
@@ -428,7 +470,11 @@ export function useMetronome() {
     toggle,
     tap,
     adjustBpm,
-    cycleAccent,
+    setBeatSubdivision,
+    cycleBeatSubdivision,
+    cyclePulse,
+    setGlobalSubdivision,
+    resetAccents,
   };
 }
 
