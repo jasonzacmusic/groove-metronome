@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 
-import { BarView } from "@/components/metronome/BarView";
+import { LevelMeters } from "@/components/metronome/LevelMeters";
+import { NotationPanel } from "@/components/metronome/NotationPanel";
+import { PatternTiles } from "@/components/metronome/PatternTiles";
 import { PolyrhythmWheel } from "@/components/metronome/PolyrhythmWheel";
+import { TapPad } from "@/components/metronome/TapPad";
+import { TempoHeaderStrip } from "@/components/metronome/TempoHeaderStrip";
+import { TimeSignatureControl } from "@/components/metronome/TimeSignatureControl";
 import { TransportButton } from "@/components/metronome/TransportButton";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
@@ -35,17 +40,30 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
     setTrainerConfig,
     setRampEnabled,
     setRampConfig,
+    setPolyrhythm,
     toggle,
     tap,
     adjustBpm,
     cycleBeatSubdivision,
     cyclePulse,
+    setPulseLevel,
+    applyPatternToBeat,
+    applyPatternToAll,
     setGlobalSubdivision,
     resetAccents,
   } = metronome;
 
   const [targetMinutes, setTargetMinutes] = useState(5);
+  const [selectedBeat, setSelectedBeat] = useState<number | null>(null);
 
+  // Keep selectedBeat in range if numerator changes
+  useEffect(() => {
+    if (selectedBeat !== null && selectedBeat >= state.timeSignature.numerator) {
+      setSelectedBeat(null);
+    }
+  }, [state.timeSignature.numerator, selectedBeat]);
+
+  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
@@ -78,18 +96,19 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-10 lg:gap-14 pb-16">
       {/* HERO column */}
-      <section className="space-y-7">
+      <section className="space-y-6">
+        {/* Top digital readout strip */}
+        <TempoHeaderStrip bpm={state.bpm} timeSignature={state.timeSignature} pattern={state.pattern} />
+
         {/* View toggle */}
         <div className="flex items-center justify-between">
           <span className="tiny-caps text-[10px] text-muted-foreground">
-            {state.timeSignature.numerator}/{state.timeSignature.denominator}
-            {" · "}
             {state.isPlaying ? `Bar ${state.barCount + 1}` : "Stopped"}
           </span>
           <div className="inline-flex items-center gap-3 tiny-caps text-[10px]">
             <button
               type="button"
-              onClick={() => onViewChange("wheel")}
+              onPointerDown={(e) => { e.preventDefault(); onViewChange("wheel"); }}
               className={view === "wheel" ? "text-primary" : "text-muted-foreground hover:text-foreground"}
             >
               Wheel
@@ -97,15 +116,15 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
             <span className="text-border">/</span>
             <button
               type="button"
-              onClick={() => onViewChange("bar")}
+              onPointerDown={(e) => { e.preventDefault(); onViewChange("bar"); }}
               className={view === "bar" ? "text-primary" : "text-muted-foreground hover:text-foreground"}
             >
-              Bar
+              Levels
             </button>
           </div>
         </div>
 
-        {/* The hero itself */}
+        {/* Hero view */}
         <div className="relative">
           {view === "wheel" ? (
             <PolyrhythmWheel
@@ -118,40 +137,54 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
               onCyclePulseAccent={cyclePulse}
             />
           ) : (
-            <div className="space-y-5">
-              <div className="text-center">
-                <span className="tiny-caps text-[10px] text-muted-foreground/80">{state.bpm < 200 ? "Tempo" : "Prestissimo"}</span>
-                <div className="font-serif tabular leading-none text-foreground" style={{ fontSize: "clamp(3rem, 12vw, 5rem)" }}>
-                  {Math.round(state.bpm)}
-                </div>
-                <span className="tiny-caps text-[9px] text-muted-foreground/70">BPM</span>
-              </div>
-              <BarView
-                pattern={state.pattern}
-                isPlaying={state.isPlaying}
-                currentBeat={state.currentBeat}
-                currentPulse={state.currentPulse}
-                onCycleBeatSubdivision={cycleBeatSubdivision}
-                onCyclePulseAccent={cyclePulse}
-              />
-            </div>
+            <LevelMeters
+              pattern={state.pattern}
+              isPlaying={state.isPlaying}
+              currentBeat={state.currentBeat}
+              currentPulse={state.currentPulse}
+              onCycleBeatSubdivision={cycleBeatSubdivision}
+              onSetPulseLevel={setPulseLevel}
+            />
           )}
         </div>
 
-        {/* Transport row */}
-        <div className="space-y-5">
-          <div className="flex items-center justify-center gap-5">
-            <button
-              type="button"
-              onClick={tap}
-              className="tiny-caps text-[11px] px-4 py-2 border border-border rounded-sm hover:border-primary/60 transition-colors"
-            >
-              Tap{state.tapInfo.count > 0 ? ` · ${state.tapInfo.count}${state.tapInfo.avgBpm ? `/${state.tapInfo.avgBpm}` : ""}` : ""}
-            </button>
+        {/* Notation */}
+        <div className="space-y-2">
+          <span className="tiny-caps text-[10px] text-foreground">Notation</span>
+          <div className="border border-border rounded-sm bg-[hsl(var(--ink))]/40 px-1 py-1 overflow-x-auto">
+            <NotationPanel
+              pattern={state.pattern}
+              timeSignature={state.timeSignature}
+              currentBeat={state.currentBeat}
+              isPlaying={state.isPlaying}
+            />
+          </div>
+        </div>
+
+        {/* Pattern tiles (Pro-Metronome style) */}
+        <PatternTiles
+          selectedBeat={selectedBeat}
+          beatCount={state.timeSignature.numerator}
+          onSelectBeat={setSelectedBeat}
+          onApply={(pat, beatIndex) => {
+            if (beatIndex === null) applyPatternToAll(pat);
+            else applyPatternToBeat(beatIndex, pat);
+          }}
+        />
+
+        <hr className="rule" />
+
+        {/* Transport row: Tap pad | Play | BPM stepper */}
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 items-center">
+          <TapPad onTap={tap} count={state.tapInfo.count} avgBpm={state.tapInfo.avgBpm} />
+          <div className="flex justify-center">
             <TransportButton isPlaying={state.isPlaying} onToggle={toggle} />
+          </div>
+          <div className="flex flex-col items-center gap-2">
+            <span className="tiny-caps text-[10px] text-muted-foreground">BPM</span>
             <div className="flex items-center gap-1">
-              <Stepper label="−10" onClick={() => adjustBpm(-10)} />
-              <Stepper label="−1" onClick={() => adjustBpm(-1)} primary />
+              <Stepper label="−10" onTap={() => adjustBpm(-10)} />
+              <Stepper label="−1" onTap={() => adjustBpm(-1)} primary />
               <input
                 type="number"
                 value={Math.round(state.bpm)}
@@ -164,36 +197,36 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
                 max={300}
                 aria-label="BPM"
               />
-              <Stepper label="+1" onClick={() => adjustBpm(1)} primary />
-              <Stepper label="+10" onClick={() => adjustBpm(10)} />
+              <Stepper label="+1" onTap={() => adjustBpm(1)} primary />
+              <Stepper label="+10" onTap={() => adjustBpm(10)} />
             </div>
           </div>
+        </div>
 
-          <div className="px-2">
-            <Slider value={[state.bpm]} min={20} max={300} step={1} onValueChange={([v]) => setBpm(v)} />
-          </div>
+        <div className="px-2">
+          <Slider value={[state.bpm]} min={20} max={300} step={1} onValueChange={([v]) => setBpm(v)} />
+        </div>
 
-          <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 tiny-caps text-[10px]">
-            {TEMPO_PRESETS.map((p) => (
-              <button
-                key={p.label}
-                type="button"
-                onClick={() => setBpm(p.bpm)}
-                className={
-                  Math.abs(state.bpm - p.bpm) < 5
-                    ? "text-primary"
-                    : "text-muted-foreground hover:text-foreground transition-colors"
-                }
-              >
-                {p.label} <span className="opacity-50">{p.bpm}</span>
-              </button>
-            ))}
-          </div>
+        <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 tiny-caps text-[10px]">
+          {TEMPO_PRESETS.map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              onPointerDown={(e) => { e.preventDefault(); setBpm(p.bpm); }}
+              className={
+                Math.abs(state.bpm - p.bpm) < 5
+                  ? "text-primary"
+                  : "text-muted-foreground hover:text-foreground transition-colors"
+              }
+            >
+              {p.label} <span className="opacity-50">{p.bpm}</span>
+            </button>
+          ))}
         </div>
 
         <hr className="rule" />
 
-        {/* Subdivisions row — applies globally */}
+        {/* Subdivision row — applies globally */}
         <div className="space-y-3">
           <SectionLabel
             title="Subdivision"
@@ -205,7 +238,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
                 <button
                   key={n}
                   type="button"
-                  onClick={() => setGlobalSubdivision(n)}
+                  onPointerDown={(e) => { e.preventDefault(); setGlobalSubdivision(n); }}
                   className={`px-3 py-1.5 text-xs font-mono border transition-colors ${
                     dominantSubdivision === n
                       ? "border-primary text-primary"
@@ -218,20 +251,25 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
             </div>
             <button
               type="button"
-              onClick={resetAccents}
+              onPointerDown={(e) => { e.preventDefault(); resetAccents(); }}
               className="tiny-caps text-[10px] text-muted-foreground hover:text-primary transition-colors"
             >
               Reset accents
             </button>
           </div>
           <p className="tiny-caps text-[9px] text-muted-foreground/60">
-            Click a beat numeral to cycle 1→8 · Click a pulse to cycle accent
+            Click a beat numeral to cycle 1→8 · Click a pulse to set its level
           </p>
         </div>
       </section>
 
       {/* SIDEBAR column */}
       <aside className="space-y-8 lg:border-l lg:border-border lg:pl-10">
+        {/* Time signature */}
+        <Field label="Time Signature">
+          <TimeSignatureControl value={state.timeSignature} onChange={setTimeSignature} />
+        </Field>
+
         {/* Preset */}
         <Field label="Preset">
           <select
@@ -248,31 +286,6 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
           </select>
         </Field>
 
-        {/* Time signature */}
-        <Field label="Time Signature">
-          <div className="flex items-baseline gap-2">
-            <select
-              value={state.timeSignature.numerator}
-              onChange={(e) => setTimeSignature({ ...state.timeSignature, numerator: Number(e.target.value) })}
-              className="bg-transparent border-b border-border py-1 font-serif text-3xl text-foreground focus:outline-none focus:border-primary"
-            >
-              {Array.from({ length: 15 }, (_, i) => i + 1).map((n) => (
-                <option key={n} value={n} className="bg-background font-sans text-base">{n}</option>
-              ))}
-            </select>
-            <span className="font-serif text-3xl text-muted-foreground">/</span>
-            <select
-              value={state.timeSignature.denominator}
-              onChange={(e) => setTimeSignature({ ...state.timeSignature, denominator: Number(e.target.value) })}
-              className="bg-transparent border-b border-border py-1 font-serif text-3xl text-foreground focus:outline-none focus:border-primary"
-            >
-              {[2, 4, 8, 16].map((d) => (
-                <option key={d} value={d} className="bg-background font-sans text-base">{d}</option>
-              ))}
-            </select>
-          </div>
-        </Field>
-
         {/* Sound */}
         <Field label="Sound">
           <div className="flex flex-wrap gap-x-4 gap-y-2 tiny-caps text-[10px]">
@@ -280,13 +293,37 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
               <button
                 key={s}
                 type="button"
-                onClick={() => setBeatSound(s)}
+                onPointerDown={(e) => { e.preventDefault(); setBeatSound(s); }}
                 className={state.beatSound === s ? "text-primary" : "text-muted-foreground hover:text-foreground transition-colors"}
               >
                 {s}
               </button>
             ))}
           </div>
+        </Field>
+
+        {/* Polyrhythm */}
+        <Field
+          label="Polyrhythm"
+          trailing={
+            <Switch
+              checked={state.polyrhythm.enabled}
+              onCheckedChange={(c) => setPolyrhythm({ enabled: c })}
+            />
+          }
+        >
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-serif text-2xl tabular text-foreground">
+              {state.timeSignature.numerator}<span className="text-muted-foreground/60 mx-1">:</span>{state.polyrhythm.against}
+            </span>
+            <div className="flex items-center gap-1">
+              <Stepper label="−" onTap={() => setPolyrhythm({ against: Math.max(2, state.polyrhythm.against - 1) })} />
+              <Stepper label="+" onTap={() => setPolyrhythm({ against: Math.min(16, state.polyrhythm.against + 1) })} />
+            </div>
+          </div>
+          <p className="tiny-caps text-[9px] text-muted-foreground/70 mt-1">
+            Cross-voice plays {state.polyrhythm.against} evenly per bar
+          </p>
         </Field>
 
         {/* Swing */}
@@ -395,12 +432,12 @@ function Field({ label, trailing, children }: { label: string; trailing?: React.
   );
 }
 
-function Stepper({ label, onClick, primary }: { label: string; onClick: () => void; primary?: boolean }) {
+function Stepper({ label, onTap, primary }: { label: string; onTap: () => void; primary?: boolean }) {
   return (
     <button
       type="button"
-      onClick={onClick}
-      className={`px-1.5 py-1 font-mono text-[10px] transition-colors ${
+      onPointerDown={(e) => { e.preventDefault(); onTap(); }}
+      className={`px-2 py-1 font-mono text-[10px] border border-transparent hover:border-primary/40 rounded-sm transition-all touch-manipulation select-none active:scale-95 ${
         primary ? "text-foreground hover:text-primary" : "text-muted-foreground hover:text-foreground"
       }`}
     >

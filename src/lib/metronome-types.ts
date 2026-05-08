@@ -30,7 +30,46 @@ export const PULSE_ACCENT_HEIGHT: Record<PulseAccent, number> = {
   mute: 0.06,
 };
 
+/** Discrete level (0..3) used by the level-meter view. */
+export const PULSE_ACCENT_LEVEL: Record<PulseAccent, number> = {
+  accent: 3,
+  normal: 2,
+  ghost: 1,
+  mute: 0,
+};
+
+export const LEVEL_TO_ACCENT: PulseAccent[] = ["mute", "ghost", "normal", "accent"];
+
 export const SUBDIVISION_OPTIONS: SubdivisionCount[] = [1, 2, 3, 4, 5, 6, 7, 8];
+
+/** A picker tile that applies a preset rhythmic pattern to a beat. */
+export interface BeatPatternTile {
+  id: string;
+  label: string;
+  glyph: string; // unicode music glyph(s)
+  pattern: BeatPattern;
+}
+
+export const BEAT_PATTERN_TILES: BeatPatternTile[] = [
+  { id: "quarter",        label: "Quarter",         glyph: "♩",   pattern: { pulses: 1, accents: ["normal"] } },
+  { id: "eighths",        label: "Eighths",         glyph: "♫",   pattern: { pulses: 2, accents: ["normal", "ghost"] } },
+  { id: "dotted",         label: "Dotted-8 + 16",   glyph: "♪.♬", pattern: { pulses: 4, accents: ["normal", "mute", "mute", "ghost"] } },
+  { id: "triplet",        label: "Triplet",         glyph: "♬³",  pattern: { pulses: 3, accents: ["normal", "ghost", "ghost"] } },
+  { id: "tripletRestA",   label: "Trip · Rest first", glyph: "𝄾♬", pattern: { pulses: 3, accents: ["mute", "ghost", "ghost"] } },
+  { id: "tripletRestB",   label: "Trip · Rest mid",   glyph: "♬𝄾", pattern: { pulses: 3, accents: ["ghost", "mute", "ghost"] } },
+  { id: "tripletRestC",   label: "Trip · Rest last",  glyph: "♬♬𝄾", pattern: { pulses: 3, accents: ["ghost", "ghost", "mute"] } },
+  { id: "sixteenths",     label: "Sixteenths",      glyph: "♬♬",  pattern: { pulses: 4, accents: ["normal", "ghost", "ghost", "ghost"] } },
+  { id: "quintuplet",     label: "5-let",           glyph: "♬⁵",  pattern: { pulses: 5, accents: ["normal", "ghost", "ghost", "ghost", "ghost"] } },
+  { id: "sextuplet",      label: "6-let",           glyph: "♬⁶",  pattern: { pulses: 6, accents: ["normal", "ghost", "ghost", "ghost", "ghost", "ghost"] } },
+  { id: "septuplet",      label: "7-let",           glyph: "♬⁷",  pattern: { pulses: 7, accents: ["normal", "ghost", "ghost", "ghost", "ghost", "ghost", "ghost"] } },
+  { id: "rest",           label: "Silent beat",     glyph: "𝄽",   pattern: { pulses: 1, accents: ["mute"] } },
+];
+
+/** Polyrhythm: cross-voice fires `against` evenly-spaced clicks per bar. 0/1 = off. */
+export interface PolyrhythmConfig {
+  enabled: boolean;
+  against: number; // 2..16
+}
 
 export const SOUND_FREQS: Record<BeatSound, { accent: number; normal: number; sub: number }> = {
   click:     { accent: 1000, normal: 800, sub: 600 },

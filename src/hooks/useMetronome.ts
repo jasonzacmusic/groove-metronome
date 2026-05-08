@@ -3,14 +3,17 @@ import * as Tone from "tone";
 
 import {
   buildDefaultPattern,
+  LEVEL_TO_ACCENT,
   nextSubdivision,
   PULSE_ACCENT_CYCLE,
+  PULSE_ACCENT_LEVEL,
   PULSE_ACCENT_VOLUME,
   SOUND_ENVELOPES,
   SOUND_FREQS,
   withSubdivision,
   type BeatPattern,
   type BeatSound,
+  type PolyrhythmConfig,
   type PulseAccent,
   type SubdivisionCount,
   type TimeSignature,
@@ -36,8 +39,10 @@ export interface MetronomeState {
   beatSound: BeatSound;
   pattern: BeatPattern[];
   swing: number;
+  polyrhythm: PolyrhythmConfig;
   currentBeat: number;
   currentPulse: number;
+  currentPoly: number;
   barCount: number;
   trainerEnabled: boolean;
   trainerPhase: "playing" | "muted";
@@ -65,6 +70,8 @@ export function useMetronome() {
   const [pattern, setPattern] = useState<BeatPattern[]>(() => buildDefaultPattern(4, 1));
   const [swing, setSwing] = useState(0);
   const [barCount, setBarCount] = useState(0);
+  const [polyrhythm, setPolyrhythmState] = useState<PolyrhythmConfig>({ enabled: false, against: 3 });
+  const [currentPoly, setCurrentPoly] = useState(-1);
 
   const [trainerEnabled, setTrainerEnabled] = useState(false);
   const [trainerConfig, setTrainerConfig] = useState<TrainerConfig>({ playBars: 2, muteBars: 2 });
@@ -86,6 +93,7 @@ export function useMetronome() {
 
   const patternRef = useRef(pattern);
   const swingRef = useRef(swing);
+  const polyrhythmRef = useRef(polyrhythm);
   const beatSoundRef = useRef(beatSound);
   const timeSignatureRef = useRef(timeSignature);
   const bpmRef = useRef(bpm);
@@ -96,6 +104,7 @@ export function useMetronome() {
 
   useEffect(() => { patternRef.current = pattern; }, [pattern]);
   useEffect(() => { swingRef.current = swing; }, [swing]);
+  useEffect(() => { polyrhythmRef.current = polyrhythm; }, [polyrhythm]);
   useEffect(() => { beatSoundRef.current = beatSound; }, [beatSound]);
   useEffect(() => { timeSignatureRef.current = timeSignature; }, [timeSignature]);
   useEffect(() => { bpmRef.current = bpm; }, [bpm]);
@@ -183,6 +192,24 @@ export function useMetronome() {
       }
 
       Tone.Draw.schedule(() => setCurrentBeat(beatIdx), time);
+
+      // Polyrhythm cross-voice — schedule N evenly-spaced clicks across the bar
+      // at the start of every bar. Uses a brighter/different pitch (clave-like).
+      const poly = polyrhythmRef.current;
+      if (beatIdx === 0 && poly.enabled && poly.against >= 2) {
+        const barDuration = beatDuration * ts.numerator;
+        const polyStep = barDuration / poly.against;
+        for (let k = 0; k < poly.against; k++) {
+          const offset = polyStep * k;
+          const isPolyDownbeat = k === 0;
+          if (!muted) {
+            const polyFreq = isPolyDownbeat ? 1800 : 1500;
+            playClick(time + offset, polyFreq, isPolyDownbeat ? -4 : -10);
+          }
+          const polyIdx = k;
+          Tone.Draw.schedule(() => setCurrentPoly(polyIdx), time + offset);
+        }
+      }
 
       beatRef.current = (beatIdx + 1) % ts.numerator;
       if (beatRef.current === 0) {
@@ -274,6 +301,7 @@ export function useMetronome() {
     setIsPlaying(false);
     setCurrentBeat(-1);
     setCurrentPulse(-1);
+    setCurrentPoly(-1);
     setBarCount(0);
     setRampProgress(null);
     setTrainerPhase("playing");
@@ -418,6 +446,52 @@ export function useMetronome() {
     });
   }, []);
 
+  const setPulseLevel = useCallback((beatIndex: number, pulseIndex: number, level: number) => {
+    const lvl = Math.max(0, Math.min(3, Math.round(level)));
+    setPattern((prev) => {
+      if (beatIndex < 0 || beatIndex >= prev.length) return prev;
+      const beat = prev[beatIndex];
+      if (pulseIndex < 0 || pulseIndex >= beat.accents.length) return prev;
+      const accents = [...beat.accents];
+      accents[pulseIndex] = LEVEL_TO_ACCENT[lvl];
+      const next = [...prev];
+      next[beatIndex] = { ...beat, accents };
+      return next;
+    });
+  }, []);
+
+  const cyclePulseLevel = useCallback((beatIndex: number, pulseIndex: number) => {
+    setPattern((prev) => {
+      if (beatIndex < 0 || beatIndex >= prev.length) return prev;
+      const beat = prev[beatIndex];
+      if (pulseIndex < 0 || pulseIndex >= beat.accents.length) return prev;
+      const accents = [...beat.accents];
+      const cur = accents[pulseIndex];
+      const lvl = (PULSE_ACCENT_LEVEL[cur] + 1) % 4;
+      accents[pulseIndex] = LEVEL_TO_ACCENT[lvl];
+      const next = [...prev];
+      next[beatIndex] = { ...beat, accents };
+      return next;
+    });
+  }, []);
+
+  const applyPatternToBeat = useCallback((beatIndex: number, pat: BeatPattern) => {
+    setPattern((prev) => {
+      if (beatIndex < 0 || beatIndex >= prev.length) return prev;
+      const next = [...prev];
+      next[beatIndex] = { pulses: pat.pulses, accents: [...pat.accents] };
+      return next;
+    });
+  }, []);
+
+  const applyPatternToAll = useCallback((pat: BeatPattern) => {
+    setPattern((prev) => prev.map(() => ({ pulses: pat.pulses, accents: [...pat.accents] })));
+  }, []);
+
+  const setPolyrhythm = useCallback((cfg: Partial<PolyrhythmConfig>) => {
+    setPolyrhythmState((prev) => ({ ...prev, ...cfg }));
+  }, []);
+
   const setGlobalSubdivision = useCallback((pulses: SubdivisionCount) => {
     setPattern((prev) => prev.map((beat) => withSubdivision(beat, pulses)));
   }, []);
@@ -443,8 +517,10 @@ export function useMetronome() {
       beatSound,
       pattern,
       swing,
+      polyrhythm,
       currentBeat,
       currentPulse,
+      currentPoly,
       barCount,
       trainerEnabled,
       trainerConfig,
@@ -473,8 +549,13 @@ export function useMetronome() {
     setBeatSubdivision,
     cycleBeatSubdivision,
     cyclePulse,
+    cyclePulseLevel,
+    setPulseLevel,
+    applyPatternToBeat,
+    applyPatternToAll,
     setGlobalSubdivision,
     resetAccents,
+    setPolyrhythm,
   };
 }
 
