@@ -12,7 +12,9 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import type { UseMetronomeReturn } from "@/hooks/useMetronome";
 import {
+  BEAT_SOUND_LABELS,
   METRONOME_PRESETS,
+  pitchLabel,
   SUBDIVISION_OPTIONS,
   TEMPO_PRESETS,
   type BeatSound,
@@ -20,7 +22,7 @@ import {
 } from "@/lib/metronome-types";
 import { clamp, formatTime } from "@/lib/utils";
 
-const SOUNDS: BeatSound[] = ["click", "woodblock", "rimshot", "cowbell", "clave"];
+const SOUNDS: BeatSound[] = ["tone", "cowbell", "clave"];
 
 interface MetronomePageProps {
   metronome: UseMetronomeReturn;
@@ -34,6 +36,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
     setBpm,
     setTimeSignature,
     setBeatSound,
+    setPitch,
     setPattern,
     setSwing,
     setTrainerEnabled,
@@ -288,17 +291,42 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
 
         {/* Sound */}
         <Field label="Sound">
-          <div className="flex flex-wrap gap-x-4 gap-y-2 tiny-caps text-[10px]">
-            {SOUNDS.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onPointerDown={(e) => { e.preventDefault(); setBeatSound(s); }}
-                className={state.beatSound === s ? "text-primary" : "text-muted-foreground hover:text-foreground transition-colors"}
-              >
-                {s}
-              </button>
-            ))}
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-2">
+              {SOUNDS.map((s) => {
+                const active = state.beatSound === s;
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onPointerDown={(e) => { e.preventDefault(); setBeatSound(s); }}
+                    className={
+                      "py-2 rounded-md border tiny-caps text-[10px] tracking-[0.18em] transition-colors " +
+                      (active
+                        ? "border-primary text-primary bg-primary/5"
+                        : "border-border/60 text-muted-foreground hover:text-foreground hover:border-border")
+                    }
+                  >
+                    {BEAT_SOUND_LABELS[s]}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-baseline justify-between tiny-caps text-[9px] tracking-[0.2em]">
+                <span className="text-muted-foreground/60">Deep</span>
+                <span className="text-primary">{pitchLabel(state.pitch)}</span>
+                <span className="text-muted-foreground/60">Piercing</span>
+              </div>
+              <Slider
+                value={[state.pitch]}
+                min={0}
+                max={100}
+                step={1}
+                onValueChange={(v) => setPitch(v[0] ?? 50)}
+              />
+            </div>
           </div>
         </Field>
 

@@ -1,6 +1,12 @@
 export type PulseAccent = "normal" | "accent" | "ghost" | "mute";
 export type SubdivisionCount = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
-export type BeatSound = "click" | "woodblock" | "rimshot" | "cowbell" | "clave";
+export type BeatSound = "tone" | "cowbell" | "clave";
+
+export const BEAT_SOUND_LABELS: Record<BeatSound, string> = {
+  tone: "Tone",
+  cowbell: "Cowbell",
+  clave: "Clave",
+};
 
 export interface BeatPattern {
   pulses: SubdivisionCount;
@@ -71,21 +77,39 @@ export interface PolyrhythmConfig {
   against: number; // 2..16
 }
 
+/**
+ * Base frequencies (Hz) at neutral pitch. The pitch slider multiplies all three
+ * proportionally, so accent / normal / sub spacing is preserved across pitch.
+ */
 export const SOUND_FREQS: Record<BeatSound, { accent: number; normal: number; sub: number }> = {
-  click:     { accent: 1000, normal: 800, sub: 600 },
-  woodblock: { accent: 900,  normal: 700, sub: 500 },
-  rimshot:   { accent: 1100, normal: 850, sub: 650 },
-  cowbell:   { accent: 800,  normal: 650, sub: 480 },
-  clave:     { accent: 2500, normal: 2000, sub: 1500 },
+  tone:    { accent: 1000, normal: 800,  sub: 600 },
+  cowbell: { accent: 800,  normal: 650,  sub: 480 },
+  clave:   { accent: 2200, normal: 1800, sub: 1400 },
 };
 
 export const SOUND_ENVELOPES: Record<BeatSound, { attack: number; decay: number; sustain: number; release: number }> = {
-  click:     { attack: 0.001, decay: 0.05,  sustain: 0,    release: 0.05 },
-  woodblock: { attack: 0.001, decay: 0.08,  sustain: 0,    release: 0.06 },
-  rimshot:   { attack: 0.001, decay: 0.04,  sustain: 0,    release: 0.03 },
-  cowbell:   { attack: 0.001, decay: 0.15,  sustain: 0.02, release: 0.1  },
-  clave:     { attack: 0.001, decay: 0.03,  sustain: 0,    release: 0.02 },
+  tone:    { attack: 0.001, decay: 0.05, sustain: 0,    release: 0.05 },
+  cowbell: { attack: 0.001, decay: 0.15, sustain: 0.02, release: 0.1  },
+  clave:   { attack: 0.001, decay: 0.03, sustain: 0,    release: 0.02 },
 };
+
+/**
+ * Pitch slider: 0..100, neutral = 50.
+ * Maps to a frequency multiplier on a log curve from 0.4× (deep) to 2.5× (piercing).
+ */
+export function pitchToMultiplier(pitch: number): number {
+  const clamped = Math.max(0, Math.min(100, pitch));
+  return 0.4 * Math.pow(6.25, clamped / 100);
+}
+
+/** A friendly word for where the slider is sitting — no numbers required. */
+export function pitchLabel(pitch: number): string {
+  if (pitch < 18) return "Deep";
+  if (pitch < 40) return "Wood";
+  if (pitch < 62) return "Click";
+  if (pitch < 82) return "Bright";
+  return "Piercing";
+}
 
 export interface TimeSignature {
   numerator: number;

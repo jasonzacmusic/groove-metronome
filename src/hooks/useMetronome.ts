@@ -5,6 +5,7 @@ import {
   buildDefaultPattern,
   LEVEL_TO_ACCENT,
   nextSubdivision,
+  pitchToMultiplier,
   PULSE_ACCENT_CYCLE,
   PULSE_ACCENT_LEVEL,
   PULSE_ACCENT_VOLUME,
@@ -37,6 +38,7 @@ export interface MetronomeState {
   isPlaying: boolean;
   timeSignature: TimeSignature;
   beatSound: BeatSound;
+  pitch: number;
   pattern: BeatPattern[];
   swing: number;
   polyrhythm: PolyrhythmConfig;
@@ -66,7 +68,8 @@ export function useMetronome() {
   const [timeSignature, setTimeSignature] = useState<TimeSignature>({ numerator: 4, denominator: 4 });
   const [currentBeat, setCurrentBeat] = useState(-1);
   const [currentPulse, setCurrentPulse] = useState(-1);
-  const [beatSound, setBeatSound] = useState<BeatSound>("click");
+  const [beatSound, setBeatSound] = useState<BeatSound>("tone");
+  const [pitch, setPitch] = useState(50);
   const [pattern, setPattern] = useState<BeatPattern[]>(() => buildDefaultPattern(4, 1));
   const [swing, setSwing] = useState(0);
   const [barCount, setBarCount] = useState(0);
@@ -95,6 +98,7 @@ export function useMetronome() {
   const swingRef = useRef(swing);
   const polyrhythmRef = useRef(polyrhythm);
   const beatSoundRef = useRef(beatSound);
+  const pitchRef = useRef(pitch);
   const timeSignatureRef = useRef(timeSignature);
   const bpmRef = useRef(bpm);
   const trainerEnabledRef = useRef(trainerEnabled);
@@ -106,6 +110,7 @@ export function useMetronome() {
   useEffect(() => { swingRef.current = swing; }, [swing]);
   useEffect(() => { polyrhythmRef.current = polyrhythm; }, [polyrhythm]);
   useEffect(() => { beatSoundRef.current = beatSound; }, [beatSound]);
+  useEffect(() => { pitchRef.current = pitch; }, [pitch]);
   useEffect(() => { timeSignatureRef.current = timeSignature; }, [timeSignature]);
   useEffect(() => { bpmRef.current = bpm; }, [bpm]);
   useEffect(() => { trainerEnabledRef.current = trainerEnabled; }, [trainerEnabled]);
@@ -155,7 +160,13 @@ export function useMetronome() {
       const ts = timeSignatureRef.current;
       const pat = patternRef.current;
       const sound = beatSoundRef.current;
-      const freqs = SOUND_FREQS[sound];
+      const baseFreqs = SOUND_FREQS[sound];
+      const pitchMul = pitchToMultiplier(pitchRef.current);
+      const freqs = {
+        accent: baseFreqs.accent * pitchMul,
+        normal: baseFreqs.normal * pitchMul,
+        sub: baseFreqs.sub * pitchMul,
+      };
       const sw = swingRef.current;
       const beatPat = pat[beatIdx] ?? { pulses: 1 as SubdivisionCount, accents: ["normal" as PulseAccent] };
       const beatDuration = 60 / bpmRef.current;
@@ -515,6 +526,7 @@ export function useMetronome() {
       isPlaying,
       timeSignature,
       beatSound,
+      pitch,
       pattern,
       swing,
       polyrhythm,
@@ -535,6 +547,7 @@ export function useMetronome() {
     setBpm,
     setTimeSignature,
     setBeatSound,
+    setPitch,
     setPattern,
     setSwing,
     setTrainerEnabled,
