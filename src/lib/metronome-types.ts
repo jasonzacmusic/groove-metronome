@@ -1,11 +1,84 @@
 export type PulseAccent = "normal" | "accent" | "ghost" | "mute";
 export type SubdivisionCount = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
-export type BeatSound = "tone" | "cowbell" | "clave";
+export type BeatSound =
+  | "tone"
+  | "studio"
+  | "wood"
+  | "cowbell"
+  | "sample-tight"
+  | "sample-clave"
+  | "sample-marimba"
+  | "sample-rim"
+  | "sample-ping";
 
 export const BEAT_SOUND_LABELS: Record<BeatSound, string> = {
   tone: "Tone",
-  cowbell: "Cowbell",
-  clave: "Clave",
+  studio: "Studio",
+  wood: "Wood",
+  cowbell: "Bell",
+  "sample-tight": "Tight",
+  "sample-clave": "Clave",
+  "sample-marimba": "Marimba",
+  "sample-rim": "Rim",
+  "sample-ping": "Ping",
+};
+
+export interface BeatSoundOption {
+  id: BeatSound;
+  label: string;
+  family: "Modeled" | "Sampled";
+}
+
+export const BEAT_SOUND_OPTIONS: BeatSoundOption[] = [
+  { id: "tone", label: BEAT_SOUND_LABELS.tone, family: "Modeled" },
+  { id: "studio", label: BEAT_SOUND_LABELS.studio, family: "Modeled" },
+  { id: "wood", label: BEAT_SOUND_LABELS.wood, family: "Modeled" },
+  { id: "cowbell", label: BEAT_SOUND_LABELS.cowbell, family: "Modeled" },
+  { id: "sample-tight", label: BEAT_SOUND_LABELS["sample-tight"], family: "Sampled" },
+  { id: "sample-clave", label: BEAT_SOUND_LABELS["sample-clave"], family: "Sampled" },
+  { id: "sample-marimba", label: BEAT_SOUND_LABELS["sample-marimba"], family: "Sampled" },
+  { id: "sample-rim", label: BEAT_SOUND_LABELS["sample-rim"], family: "Sampled" },
+  { id: "sample-ping", label: BEAT_SOUND_LABELS["sample-ping"], family: "Sampled" },
+];
+
+export interface SampleSoundSet {
+  accent: string;
+  normal: string;
+  sub: string;
+  gainDb?: number;
+}
+
+export const SAMPLE_SOUND_SETS: Partial<Record<BeatSound, SampleSoundSet>> = {
+  "sample-tight": {
+    accent: "/metronome-sounds/reapertips/tight-accent.wav",
+    normal: "/metronome-sounds/reapertips/tight-normal.wav",
+    sub: "/metronome-sounds/reapertips/tight-sub.wav",
+    gainDb: -2,
+  },
+  "sample-clave": {
+    accent: "/metronome-sounds/reapertips/clave-accent.wav",
+    normal: "/metronome-sounds/reapertips/clave-normal.wav",
+    sub: "/metronome-sounds/reapertips/clave-sub.wav",
+    gainDb: -1,
+  },
+  "sample-marimba": {
+    accent: "/metronome-sounds/reapertips/marimba-accent.wav",
+    normal: "/metronome-sounds/reapertips/marimba-normal.wav",
+    sub: "/metronome-sounds/reapertips/marimba-sub.wav",
+    gainDb: -3,
+  },
+  "sample-rim": {
+    accent: "/metronome-sounds/reapertips/rim-accent.wav",
+    normal: "/metronome-sounds/reapertips/rim-normal.wav",
+    sub: "/metronome-sounds/reapertips/rim-sub.wav",
+    gainDb: -5,
+  },
+  "sample-ping": {
+    accent: "/metronome-sounds/reapertips/ping-accent.wav",
+    normal: "/metronome-sounds/reapertips/ping-normal.wav",
+    sub: "/metronome-sounds/reapertips/ping-sub.wav",
+    gainDb: -6,
+  },
 };
 
 export interface BeatPattern {
@@ -82,15 +155,36 @@ export interface PolyrhythmConfig {
  * proportionally, so accent / normal / sub spacing is preserved across pitch.
  */
 export const SOUND_FREQS: Record<BeatSound, { accent: number; normal: number; sub: number }> = {
-  tone:    { accent: 1000, normal: 800,  sub: 600 },
-  cowbell: { accent: 800,  normal: 650,  sub: 480 },
-  clave:   { accent: 2200, normal: 1800, sub: 1400 },
+  tone:             { accent: 1000, normal: 800,  sub: 600 },
+  studio:           { accent: 1750, normal: 1350, sub: 950 },
+  wood:             { accent: 760,  normal: 560,  sub: 420 },
+  cowbell:          { accent: 1120, normal: 840,  sub: 620 },
+  "sample-tight":   { accent: 1000, normal: 800,  sub: 600 },
+  "sample-clave":   { accent: 2200, normal: 1800, sub: 1400 },
+  "sample-marimba": { accent: 820,  normal: 620,  sub: 460 },
+  "sample-rim":     { accent: 1700, normal: 1300, sub: 900 },
+  "sample-ping":    { accent: 1400, normal: 1050, sub: 760 },
 };
 
 export const SOUND_ENVELOPES: Record<BeatSound, { attack: number; decay: number; sustain: number; release: number }> = {
-  tone:    { attack: 0.001, decay: 0.05, sustain: 0,    release: 0.05 },
-  cowbell: { attack: 0.001, decay: 0.15, sustain: 0.02, release: 0.1  },
-  clave:   { attack: 0.001, decay: 0.03, sustain: 0,    release: 0.02 },
+  tone:             { attack: 0.001, decay: 0.05, sustain: 0,    release: 0.05 },
+  studio:           { attack: 0.001, decay: 0.025, sustain: 0,    release: 0.018 },
+  wood:             { attack: 0.001, decay: 0.09, sustain: 0.01, release: 0.04 },
+  cowbell:          { attack: 0.001, decay: 0.13, sustain: 0.02, release: 0.08 },
+  "sample-tight":   { attack: 0.001, decay: 0.05, sustain: 0,    release: 0.05 },
+  "sample-clave":   { attack: 0.001, decay: 0.03, sustain: 0,    release: 0.02 },
+  "sample-marimba": { attack: 0.001, decay: 0.12, sustain: 0.01, release: 0.05 },
+  "sample-rim":     { attack: 0.001, decay: 0.09, sustain: 0,    release: 0.04 },
+  "sample-ping":    { attack: 0.001, decay: 0.12, sustain: 0,    release: 0.08 },
+};
+
+export type SynthOscillatorType = "sine" | "triangle" | "square";
+
+export const SOUND_OSCILLATORS: Partial<Record<BeatSound, SynthOscillatorType>> = {
+  tone: "sine",
+  studio: "triangle",
+  wood: "square",
+  cowbell: "square",
 };
 
 /**

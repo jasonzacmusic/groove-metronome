@@ -13,16 +13,16 @@ import { Switch } from "@/components/ui/switch";
 import type { UseMetronomeReturn } from "@/hooks/useMetronome";
 import {
   BEAT_SOUND_LABELS,
+  BEAT_SOUND_OPTIONS,
   METRONOME_PRESETS,
   pitchLabel,
   SUBDIVISION_OPTIONS,
   TEMPO_PRESETS,
-  type BeatSound,
+  type BeatPattern,
+  type PulseAccent,
   type SubdivisionCount,
 } from "@/lib/metronome-types";
 import { clamp, formatTime } from "@/lib/utils";
-
-const SOUNDS: BeatSound[] = ["tone", "cowbell", "clave"];
 
 interface MetronomePageProps {
   metronome: UseMetronomeReturn;
@@ -264,6 +264,21 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
             Click a beat numeral to cycle 1→8 · Click a pulse to set its level
           </p>
         </div>
+
+        <div className="space-y-3">
+          <SectionLabel title="Per Beat" hint="Subdivision map" />
+          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-6 gap-2">
+            {state.pattern.map((beat, index) => (
+              <SubdivisionOrb
+                key={index}
+                beat={beat}
+                beatIndex={index}
+                active={state.isPlaying && state.currentBeat === index}
+                onCycle={() => cycleBeatSubdivision(index)}
+              />
+            ))}
+          </div>
+        </div>
       </section>
 
       {/* SIDEBAR column */}
@@ -293,21 +308,22 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
         <Field label="Sound">
           <div className="space-y-3">
             <div className="grid grid-cols-3 gap-2">
-              {SOUNDS.map((s) => {
-                const active = state.beatSound === s;
+              {BEAT_SOUND_OPTIONS.map((sound) => {
+                const active = state.beatSound === sound.id;
                 return (
                   <button
-                    key={s}
+                    key={sound.id}
                     type="button"
-                    onPointerDown={(e) => { e.preventDefault(); setBeatSound(s); }}
+                    onPointerDown={(e) => { e.preventDefault(); setBeatSound(sound.id); }}
                     className={
-                      "py-2 rounded-md border tiny-caps text-[10px] tracking-[0.18em] transition-colors " +
+                      "min-h-14 px-1.5 py-2 rounded-md border transition-colors touch-manipulation " +
                       (active
                         ? "border-primary text-primary bg-primary/5"
                         : "border-border/60 text-muted-foreground hover:text-foreground hover:border-border")
                     }
                   >
-                    {BEAT_SOUND_LABELS[s]}
+                    <span className="tiny-caps block text-[10px] tracking-[0.12em]">{BEAT_SOUND_LABELS[sound.id]}</span>
+                    <span className="tiny-caps block mt-1 text-[7px] tracking-[0.12em] opacity-50">{sound.family}</span>
                   </button>
                 );
               })}
@@ -445,6 +461,70 @@ function SectionLabel({ title, hint }: { title: string; hint?: string }) {
       <span className="tiny-caps text-[10px] text-foreground">{title}</span>
       {hint && <span className="tiny-caps text-[9px] text-muted-foreground/70">{hint}</span>}
     </div>
+  );
+}
+
+function accentColor(accent: PulseAccent, active: boolean): string {
+  if (active) return "hsl(var(--amber))";
+  if (accent === "accent") return "hsl(var(--amber) / 0.72)";
+  if (accent === "normal") return "hsl(var(--slate-cyan) / 0.62)";
+  if (accent === "ghost") return "hsl(36 22% 72% / 0.24)";
+  return "hsl(var(--ink))";
+}
+
+function subdivisionBackground(beat: BeatPattern, active: boolean): string {
+  const slice = 100 / beat.pulses;
+  return `conic-gradient(${beat.accents
+    .map((accent, index) => {
+      const start = index * slice;
+      const end = (index + 1) * slice;
+      return `${accentColor(accent, active)} ${start}% ${end}%`;
+    })
+    .join(", ")})`;
+}
+
+function SubdivisionOrb({
+  beat,
+  beatIndex,
+  active,
+  onCycle,
+}: {
+  beat: BeatPattern;
+  beatIndex: number;
+  active: boolean;
+  onCycle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onPointerDown={(e) => {
+        e.preventDefault();
+        onCycle();
+      }}
+      className={
+        "flex items-center gap-3 rounded-md border px-3 py-2 text-left transition-colors touch-manipulation " +
+        (active
+          ? "border-accent/70 bg-accent/5"
+          : "border-border/60 hover:border-primary/50 hover:bg-primary/5")
+      }
+      aria-label={`Beat ${beatIndex + 1}: ${beat.pulses} subdivisions. Tap to cycle.`}
+    >
+      <span
+        className="relative grid size-11 shrink-0 place-items-center rounded-full border"
+        style={{
+          background: subdivisionBackground(beat, active),
+          borderColor: active ? "hsl(var(--accent))" : "hsl(var(--border))",
+          boxShadow: active ? "0 0 12px hsl(var(--accent) / 0.22)" : undefined,
+        }}
+      >
+        <span className="absolute inset-[28%] rounded-full bg-background/90" />
+        <span className="relative font-serif text-lg leading-none text-foreground">{beatIndex + 1}</span>
+      </span>
+      <span className="min-w-0">
+        <span className="tiny-caps block text-[8px] text-muted-foreground">Beat</span>
+        <span className="font-mono text-sm tabular text-foreground">{beat.pulses} pulse{beat.pulses > 1 ? "s" : ""}</span>
+      </span>
+    </button>
   );
 }
 

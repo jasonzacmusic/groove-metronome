@@ -9,8 +9,10 @@ import {
   PULSE_ACCENT_CYCLE,
   PULSE_ACCENT_LEVEL,
   PULSE_ACCENT_VOLUME,
+  SAMPLE_SOUND_SETS,
   SOUND_ENVELOPES,
   SOUND_FREQS,
+  SOUND_OSCILLATORS,
   withSubdivision,
   type BeatPattern,
   type BeatSound,
@@ -57,6 +59,17 @@ export interface MetronomeState {
   tapInfo: { count: number; avgBpm: number | null };
 }
 
+type ClickRole = "accent" | "normal" | "sub";
+
+function displayBpmToTransportBpm(displayBpm: number, denominator: number): number {
+  return displayBpm * (4 / denominator);
+}
+
+function samplePlaybackRate(pitch: number): number {
+  const clamped = Math.max(0, Math.min(100, pitch));
+  return 0.82 + (clamped / 100) * 0.36;
+}
+
 /**
  * Per-beat metronome engine. Each beat in the bar carries its own subdivision count
  * (1–8) plus a per-pulse accent (normal / accent / ghost / mute). Tone.Transport
@@ -88,6 +101,8 @@ export function useMetronome() {
   const [toneStarted, setToneStarted] = useState(false);
 
   const synthRef = useRef<Tone.Synth | null>(null);
+  const samplePlayersRef = useRef<Tone.Players | null>(null);
+  const engineSoundRef = useRef<BeatSound | null>(null);
   const scheduleIdRef = useRef<number | null>(null);
   const beatRef = useRef(0);
   const barCountRef = useRef(0);
@@ -135,19 +150,61 @@ export function useMetronome() {
     });
   }, [timeSignature.numerator]);
 
-  const ensureSynth = useCallback(() => {
-    if (synthRef.current) synthRef.current.dispose();
-    const env = SOUND_ENVELOPES[beatSoundRef.current];
+  const disposeEngine = useCallback(() => {
+    if (synthRef.current) {
+      synthRef.current.dispose();
+      synthRef.current = null;
+    }
+    if (samplePlayersRef.current) {
+      samplePlayersRef.current.dispose();
+      samplePlayersRef.current = null;
+    }
+    engineSoundRef.current = null;
+  }, []);
+
+  const ensureSoundEngine = useCallback(() => {
+    const sound = beatSoundRef.current;
+    if (engineSoundRef.current === sound && (synthRef.current || samplePlayersRef.current)) return;
+
+    disposeEngine();
+
+    const sampleSet = SAMPLE_SOUND_SETS[sound];
+    if (sampleSet) {
+      samplePlayersRef.current = new Tone.Players({
+        urls: {
+          accent: sampleSet.accent,
+          normal: sampleSet.normal,
+          sub: sampleSet.sub,
+        },
+        fadeOut: 0.006,
+        volume: sampleSet.gainDb ?? 0,
+      }).toDestination();
+      engineSoundRef.current = sound;
+      return;
+    }
+
+    const env = SOUND_ENVELOPES[sound];
     synthRef.current = new Tone.Synth({
-      oscillator: { type: beatSoundRef.current === "cowbell" ? "square" : "sine" },
+      oscillator: { type: SOUND_OSCILLATORS[sound] ?? "sine" },
       envelope: env,
     }).toDestination();
     synthRef.current.triggerAttackRelease(1, "128n", Tone.now(), 0);
-  }, []);
+    engineSoundRef.current = sound;
+  }, [disposeEngine]);
 
-  const playClick = useCallback((time: number, freq: number, vol: number) => {
-    if (!synthRef.current || vol === -Infinity) return;
+  const playClick = useCallback((time: number, freq: number, vol: number, role: ClickRole) => {
+    if (vol === -Infinity) return;
     try {
+      const players = samplePlayersRef.current;
+      if (players?.loaded && players.has(role)) {
+        const player = players.player(role);
+        player.playbackRate = samplePlaybackRate(pitchRef.current);
+        player.volume.setValueAtTime(vol, time);
+        player.start(time);
+        return;
+      }
+
+      if (!synthRef.current) return;
       synthRef.current.triggerAttackRelease(freq, "32n", time, Tone.dbToGain(vol));
     } catch {
       // ignore rapid trigger errors
@@ -196,7 +253,8 @@ export function useMetronome() {
           ? (accent === "accent" ? freqs.accent : freqs.normal)
           : freqs.sub;
         const vol = PULSE_ACCENT_VOLUME[accent];
-        if (!muted) playClick(time + offset, freq, vol);
+        const role: ClickRole = isFirstPulse ? (accent === "accent" ? "accent" : "normal") : "sub";
+        if (!muted) playClick(time + offset, freq, vol, role);
 
         const pulseIndex = p;
         Tone.Draw.schedule(() => setCurrentPulse(pulseIndex), time + offset);
@@ -215,7 +273,7 @@ export function useMetronome() {
           const isPolyDownbeat = k === 0;
           if (!muted) {
             const polyFreq = isPolyDownbeat ? 1800 : 1500;
-            playClick(time + offset, polyFreq, isPolyDownbeat ? -4 : -10);
+            playClick(time + offset, polyFreq, isPolyDownbeat ? -4 : -10, isPolyDownbeat ? "accent" : "normal");
           }
           const polyIdx = k;
           Tone.Draw.schedule(() => setCurrentPoly(polyIdx), time + offset);
@@ -239,9 +297,9 @@ export function useMetronome() {
     const totalBeats = cfg.durationBars * timeSignatureRef.current.numerator;
     const beatDuration = 60 / cfg.startBpm;
     const totalTime = totalBeats * beatDuration;
-    transport.bpm.value = cfg.startBpm;
+    transport.bpm.value = displayBpmToTransportBpm(cfg.startBpm, timeSignatureRef.current.denominator);
     setBpm(cfg.startBpm);
-    transport.bpm.rampTo(cfg.endBpm, totalTime);
+    transport.bpm.rampTo(displayBpmToTransportBpm(cfg.endBpm, timeSignatureRef.current.denominator), totalTime);
     setRampProgress({ bar: 1, currentBpm: cfg.startBpm });
 
     const startTime = Date.now();
@@ -271,14 +329,14 @@ export function useMetronome() {
       await Tone.start();
       setToneStarted(true);
     }
-    ensureSynth();
+    ensureSoundEngine();
     beatRef.current = 0;
     barCountRef.current = 0;
     setCurrentBeat(-1);
     setCurrentPulse(-1);
 
     const transport = Tone.getTransport();
-    transport.bpm.value = bpmRef.current;
+    transport.bpm.value = displayBpmToTransportBpm(bpmRef.current, timeSignatureRef.current.denominator);
     transport.timeSignature = timeSignatureRef.current.numerator;
     transport.cancel();
     transport.position = 0;
@@ -294,7 +352,7 @@ export function useMetronome() {
     }, 1000);
 
     if (rampEnabledRef.current) startRampCycle();
-  }, [toneStarted, ensureSynth, scheduleLoop, startRampCycle]);
+  }, [toneStarted, ensureSoundEngine, scheduleLoop, startRampCycle]);
 
   const stop = useCallback(() => {
     const transport = Tone.getTransport();
@@ -325,9 +383,9 @@ export function useMetronome() {
 
   useEffect(() => {
     if (isPlaying && !rampEnabled) {
-      Tone.getTransport().bpm.value = bpm;
+      Tone.getTransport().bpm.value = displayBpmToTransportBpm(bpm, timeSignature.denominator);
     }
-  }, [bpm, isPlaying, rampEnabled]);
+  }, [bpm, isPlaying, rampEnabled, timeSignature.denominator]);
 
   // Reschedule when time signature changes mid-play (subdivisions are read live from ref)
   useEffect(() => {
@@ -342,8 +400,8 @@ export function useMetronome() {
   }, [timeSignature.numerator, timeSignature.denominator]);
 
   useEffect(() => {
-    if (isPlaying) ensureSynth();
-  }, [beatSound, isPlaying, ensureSynth]);
+    if (isPlaying || toneStarted) ensureSoundEngine();
+  }, [beatSound, isPlaying, toneStarted, ensureSoundEngine]);
 
   // Pre-init Tone on first user gesture
   useEffect(() => {
@@ -351,7 +409,7 @@ export function useMetronome() {
       if (!toneStarted) {
         void Tone.start().then(() => {
           setToneStarted(true);
-          ensureSynth();
+          ensureSoundEngine();
           Tone.getContext().lookAhead = 0.01;
         });
       }
@@ -364,18 +422,18 @@ export function useMetronome() {
       document.removeEventListener("pointerdown", init);
       document.removeEventListener("keydown", init);
     };
-  }, [toneStarted, ensureSynth]);
+  }, [toneStarted, ensureSoundEngine]);
 
   useEffect(() => {
     return () => {
       const transport = Tone.getTransport();
       transport.stop();
       transport.cancel();
-      if (synthRef.current) synthRef.current.dispose();
+      disposeEngine();
       if (practiceIntervalRef.current) clearInterval(practiceIntervalRef.current);
       if (rampIntervalRef.current) clearInterval(rampIntervalRef.current);
     };
-  }, []);
+  }, [disposeEngine]);
 
   // --- Tap tempo ---
   const tapTimesRef = useRef<number[]>([]);
@@ -398,7 +456,7 @@ export function useMetronome() {
     tapResetTimerRef.current = setTimeout(() => setTapInfo({ count: 0, avgBpm: null }), 3000);
 
     if (!toneStarted) {
-      void Tone.start().then(() => { setToneStarted(true); ensureSynth(); });
+      void Tone.start().then(() => { setToneStarted(true); ensureSoundEngine(); });
     }
 
     if (taps.length >= 2) {
@@ -416,7 +474,7 @@ export function useMetronome() {
     } else {
       setTapInfo({ count: 1, avgBpm: null });
     }
-  }, [toneStarted, ensureSynth, isPlaying, rampEnabled]);
+  }, [toneStarted, ensureSoundEngine, isPlaying, rampEnabled]);
 
   // --- Pattern setters ---
   const adjustBpm = useCallback((delta: number) => {
