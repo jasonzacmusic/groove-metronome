@@ -18,7 +18,7 @@ import {
 } from "@/lib/metronome-types";
 
 interface NotationPanelProps {
-  view?: "beatmap" | "levels" | "polyrhythm";
+  view?: "beatmap" | "levels" | "polyrhythm" | "polymeter";
   pattern: BeatPattern[];
   polyrhythm?: PolyrhythmConfig;
   timeSignature: TimeSignature;
@@ -95,7 +95,13 @@ export function NotationPanel({
     const width = Math.max(380, host.clientWidth || 600);
     const polyVoiceCounts = polyrhythm?.enabled ? [polyrhythm.main, ...polyrhythm.voices].filter((count) => count >= 2).slice(0, 4) : [];
     const isPolyPreview = view === "polyrhythm" && polyVoiceCounts.length > 0;
-    const height = isPolyPreview ? Math.max(170, 64 + polyVoiceCounts.length * 58) : 170;
+    const polymeterSteps = polyrhythm?.polymeterEnabled ? polyrhythm.polymeterLanes.slice(0, 4) : [];
+    const isPolymeterPreview = view === "polymeter" && polymeterSteps.length > 0;
+    const height = isPolyPreview
+      ? Math.max(170, 64 + polyVoiceCounts.length * 58)
+      : isPolymeterPreview
+      ? Math.max(170, 74 + polymeterSteps.length * 48)
+      : 170;
 
     let renderer: Renderer | null = null;
     let ctx: RenderContext | null = null;
@@ -109,6 +115,10 @@ export function NotationPanel({
 
       if (isPolyPreview) {
         drawPolyrhythmNotation(ctx, host, width, polyVoiceCounts, currentBeat, currentPoly, isPlaying);
+        return;
+      }
+      if (isPolymeterPreview) {
+        drawPolymeterNotation(ctx, host, width, polymeterSteps, currentBeat, currentPoly, isPlaying);
         return;
       }
 
@@ -258,6 +268,51 @@ function drawPolyrhythmNotation(
   voiceCounts.forEach((count, row) => {
     appendSvgText(svg, labels[row] ?? `Voice ${row + 1}`, 14, 48 + row * 58, colors[row] ?? FG, "11", "700");
     appendSvgText(svg, String(count), 47, 48 + row * 58, colors[row] ?? FG, "18", "500");
+  });
+}
+
+function drawPolymeterNotation(
+  ctx: RenderContext,
+  host: HTMLDivElement,
+  width: number,
+  steps: Array<{ numerator: number; denominator: 4 | 8 | 16 }>,
+  currentBeat: number,
+  currentStep: number,
+  isPlaying: boolean,
+) {
+  const colors = ["rgb(174, 112, 16)", "rgb(31, 119, 142)", "rgb(124, 92, 188)", "rgb(198, 89, 82)"];
+  const voices: Voice[] = [];
+  const staves: Stave[] = [];
+
+  steps.forEach((step, row) => {
+    const y = 18 + row * 48;
+    const stave = new Stave(78, y, width - 94);
+    stave.addTimeSignature(`${step.numerator}/${step.denominator}`);
+    stave.setStyle({ strokeStyle: STAFF, fillStyle: STAFF });
+    stave.setContext(ctx).draw();
+    staves.push(stave);
+
+    const duration = step.denominator === 4 ? "q" : step.denominator === 8 ? "8" : "16";
+    const notes = Array.from({ length: step.numerator }, (_, index) => {
+      const note = new StaveNote({ keys: ["b/4"], duration, stem_direction: 1 });
+      const isActive = isPlaying && currentStep === row && currentBeat === index;
+      const color = isActive || index === 0 ? colors[row] ?? FG : "rgba(17, 24, 39, 0.58)";
+      note.setStyle({ fillStyle: color, strokeStyle: color });
+      return note;
+    });
+    const voice = new Voice({ num_beats: step.numerator, beat_value: step.denominator });
+    voice.setStrict(false);
+    voice.addTickables(notes);
+    voices.push(voice);
+  });
+
+  voices.forEach((voice) => new Formatter().format([voice], Math.max(220, width - 170)));
+  voices.forEach((voice, index) => voice.draw(ctx, staves[index]));
+
+  const svg = host.querySelector("svg");
+  if (!svg) return;
+  steps.forEach((_, row) => {
+    appendSvgText(svg, `Step ${row + 1}`, 14, 48 + row * 48, colors[row] ?? FG, "11", "700");
   });
 }
 

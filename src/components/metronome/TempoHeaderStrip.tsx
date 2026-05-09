@@ -39,6 +39,7 @@ export function TempoHeaderStrip({
   const [open, setOpen] = useState<OpenPanel>(null);
   const dom = dominantPulses(pattern);
   const tempoWord = getTempoMarking(bpm);
+  const subdivisionOptions = bpm <= 80 ? SUBDIVISION_OPTIONS : bpm <= 100 ? SUBDIVISION_OPTIONS.filter((n) => n <= 5) : SUBDIVISION_OPTIONS.filter((n) => n <= 4);
 
   const toggle = (panel: OpenPanel) => setOpen((current) => (current === panel ? null : panel));
 
@@ -149,7 +150,7 @@ export function TempoHeaderStrip({
           aria-label="Subdivision"
         >
           <option value="" disabled className="bg-background">Mixed per beat</option>
-          {SUBDIVISION_OPTIONS.map((n) => (
+          {subdivisionOptions.map((n) => (
             <option key={n} value={n} className="bg-background">
               {SUBDIVISION_NOTATION[n].glyph} {SUBDIVISION_NOTATION[n].label}
             </option>

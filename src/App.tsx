@@ -6,7 +6,7 @@ import { AnalyzerPage } from "@/pages/AnalyzerPage";
 import { MetronomePage } from "@/pages/MetronomePage";
 
 type Tab = "metronome" | "analyzer";
-export type MetronomeView = "beatmap" | "levels" | "polyrhythm";
+export type MetronomeView = "beatmap" | "levels" | "polyrhythm" | "polymeter";
 type ThemeId = "midnight" | "concert" | "aqua" | "graphite" | "contrast";
 
 const THEME_STORAGE_KEY = "groove-metronome.theme.v1";

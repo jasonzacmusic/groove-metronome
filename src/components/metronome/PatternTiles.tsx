@@ -1,13 +1,16 @@
 import { BEAT_PATTERN_TILES, type BeatPattern } from "@/lib/metronome-types";
 
 interface PatternTilesProps {
+  bpm: number;
   selectedBeat: number | null;
   beatCount: number;
   onSelectBeat: (beatIndex: number | null) => void;
   onApply: (pattern: BeatPattern, beatIndex: number | null) => void;
 }
 
-export function PatternTiles({ selectedBeat, beatCount, onSelectBeat, onApply }: PatternTilesProps) {
+export function PatternTiles({ bpm, selectedBeat, beatCount, onSelectBeat, onApply }: PatternTilesProps) {
+  const maxPulses = bpm <= 80 ? 8 : bpm <= 100 ? 5 : 4;
+  const tiles = BEAT_PATTERN_TILES.filter((tile) => tile.pattern.pulses <= maxPulses);
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -43,7 +46,7 @@ export function PatternTiles({ selectedBeat, beatCount, onSelectBeat, onApply }:
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        {BEAT_PATTERN_TILES.map((tile) => (
+        {tiles.map((tile) => (
           <button
             key={tile.id}
             type="button"

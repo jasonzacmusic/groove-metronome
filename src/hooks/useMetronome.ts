@@ -92,10 +92,10 @@ function dottedBeatSpan(mode: DottedPlaybackMode): number | null {
 
 function tripletHitsPerBar(mode: TripletAssistMode, numerator: number, denominator: number): number {
   const quarterNotesPerBar = numerator * (4 / denominator);
-  if (mode === "half") return Math.max(1, Math.round((quarterNotesPerBar / 2) * 3));
-  if (mode === "quarter") return Math.max(1, Math.round(quarterNotesPerBar * 3));
-  if (mode === "eighth") return Math.max(1, Math.round(quarterNotesPerBar * 6));
-  if (mode === "sextuplet") return Math.max(1, Math.round(quarterNotesPerBar * 12));
+  if (mode === "half") return Math.max(1, Math.round((quarterNotesPerBar / 4) * 3));
+  if (mode === "quarter") return Math.max(1, Math.round((quarterNotesPerBar / 2) * 3));
+  if (mode === "eighth") return Math.max(1, Math.round(quarterNotesPerBar * 3));
+  if (mode === "sextuplet") return Math.max(1, Math.round(quarterNotesPerBar * 6));
   return 0;
 }
 
@@ -172,7 +172,7 @@ function voiceSubdivisionKey(pulses: number, pulseIndex: number): string | null 
  * schedules one event per beat; sub-pulses fan out within the beat span.
  */
 export function useMetronome() {
-  const [bpm, setBpm] = useState(120);
+  const [bpm, setBpm] = useState(100);
   const [isPlaying, setIsPlaying] = useState(false);
   const [timeSignature, setTimeSignature] = useState<TimeSignature>({ numerator: 4, denominator: 4 });
   const [currentBeat, setCurrentBeat] = useState(-1);
@@ -338,7 +338,7 @@ export function useMetronome() {
     if (!polySynthsRef.current) {
       polySynthsRef.current = Array.from({ length: 4 }, (_, index) =>
         new Tone.Synth({
-          oscillator: { type: index === 0 ? "triangle" : index === 1 ? "square" : "sine" },
+          oscillator: { type: index === 0 ? "triangle" : index === 1 ? "square" : index === 2 ? "sawtooth" : "sine" },
           envelope: { attack: 0.001, decay: 0.045, sustain: 0, release: 0.025 },
         }).toDestination(),
       );
@@ -443,7 +443,7 @@ export function useMetronome() {
           const step = beatDuration * dottedSpan;
           const hitCount = Math.max(1, Math.floor((barDuration + 0.0001) / step));
           for (let k = 0; k < hitCount; k++) {
-            playPolyClick(time + step * k, k === 0 ? 1320 : 1080, k === 0 ? -8 : -13, 2, k === 0);
+            playPolyClick(time + step * k, k === 0 ? 980 : 760, k === 0 ? -9 : -15, 2, k === 0);
           }
         }
 
@@ -452,7 +452,7 @@ export function useMetronome() {
           const step = barDuration / tripletHits;
           for (let k = 0; k < tripletHits; k++) {
             const downbeat = k === 0;
-            playPolyClick(time + step * k, downbeat ? 1680 : 1240, downbeat ? -9 : -15, 3, downbeat);
+            playPolyClick(time + step * k, downbeat ? 1420 : 1040, downbeat ? -9 : -16, 3, downbeat);
           }
         }
       }

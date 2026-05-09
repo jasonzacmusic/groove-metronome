@@ -9,7 +9,6 @@ import {
   Music2,
   Network,
   Plus,
-  RotateCcw,
   SlidersHorizontal,
   Timer,
   TrendingUp,
@@ -59,12 +58,14 @@ const MODE_OPTIONS: Array<{ id: MetronomeView; label: string; detail: string }> 
   { id: "beatmap", label: "Beat Map", detail: "per-beat subdivisions" },
   { id: "levels", label: "Levels", detail: "accent strength" },
   { id: "polyrhythm", label: "Polyrhythm", detail: "LCM grid" },
+  { id: "polymeter", label: "Polymeter", detail: "meter chain" },
 ];
 
 const MODE_ICON: Record<MetronomeView, ReactNode> = {
   beatmap: <Waves className="size-5" aria-hidden />,
   levels: <BarChart3 className="size-5" aria-hidden />,
   polyrhythm: <Network className="size-5" aria-hidden />,
+  polymeter: <PolymeterGlyph />,
 };
 
 interface SavedSong {
@@ -173,7 +174,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
   };
 
   const resetDefault = () => {
-    setBpm(120);
+    setBpm(100);
     setTimeSignature({ numerator: 4, denominator: 4 });
     setSwing(0);
     setPattern(buildDefaultPattern(4, 1));
@@ -194,7 +195,10 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
 
   const handleViewChange = (next: MetronomeView) => {
     onViewChange(next);
-    setPolyrhythm({ enabled: next === "polyrhythm" });
+    setPolyrhythm({
+      enabled: next === "polyrhythm",
+      polymeterEnabled: next === "polymeter",
+    });
   };
 
   const saveCurrentSong = () => {
@@ -237,6 +241,13 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
           onSetSubdivision={setGlobalSubdivision}
         />
 
+        <HeroPracticeBar
+          practiceSeconds={state.practiceSeconds}
+          targetMinutes={targetMinutes}
+          onTargetMinutes={setTargetMinutes}
+          onReset={resetDefault}
+        />
+
         <WheelStage
           view={view}
           pattern={state.pattern}
@@ -262,6 +273,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
         <div className="relative">
           {view === "beatmap" ? (
             <BeatMapRow
+              bpm={state.bpm}
               pattern={state.pattern}
               isPlaying={state.isPlaying}
               currentBeat={state.currentBeat}
@@ -285,7 +297,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
               onCycleBeatSubdivision={cycleBeatSubdivision}
               onSetPulseLevel={setPulseLevel}
             />
-          ) : (
+          ) : view === "polyrhythm" ? (
             <PolyrhythmMode
               main={state.polyrhythm.main}
               voices={state.polyrhythm.voices}
@@ -296,6 +308,14 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
               onToggle={(enabled) => setPolyrhythm({ enabled })}
               onMain={(main) => setPolyrhythm({ main, enabled: true })}
               onVoices={(voices) => setPolyrhythm({ voices, enabled: true })}
+            />
+          ) : (
+            <PolymeterPanel
+              enabled={state.polyrhythm.polymeterEnabled}
+              lanes={state.polyrhythm.polymeterLanes}
+              onEnabled={(polymeterEnabled) => setPolyrhythm({ polymeterEnabled, enabled: false })}
+              onLanes={(polymeterLanes) => setPolyrhythm({ polymeterLanes, polymeterEnabled: true, enabled: false })}
+              framed
             />
           )}
         </div>
@@ -330,13 +350,6 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
 
         <VisualModePanel view={view} onChange={handleViewChange} />
 
-        <PolymeterPanel
-          enabled={state.polyrhythm.polymeterEnabled}
-          lanes={state.polyrhythm.polymeterLanes}
-          onEnabled={(polymeterEnabled) => setPolyrhythm({ polymeterEnabled })}
-          onLanes={(polymeterLanes) => setPolyrhythm({ polymeterLanes, polymeterEnabled: true })}
-        />
-
         <RhythmAssistPanel
           dottedMode={state.polyrhythm.dottedMode}
           tripletMode={state.polyrhythm.tripletMode}
@@ -351,6 +364,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
           defaultOpen={false}
         >
           <SubdivisionPalette
+            bpm={state.bpm}
             dominantSubdivision={dominantSubdivision}
             onApply={setGlobalSubdivision}
             onReset={resetAccents}
@@ -359,6 +373,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
 
         <CollapsiblePanel title="Patterns" summary="Apply rhythm tiles" icon={<Music2 className="size-4" />} defaultOpen={false}>
           <PatternTiles
+            bpm={state.bpm}
             selectedBeat={selectedBeat}
             beatCount={state.timeSignature.numerator}
             onSelectBeat={setSelectedBeat}
@@ -410,8 +425,9 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
           </CollapsiblePanel>
         )}
 
-        <CollapsiblePanel title="Setlist" summary={setlist.name} icon={<ListMusic className="size-4" />} defaultOpen={false}>
+        <CollapsiblePanel title="Setlist Studio" summary={setlist.name} icon={<ListMusic className="size-4" />} defaultOpen={false}>
           <div className="space-y-3">
+            <PremiumToolNote label="Premium workflow" body="Build a concert or band book, save song tempos, then jump between songs without rebuilding your click." />
             <input
               value={setlist.name}
               onChange={(e) => setSetlist((prev) => ({ ...prev, name: e.target.value }))}
@@ -479,6 +495,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
           trailing={<Switch checked={state.rampEnabled} onCheckedChange={setRampEnabled} />}
           defaultOpen={state.rampEnabled}
         >
+          <PremiumToolNote label="Practice builder" body="Ramp gradually across a phrase so speed increases feel musical, not sudden." />
           <div className="grid grid-cols-3 gap-3">
             <NumberField label="Start" value={state.rampConfig.startBpm} onChange={(v) => setRampConfig({ ...state.rampConfig, startBpm: clamp(v, 20, 300) })} />
             <NumberField label="End" value={state.rampConfig.endBpm} onChange={(v) => setRampConfig({ ...state.rampConfig, endBpm: clamp(v, 20, 300) })} />
@@ -511,6 +528,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
           trailing={<Switch checked={state.trainerEnabled} onCheckedChange={setTrainerEnabled} />}
           defaultOpen={state.trainerEnabled}
         >
+          <PremiumToolNote label="Inner clock" body="Alternate playing and silent bars to test whether your pulse survives without the click." />
           <div className="grid grid-cols-2 gap-3">
             <NumberField label="Play" value={state.trainerConfig.playBars} onChange={(v) => setTrainerConfig({ ...state.trainerConfig, playBars: Math.max(1, v) })} />
             <NumberField label="Mute" value={state.trainerConfig.muteBars} onChange={(v) => setTrainerConfig({ ...state.trainerConfig, muteBars: Math.max(1, v) })} />
@@ -530,30 +548,6 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
           )}
         </CollapsiblePanel>
 
-        {/* Practice timer */}
-        <CollapsiblePanel title="Timer" summary={formatTime(state.practiceSeconds)} icon={<Timer className="size-4" />} defaultOpen={false}>
-          <div className="flex items-baseline justify-between">
-            <span className="font-serif text-3xl tabular text-foreground">{formatTime(state.practiceSeconds)}</span>
-            <NumberField label="Target min" value={targetMinutes} onChange={(v) => setTargetMinutes(Math.max(0, v))} compact />
-          </div>
-          {targetMinutes > 0 && (
-            <div className="mt-2 w-full h-px bg-border overflow-hidden">
-              <div
-                className="bg-primary transition-all duration-1000"
-                style={{ width: `${Math.min(100, (state.practiceSeconds / (targetMinutes * 60)) * 100)}%`, height: "1px" }}
-              />
-            </div>
-          )}
-        </CollapsiblePanel>
-
-        <button
-          type="button"
-          onPointerDown={(e) => { e.preventDefault(); resetDefault(); }}
-          className="flex w-full items-center justify-center gap-2 rounded-md border border-border/70 px-4 py-3 tiny-caps text-[10px] text-muted-foreground hover:border-primary/60 hover:text-primary transition-colors"
-        >
-          <RotateCcw className="size-4" aria-hidden />
-          Reset 4/4
-        </button>
       </aside>
     </div>
   );
@@ -611,7 +605,7 @@ function WheelStage({
           onCyclePulseAccent={onCyclePulseAccent}
         />
       </div>
-      {polyrhythm.polymeterEnabled && (
+      {view === "polymeter" && polyrhythm.polymeterEnabled && (
         <PolymeterStackVisual
           lanes={polyrhythm.polymeterLanes}
           isPlaying={isPlaying}
@@ -720,6 +714,8 @@ function NotationStage({
 }) {
   const previewHint = view === "polyrhythm" && polyrhythm.enabled
     ? `${polyrhythm.main}:${polyrhythm.voices.join(":") || polyrhythm.against}`
+    : view === "polymeter" && polyrhythm.polymeterEnabled
+    ? polyrhythm.polymeterLanes.map((lane) => `${lane.numerator}/${lane.denominator}`).join(" -> ")
     : `${timeSignature.numerator}/${timeSignature.denominator}`;
 
   return (
@@ -742,8 +738,82 @@ function NotationStage({
           onCycleBeatSubdivision={onCycleBeatSubdivision}
         />
       </div>
+      <AssistNotationStrip dottedMode={polyrhythm.dottedMode} tripletMode={polyrhythm.tripletMode} />
     </section>
   );
+}
+
+function HeroPracticeBar({
+  practiceSeconds,
+  targetMinutes,
+  onTargetMinutes,
+  onReset,
+}: {
+  practiceSeconds: number;
+  targetMinutes: number;
+  onTargetMinutes: (minutes: number) => void;
+  onReset: () => void;
+}) {
+  const progress = targetMinutes > 0 ? Math.min(100, (practiceSeconds / (targetMinutes * 60)) * 100) : 0;
+  return (
+    <section className="rounded-lg border border-primary/35 bg-primary/10 p-4 md:p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <span className="tiny-caps block text-[10px] text-muted-foreground">Practice Timer</span>
+          <span className="font-serif text-5xl leading-none tabular text-foreground">{formatTime(practiceSeconds)}</span>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <NumberField label="Target min" value={targetMinutes} onChange={(v) => onTargetMinutes(Math.max(0, v))} compact />
+          <button
+            type="button"
+            onPointerDown={(e) => { e.preventDefault(); onReset(); }}
+            className="rounded-md border border-primary/70 bg-background/50 px-4 py-3 tiny-caps text-[10px] text-primary transition-colors hover:bg-primary/10"
+          >
+            Reset 4/4 · 100 BPM
+          </button>
+        </div>
+      </div>
+      {targetMinutes > 0 && (
+        <div className="mt-4 h-1 overflow-hidden rounded-full bg-background/65">
+          <div className="h-full rounded-full bg-primary transition-all duration-1000" style={{ width: `${progress}%` }} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AssistNotationStrip({ dottedMode, tripletMode }: { dottedMode: DottedPlaybackMode; tripletMode: TripletAssistMode }) {
+  const items = [
+    dottedMode !== "off" ? assistNotationForDotted(dottedMode) : null,
+    tripletMode !== "off" ? assistNotationForTriplet(tripletMode) : null,
+  ].filter(Boolean) as Array<{ label: string; glyph: string; detail: string }>;
+  if (items.length === 0) return null;
+  return (
+    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      {items.map((item) => (
+        <div key={item.label} className="rounded-md border border-border/70 bg-background/55 px-3 py-2">
+          <span className="tiny-caps block text-[9px] text-muted-foreground">{item.label}</span>
+          <span className="mt-1 flex items-baseline gap-3">
+            <span className="font-serif text-3xl leading-none text-primary">{item.glyph}</span>
+            <span className="font-mono text-xs text-muted-foreground">{item.detail}</span>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function assistNotationForDotted(mode: DottedPlaybackMode) {
+  if (mode === "quarter") return { label: "Dotted Assist", glyph: "♩.", detail: "dotted quarter pulse" };
+  if (mode === "eighth") return { label: "Dotted Assist", glyph: "♪.", detail: "dotted eighth pulse" };
+  return { label: "Dotted Assist", glyph: "♬.", detail: "dotted sixteenth pulse" };
+}
+
+function assistNotationForTriplet(mode: TripletAssistMode) {
+  if (mode === "half") return { label: "Triplet Assist", glyph: "𝅗𝅥³", detail: "3 across the bar" };
+  if (mode === "quarter") return { label: "Triplet Assist", glyph: "♩³", detail: "quarter-note triplets" };
+  if (mode === "eighth") return { label: "Triplet Assist", glyph: "♪³", detail: "eighth-note triplets" };
+  return { label: "Triplet Assist", glyph: "♬⁶", detail: "sextuplets" };
 }
 
 function TransportDeck({
@@ -795,8 +865,8 @@ function TransportDeck({
           max={300}
           step={1}
           onValueChange={([v]) => onSetBpm(v)}
-          onDoubleClick={() => onSetBpm(120)}
-          title="Double-click to reset to 120 BPM"
+          onDoubleClick={() => onSetBpm(100)}
+          title="Double-click to reset to 100 BPM"
         />
       </div>
     </div>
@@ -1057,11 +1127,13 @@ function PolymeterPanel({
   lanes,
   onEnabled,
   onLanes,
+  framed = false,
 }: {
   enabled: boolean;
   lanes: PolymeterLane[];
   onEnabled: (enabled: boolean) => void;
   onLanes: (lanes: PolymeterLane[]) => void;
+  framed?: boolean;
 }) {
   const setLane = (index: number, patch: Partial<PolymeterLane>) => {
     onLanes(lanes.map((lane, i) => i === index ? { ...lane, ...patch } : lane));
@@ -1105,8 +1177,8 @@ function PolymeterPanel({
   ];
   const summary = enabled ? lanes.map((lane) => `${lane.numerator}/${lane.denominator}`).join(" -> ") : "Hidden";
 
-  return (
-    <CollapsiblePanel title="Polymeter" summary={summary} icon={<PolymeterGlyph />} defaultOpen={false}>
+  const content = (
+    <>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <span className="tiny-caps block text-[10px] text-muted-foreground">Polyrhythm branch</span>
@@ -1229,6 +1301,21 @@ function PolymeterPanel({
           </button>
         )}
       </div>
+    </>
+  );
+
+  if (framed) {
+    return (
+      <section className="rounded-lg border border-border/70 bg-card/60 p-4">
+        <SectionLabel title="Polymeter" hint={summary} />
+        <div className="mt-4">{content}</div>
+      </section>
+    );
+  }
+
+  return (
+    <CollapsiblePanel title="Polymeter" summary={summary} icon={<PolymeterGlyph />} defaultOpen={false}>
+      {content}
     </CollapsiblePanel>
   );
 }
@@ -1290,14 +1377,17 @@ function CollapsiblePanel({
 }
 
 function SubdivisionPalette({
+  bpm,
   dominantSubdivision,
   onApply,
   onReset,
 }: {
+  bpm: number;
   dominantSubdivision: SubdivisionCount | null;
   onApply: (subdivision: SubdivisionCount) => void;
   onReset: () => void;
 }) {
+  const options = subdivisionOptionsForBpm(bpm);
   return (
     <div className="rounded-md border border-border/70 bg-card/60 p-4">
       <SectionLabel
@@ -1305,7 +1395,7 @@ function SubdivisionPalette({
         hint={dominantSubdivision ? `${dominantSubdivision}` : "mixed"}
       />
       <div className="mt-3 grid grid-cols-2 xl:grid-cols-1 gap-1.5">
-        {SUBDIVISION_OPTIONS.map((n) => {
+        {options.map((n) => {
           const notation = SUBDIVISION_NOTATION[n];
           const active = dominantSubdivision === n;
           return (
@@ -1341,6 +1431,7 @@ function SubdivisionPalette({
 }
 
 function BeatMapRow({
+  bpm,
   pattern,
   isPlaying,
   currentBeat,
@@ -1348,6 +1439,7 @@ function BeatMapRow({
   onSetSubdivision,
   onCyclePulse,
 }: {
+  bpm: number;
   pattern: BeatPattern[];
   isPlaying: boolean;
   currentBeat: number;
@@ -1355,6 +1447,7 @@ function BeatMapRow({
   onSetSubdivision: (beatIndex: number, pulses: SubdivisionCount) => void;
   onCyclePulse: (beatIndex: number, pulseIndex: number) => void;
 }) {
+  const options = subdivisionOptionsForBpm(bpm);
   return (
     <div className="rounded-lg border border-border/70 bg-card/60 p-4">
       <SectionLabel title="Beat Map" hint="beats in one row" />
@@ -1395,7 +1488,7 @@ function BeatMapRow({
                   className="metronome-select min-h-10 text-xs"
                   aria-label={`Subdivision for beat ${beatIndex + 1}`}
                 >
-                  {SUBDIVISION_OPTIONS.map((n) => (
+                  {options.map((n) => (
                     <option key={n} value={n} className="bg-background">
                       {SUBDIVISION_NOTATION[n].glyph} {n}
                     </option>
@@ -1428,6 +1521,21 @@ function BeatMapRow({
         })}
         </div>
       </div>
+    </div>
+  );
+}
+
+function subdivisionOptionsForBpm(bpm: number): SubdivisionCount[] {
+  if (bpm <= 80) return [1, 2, 3, 4, 5, 6, 7, 8];
+  if (bpm <= 100) return [1, 2, 3, 4, 5];
+  return [1, 2, 3, 4];
+}
+
+function PremiumToolNote({ label, body }: { label: string; body: string }) {
+  return (
+    <div className="rounded-md border border-primary/25 bg-primary/10 p-3">
+      <span className="tiny-caps text-[9px] text-primary">{label}</span>
+      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{body}</p>
     </div>
   );
 }
