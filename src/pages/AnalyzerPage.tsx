@@ -52,7 +52,7 @@ interface Marker {
   label: string;
 }
 
-type MidiInstrument = "keys" | "samplePiano" | "guitar" | "drums";
+type MidiInstrument = "keys" | "guitar" | "drums";
 
 export function AnalyzerPage({
   metronome,
@@ -757,14 +757,7 @@ function MidiPlayer({
     const synths = createMidiInstrument(instrument);
     await Tone.loaded();
     disposablesRef.current = synths.nodes;
-    const sourceNotes = midi.tracks.flatMap((track) => track.notes.map((note) => ({
-      time: note.time,
-      duration: note.duration,
-      name: note.name,
-      midi: note.midi,
-      velocity: note.velocity,
-      channel: track.channel,
-    }))).slice(0, 5000);
+    const sourceNotes = buildSustainAwareMidiNotes(midi).slice(0, 5000);
     const loopNotes = selectedSectionIds.length > 0 && analysis
       ? notesForSelectedSections(sourceNotes, analysis.sections.filter((section) => selectedSectionIds.includes(section.index)))
       : { notes: sourceNotes, duration: midi.duration };
@@ -805,8 +798,7 @@ function MidiPlayer({
           className="metronome-select max-w-44"
           aria-label="MIDI instrument"
         >
-          <option value="keys" className="bg-background">Practice Keys</option>
-          <option value="samplePiano" className="bg-background">Sample Piano</option>
+          <option value="keys" className="bg-background">Light Piano</option>
           <option value="guitar" className="bg-background">Clean Guitar</option>
           <option value="drums" className="bg-background">Drums</option>
         </select>
@@ -1078,6 +1070,80 @@ type MidiScheduledNote = {
   channel: number;
 };
 
+type SustainEvent = {
+  time: number;
+  down: boolean;
+};
+
+function buildSustainAwareMidiNotes(midi: Midi): MidiScheduledNote[] {
+  const notesByChannel = new Map<number, MidiScheduledNote[]>();
+  const sustainByChannel = new Map<number, SustainEvent[]>();
+
+  for (const track of midi.tracks) {
+    const channel = track.channel ?? 0;
+    const channelNotes = notesByChannel.get(channel) ?? [];
+    for (const note of track.notes) {
+      channelNotes.push({
+        time: note.time,
+        duration: note.duration,
+        name: note.name,
+        midi: note.midi,
+        velocity: note.velocity,
+        channel,
+      });
+    }
+    notesByChannel.set(channel, channelNotes);
+
+    const sustainChanges = (track.controlChanges[64] ?? track.controlChanges.sustain ?? [])
+      .map((cc) => ({ time: cc.time, down: cc.value >= 0.5 }))
+      .sort((a, b) => a.time - b.time);
+    if (sustainChanges.length > 0) {
+      const existing = sustainByChannel.get(channel) ?? [];
+      sustainByChannel.set(channel, [...existing, ...sustainChanges].sort((a, b) => a.time - b.time));
+    }
+  }
+
+  const adjusted: MidiScheduledNote[] = [];
+  for (const [channel, notes] of notesByChannel) {
+    const sustainEvents = sustainByChannel.get(channel) ?? [];
+    const byPitch = new Map<number, MidiScheduledNote[]>();
+    for (const note of notes) {
+      const group = byPitch.get(note.midi) ?? [];
+      group.push(note);
+      byPitch.set(note.midi, group);
+    }
+
+    for (const group of byPitch.values()) {
+      group.sort((a, b) => a.time - b.time);
+      group.forEach((note, index) => {
+        const naturalEnd = note.time + note.duration;
+        const sustainedEnd = findSustainRelease(naturalEnd, sustainEvents);
+        const nextSamePitchStart = group[index + 1]?.time ?? Infinity;
+        const end = Math.min(sustainedEnd, nextSamePitchStart, note.time + 12);
+        adjusted.push({
+          ...note,
+          duration: Math.max(0.03, end - note.time),
+        });
+      });
+    }
+  }
+
+  return adjusted.sort((a, b) => a.time - b.time || a.midi - b.midi);
+}
+
+function findSustainRelease(noteEnd: number, events: SustainEvent[]): number {
+  let pedalDown = false;
+  for (const event of events) {
+    if (event.time <= noteEnd) {
+      pedalDown = event.down;
+      continue;
+    }
+    if (pedalDown && !event.down) return event.time;
+    if (!pedalDown) return noteEnd;
+  }
+  return pedalDown ? noteEnd + 1.2 : noteEnd;
+}
+
 function notesForSelectedSections(
   notes: MidiScheduledNote[],
   sections: MidiAnalysis["sections"],
@@ -1109,7 +1175,7 @@ function notesForSelectedSections(
 
 function createMidiInstrument(instrument: MidiInstrument): {
   nodes: Tone.ToneAudioNode[];
-  poly?: Tone.PolySynth | Tone.Sampler;
+  poly?: Tone.PolySynth;
   kick?: Tone.MembraneSynth;
   snare?: Tone.NoiseSynth;
   hat?: Tone.MetalSynth;
@@ -1123,45 +1189,6 @@ function createMidiInstrument(instrument: MidiInstrument): {
     const tone = new Tone.Filter(4200, "lowpass").toDestination();
     keys.connect(tone);
     return { nodes: [keys, tone], poly: keys };
-  }
-  if (instrument === "samplePiano") {
-    const sampler = new Tone.Sampler({
-      urls: {
-        A0: "A0.mp3",
-        C1: "C1.mp3",
-        "D#1": "Ds1.mp3",
-        "F#1": "Fs1.mp3",
-        A1: "A1.mp3",
-        C2: "C2.mp3",
-        "D#2": "Ds2.mp3",
-        "F#2": "Fs2.mp3",
-        A2: "A2.mp3",
-        C3: "C3.mp3",
-        "D#3": "Ds3.mp3",
-        "F#3": "Fs3.mp3",
-        A3: "A3.mp3",
-        C4: "C4.mp3",
-        "D#4": "Ds4.mp3",
-        "F#4": "Fs4.mp3",
-        A4: "A4.mp3",
-        C5: "C5.mp3",
-        "D#5": "Ds5.mp3",
-        "F#5": "Fs5.mp3",
-        A5: "A5.mp3",
-        C6: "C6.mp3",
-        "D#6": "Ds6.mp3",
-        "F#6": "Fs6.mp3",
-        A6: "A6.mp3",
-        C7: "C7.mp3",
-        "D#7": "Ds7.mp3",
-        "F#7": "Fs7.mp3",
-        A7: "A7.mp3",
-        C8: "C8.mp3",
-      },
-      release: 1,
-      baseUrl: "https://tonejs.github.io/audio/salamander/",
-    }).toDestination();
-    return { nodes: [sampler], poly: sampler };
   }
   if (instrument === "guitar") {
     const guitar = new Tone.PolySynth(Tone.Synth, {
