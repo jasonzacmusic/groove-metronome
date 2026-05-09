@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://metronome.nathanielschool.com/sitemap.xml

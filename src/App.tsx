@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Check, Copy, MessageCircle, Share2 } from "lucide-react";
 
 import { useMetronome } from "@/hooks/useMetronome";
 import { AnalyzerPage } from "@/pages/AnalyzerPage";
@@ -9,6 +10,9 @@ export type MetronomeView = "beatmap" | "levels" | "polyrhythm";
 type ThemeId = "midnight" | "concert" | "aqua" | "graphite" | "contrast";
 
 const THEME_STORAGE_KEY = "groove-metronome.theme.v1";
+const PUBLIC_URL = "https://metronome.nathanielschool.com/";
+const SHARE_TITLE = "Groove Metronome";
+const SHARE_TEXT = "Groove Metronome is a serious online metronome for musicians: beat maps, polyrhythm, polymeter, practice tools, and audio/MIDI analysis.";
 const THEMES: Array<{ id: ThemeId; label: string; colors: [string, string, string] }> = [
   { id: "midnight", label: "Midnight", colors: ["#101525", "#facc15", "#4deee0"] },
   { id: "concert", label: "Concert", colors: ["#120b1f", "#ff4f8b", "#45d483"] },
@@ -82,7 +86,10 @@ export default function App() {
                 </span>
               )}
             </nav>
-            <ThemeSwitch theme={theme} onThemeChange={setTheme} />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <ShareStrip />
+              <ThemeSwitch theme={theme} onThemeChange={setTheme} />
+            </div>
           </div>
         </div>
       </header>
@@ -103,7 +110,70 @@ export default function App() {
           />
         )}
       </main>
+      <SeoFooter />
     </div>
+  );
+}
+
+function ShareStrip() {
+  const [copied, setCopied] = useState<"link" | "caption" | null>(null);
+
+  const markCopied = (kind: "link" | "caption") => {
+    setCopied(kind);
+    window.setTimeout(() => setCopied(null), 1400);
+  };
+
+  const share = async () => {
+    const url = typeof window !== "undefined" ? window.location.href : PUBLIC_URL;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: SHARE_TITLE, text: SHARE_TEXT, url });
+        return;
+      } catch {
+        // Fall back to copy when the native share sheet is dismissed or unavailable.
+      }
+    }
+    await navigator.clipboard?.writeText(`${SHARE_TEXT} ${url}`);
+    markCopied("caption");
+  };
+
+  const copyLink = async () => {
+    const url = typeof window !== "undefined" ? window.location.href : PUBLIC_URL;
+    await navigator.clipboard?.writeText(url);
+    markCopied("link");
+  };
+
+  const whatsappHref = `https://wa.me/?text=${encodeURIComponent(`${SHARE_TEXT} ${PUBLIC_URL}`)}`;
+
+  return (
+    <div className="flex flex-col gap-1.5 sm:items-end" aria-label="Share Groove Metronome">
+      <span className="tiny-caps text-[9px] text-muted-foreground/75">Share</span>
+      <div className="grid grid-cols-3 gap-1.5">
+        <button type="button" onClick={share} className="share-action" title="Share">
+          <Share2 className="size-4" aria-hidden />
+          <span className="sr-only">Share</span>
+        </button>
+        <a href={whatsappHref} target="_blank" rel="noreferrer" className="share-action" title="Share on WhatsApp">
+          <MessageCircle className="size-4" aria-hidden />
+          <span className="sr-only">WhatsApp</span>
+        </a>
+        <button type="button" onClick={copyLink} className="share-action" title={copied === "link" ? "Copied" : "Copy link"}>
+          {copied === "link" ? <Check className="size-4" aria-hidden /> : <Copy className="size-4" aria-hidden />}
+          <span className="sr-only">Copy link</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SeoFooter() {
+  return (
+    <footer className="relative z-10 mx-auto max-w-6xl px-5 pb-8 text-xs leading-relaxed text-muted-foreground md:px-10">
+      <p>
+        Groove Metronome is a free online metronome for musicians, teachers, bands, and students who need a precise click with beat maps,
+        subdivisions, accents, polyrhythm, polymeter, practice ramps, mute training, setlists, audio tempo detection, and MIDI analysis.
+      </p>
+    </footer>
   );
 }
 

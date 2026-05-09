@@ -1,13 +1,33 @@
 {
   "name": "Groove Metronome",
   "short_name": "Groove Met",
-  "description": "Modern metronome with rhythm trainer, notation, and audio/MIDI analysis.",
+  "description": "Free online metronome for musicians with beat maps, subdivisions, accents, polyrhythm, polymeter, practice tools, setlists, and audio/MIDI analysis.",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
   "background_color": "#0f1226",
   "theme_color": "#0f1226",
   "orientation": "portrait",
+  "categories": ["music", "education", "productivity"],
   "icons": [
     { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Open Metronome",
+      "short_name": "Metronome",
+      "description": "Start the Groove Metronome practice view.",
+      "url": "/",
+      "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Open Analyzer",
+      "short_name": "Analyzer",
+      "description": "Analyze audio or MIDI for tempo and musical structure.",
+      "url": "/?tab=analyzer",
+      "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    }
   ]
 }

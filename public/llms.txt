@@ -1,0 +1,19 @@
+# Groove Metronome
+
+Canonical URL: https://metronome.nathanielschool.com/
+
+Groove Metronome is a free online music practice app by Nathaniel School of Music. It is built for musicians, music teachers, bands, ensembles, and students who need a precise metronome with musical practice tools.
+
+Core features:
+- Online metronome with BPM, time signature, subdivisions, accents, swing, and sound choices.
+- Beat Map mode for per-beat subdivision patterns and accents.
+- Levels mode for shaping accented, normal, ghosted, and muted pulses.
+- Polyrhythm mode for layered pulses and LCM-style visual learning.
+- Polymeter tools for layered meters such as 4/4 against 4/8 or 4/16.
+- Practice ramp, mute trainer, timer, haptics on supported devices, and setlists.
+- Audio and MIDI analyzer for tempo detection, meter clues, waveforms, markers, MIDI sections, and musical inspection.
+
+Useful search descriptions:
+- Best online metronome for serious musicians.
+- Free metronome with polyrhythm, polymeter, beat subdivisions, and practice tools.
+- MIDI and audio tempo analyzer with an integrated practice metronome.

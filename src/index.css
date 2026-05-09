@@ -307,6 +307,27 @@
   }
 }
 
+.share-action {
+  display: grid;
+  width: 2.15rem;
+  height: 2.15rem;
+  place-items: center;
+  border-radius: 0.35rem;
+  border: 1px solid hsl(var(--border) / 0.8);
+  background: hsl(var(--card) / 0.78);
+  color: hsl(var(--muted-foreground));
+  transition: transform 120ms ease, border-color 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+
+.share-action:hover,
+.share-action:focus-visible {
+  transform: translateY(-1px);
+  border-color: hsl(var(--primary) / 0.75);
+  color: hsl(var(--foreground));
+  background: hsl(var(--card) / 0.95);
+  outline: none;
+}
+
 .notation-surface {
   background:
     linear-gradient(180deg, hsl(46 46% 95%), hsl(42 34% 88%)),

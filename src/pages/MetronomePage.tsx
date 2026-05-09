@@ -185,8 +185,8 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
       polymeterEnabled: false,
       polymeterLanes: [
         { numerator: 4, denominator: 4 },
-        { numerator: 5, denominator: 8 },
-        { numerator: 3, denominator: 16 },
+        { numerator: 4, denominator: 8 },
+        { numerator: 4, denominator: 16 },
       ],
     });
     onViewChange("beatmap");
@@ -245,6 +245,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
           isPlaying={state.isPlaying}
           currentBeat={state.currentBeat}
           currentPulse={state.currentPulse}
+          currentPoly={state.currentPoly}
           onCycleBeatSubdivision={cycleBeatSubdivision}
           onCyclePulseAccent={cyclePulse}
         />
@@ -575,6 +576,7 @@ function WheelStage({
   isPlaying,
   currentBeat,
   currentPulse,
+  currentPoly,
   onCycleBeatSubdivision,
   onCyclePulseAccent,
 }: {
@@ -585,6 +587,7 @@ function WheelStage({
   isPlaying: boolean;
   currentBeat: number;
   currentPulse: number;
+  currentPoly: number;
   onCycleBeatSubdivision: (beatIndex: number) => void;
   onCyclePulseAccent: (beatIndex: number, pulseIndex: number) => void;
 }) {
@@ -607,6 +610,69 @@ function WheelStage({
           onCycleBeatSubdivision={onCycleBeatSubdivision}
           onCyclePulseAccent={onCyclePulseAccent}
         />
+      </div>
+      {polyrhythm.polymeterEnabled && (
+        <PolymeterStackVisual
+          lanes={polyrhythm.polymeterLanes}
+          isPlaying={isPlaying}
+          currentBeat={currentBeat}
+          currentPoly={currentPoly}
+        />
+      )}
+    </div>
+  );
+}
+
+function PolymeterStackVisual({
+  lanes,
+  isPlaying,
+  currentBeat,
+  currentPoly,
+}: {
+  lanes: PolymeterLane[];
+  isPlaying: boolean;
+  currentBeat: number;
+  currentPoly: number;
+}) {
+  const palette = ["hsl(var(--amber))", "hsl(var(--slate-cyan))", "hsl(338 82% 66%)", "hsl(var(--primary))"];
+  return (
+    <div className="mt-4 overflow-x-auto rounded-md border border-border/60 bg-background/35 p-3">
+      <div className="min-w-max space-y-2">
+        {lanes.slice(0, 4).map((lane, laneIndex) => {
+          const cellWidth = lane.denominator === 4 ? "2.75rem" : lane.denominator === 8 ? "1.75rem" : "1rem";
+          const activeIndex = laneIndex === 0 ? currentBeat : laneIndex === 1 ? currentPoly : -1;
+          return (
+            <div key={`${lane.numerator}-${lane.denominator}-${laneIndex}`} className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-3">
+              <span className="font-serif text-xl leading-none text-foreground">
+                {lane.numerator} <span className="text-muted-foreground">|</span> {lane.denominator}
+              </span>
+              <div
+                className="grid items-center gap-1.5 border-l border-border/60 pl-3"
+                style={{ gridTemplateColumns: `repeat(${lane.numerator}, ${cellWidth})` }}
+              >
+                {Array.from({ length: lane.numerator }, (_, beatIndex) => {
+                  const active = isPlaying && activeIndex === beatIndex;
+                  return (
+                    <span
+                      key={beatIndex}
+                      className="grid place-items-center rounded-full border text-[10px] font-mono transition-all"
+                      style={{
+                        width: cellWidth,
+                        height: lane.denominator === 4 ? "2.35rem" : lane.denominator === 8 ? "1.65rem" : "1rem",
+                        borderColor: active ? palette[laneIndex] : "hsl(var(--border) / 0.65)",
+                        background: active ? palette[laneIndex] : "hsl(var(--card) / 0.45)",
+                        color: active ? "hsl(var(--background))" : "hsl(var(--muted-foreground))",
+                        boxShadow: active ? `0 0 18px ${palette[laneIndex]}` : "none",
+                      }}
+                    >
+                      {lane.denominator === 16 ? "" : beatIndex + 1}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1006,6 +1072,7 @@ function PolymeterPanel({
     onLanes(lanes.filter((_, i) => i !== index));
   };
   const quickStacks: Array<{ label: string; lanes: PolymeterLane[] }> = [
+    { label: "4/4 + 4/8 + 4/16", lanes: [{ numerator: 4, denominator: 4 }, { numerator: 4, denominator: 8 }, { numerator: 4, denominator: 16 }] },
     { label: "4/4 + 5/8 + 3/16", lanes: [{ numerator: 4, denominator: 4 }, { numerator: 5, denominator: 8 }, { numerator: 3, denominator: 16 }] },
     { label: "5/4 + 5/8 + 5/16", lanes: [{ numerator: 5, denominator: 4 }, { numerator: 5, denominator: 8 }, { numerator: 5, denominator: 16 }] },
     { label: "4/4 + 7/8", lanes: [{ numerator: 4, denominator: 4 }, { numerator: 7, denominator: 8 }] },
@@ -1019,20 +1086,20 @@ function PolymeterPanel({
     { numerator: 3, denominator: 16 },
     { numerator: 5, denominator: 16 },
   ];
-  const summary = lanes.map((lane) => `${lane.numerator}/${lane.denominator}`).join(" + ");
+  const summary = enabled ? lanes.map((lane) => `${lane.numerator}/${lane.denominator}`).join(" + ") : "Hidden";
 
   return (
-    <div className="rounded-md border border-border/70 bg-card/55 p-4">
+    <CollapsiblePanel title="Polymeter" summary={summary} icon={<Network className="size-4" />} defaultOpen={false}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <span className="tiny-caps block text-xs text-foreground">Polymeter</span>
-          <p className="mt-1 font-mono text-sm text-primary">{summary}</p>
+          <span className="tiny-caps block text-[10px] text-muted-foreground">Layered meters</span>
+          <p className="mt-1 font-mono text-sm text-primary">{lanes.map((lane) => `${lane.numerator}/${lane.denominator}`).join(" + ")}</p>
         </div>
         <Switch checked={enabled} onCheckedChange={onEnabled} />
       </div>
 
       <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-        Under polyrhythm, use polymeter when the layers are different time signatures. Every lane shares one clock; /8 and /16 lanes move faster and look tighter.
+        Use polymeter when the click layers are different time signatures. The first lane is the real metronome click; /8 and /16 lanes move faster and draw tighter.
       </p>
 
       <div className="mt-4 space-y-4">
@@ -1145,7 +1212,7 @@ function PolymeterPanel({
           </button>
         )}
       </div>
-    </div>
+    </CollapsiblePanel>
   );
 }
 
