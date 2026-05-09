@@ -20,7 +20,7 @@ interface TempoHeaderStripProps {
   onSetSubdivision: (subdivision: SubdivisionCount) => void;
 }
 
-type OpenPanel = "tempo" | "meter" | "subdivision" | null;
+type OpenPanel = "tempo-number" | "tempo-word" | "meter" | "subdivision" | null;
 
 function dominantPulses(pattern: BeatPattern[]): SubdivisionCount | null {
   if (pattern.length === 0) return 1;
@@ -44,42 +44,62 @@ export function TempoHeaderStrip({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-      <TopControlCard
-        label="Tempo"
-        value={`${Math.round(bpm)}`}
-        detail={tempoWord}
-        active={open === "tempo"}
-        onToggle={() => toggle("tempo")}
-        onDoubleClick={() => toggle("tempo")}
-      >
-        <input
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          value={Math.round(bpm)}
-          onChange={(e) => {
-            const next = Number(e.target.value.replace(/[^0-9]/g, ""));
-            if (Number.isFinite(next)) onSetBpm(Math.min(300, Math.max(20, next)));
-          }}
-          className="w-full bg-background/50 border border-border rounded-md px-3 py-2 font-serif text-3xl tabular text-foreground focus:outline-none focus:border-primary"
-          aria-label="Tempo BPM"
-        />
-        <select
-          value={TEMPO_PRESETS.find((preset) => Math.abs(preset.bpm - bpm) < 4)?.bpm ?? ""}
-          onChange={(e) => {
-            if (e.target.value) onSetBpm(Number(e.target.value));
-          }}
-          className="metronome-select mt-2"
-          aria-label="Classical tempo marking"
-        >
-          <option value="" className="bg-background">Choose a tempo word</option>
-          {TEMPO_PRESETS.map((preset) => (
-            <option key={preset.label} value={preset.bpm} className="bg-background">
-              {preset.label} · {preset.bpm}
-            </option>
-          ))}
-        </select>
-      </TopControlCard>
+      <section className="rounded-lg border border-border/70 bg-card/60 p-3 md:p-4">
+        <span className="tiny-caps block text-[10px] text-muted-foreground">Tempo</span>
+        <div className="mt-1 grid grid-cols-[1fr_auto] items-end gap-3">
+          <button
+            type="button"
+            onClick={() => toggle("tempo-number")}
+            onDoubleClick={() => toggle("tempo-number")}
+            className="text-left font-serif text-4xl md:text-5xl leading-none text-[hsl(var(--slate-cyan))]"
+          >
+            {Math.round(bpm)}
+          </button>
+          <button
+            type="button"
+            onClick={() => toggle("tempo-word")}
+            onDoubleClick={() => toggle("tempo-word")}
+            className="pb-1 text-right font-serif italic text-base text-primary/80"
+          >
+            {tempoWord}
+          </button>
+        </div>
+        {open === "tempo-number" && (
+          <div className="mt-3 border-t border-border/60 pt-3">
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={Math.round(bpm)}
+              onChange={(e) => {
+                const next = Number(e.target.value.replace(/[^0-9]/g, ""));
+                if (Number.isFinite(next)) onSetBpm(Math.min(300, Math.max(20, next)));
+              }}
+              className="w-full bg-background/50 border border-border rounded-md px-3 py-2 font-serif text-3xl tabular text-foreground focus:outline-none focus:border-primary"
+              aria-label="Tempo BPM"
+            />
+          </div>
+        )}
+        {open === "tempo-word" && (
+          <div className="mt-3 border-t border-border/60 pt-3">
+            <select
+              value={TEMPO_PRESETS.find((preset) => Math.abs(preset.bpm - bpm) < 4)?.bpm ?? ""}
+              onChange={(e) => {
+                if (e.target.value) onSetBpm(Number(e.target.value));
+              }}
+              className="metronome-select"
+              aria-label="Classical tempo marking"
+            >
+              <option value="" className="bg-background">Choose a tempo word</option>
+              {TEMPO_PRESETS.map((preset) => (
+                <option key={preset.label} value={preset.bpm} className="bg-background">
+                  {preset.label} · {preset.bpm}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </section>
 
       <TopControlCard
         label="Time Signature"

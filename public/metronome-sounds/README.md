@@ -12,6 +12,9 @@ Audio buffers rather than live speech. Voice subdivision playback is intended
 for divisions of 2, 3, and 4; denser subdivisions fall back to the main beat
 count so speech does not become cluttered.
 
+For a fully human voice mode, replace the generated files with real recordings
+using the same filenames. See `voices/RECORDING_SPEC.md`.
+
 The local Avid Click II resource folder was reviewed as a tonal reference, but
 its proprietary plugin assets are not bundled or redistributed in this public
 repo.

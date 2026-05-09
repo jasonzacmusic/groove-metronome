@@ -1,4 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import {
+  BarChart3,
+  CircleHelp,
+  Gauge,
+  Hand,
+  ListMusic,
+  Music2,
+  Network,
+  RotateCcw,
+  SlidersHorizontal,
+  Timer,
+  TrendingUp,
+  Volume2,
+  VolumeX,
+  Waves,
+} from "lucide-react";
 
 import { LevelMeters } from "@/components/metronome/LevelMeters";
 import { NotationPanel } from "@/components/metronome/NotationPanel";
@@ -20,7 +36,6 @@ import {
   pitchLabel,
   SUBDIVISION_NOTATION,
   SUBDIVISION_OPTIONS,
-  TEMPO_PRESETS,
   type BeatPattern,
   type PulseAccent,
   type SubdivisionCount,
@@ -35,6 +50,12 @@ const MODE_OPTIONS: Array<{ id: MetronomeView; label: string; detail: string }> 
   { id: "levels", label: "Levels", detail: "accent strength" },
   { id: "polyrhythm", label: "Polyrhythm", detail: "LCM grid" },
 ];
+
+const MODE_ICON: Record<MetronomeView, ReactNode> = {
+  beatmap: <Waves className="size-5" aria-hidden />,
+  levels: <BarChart3 className="size-5" aria-hidden />,
+  polyrhythm: <Network className="size-5" aria-hidden />,
+};
 
 interface SavedSong {
   id: string;
@@ -265,10 +286,8 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
         </div>
 
         <QuickSetup
-          view={view}
           status={state.isPlaying ? `Bar ${state.barCount + 1}` : "Stopped"}
           beatSound={state.beatSound}
-          onViewChange={handleViewChange}
           onBeatSoundChange={setBeatSound}
           onPresetChange={loadPreset}
           onResetAccents={resetAccents}
@@ -290,7 +309,13 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
 
       {/* SIDEBAR column */}
       <aside className="space-y-4 lg:border-l lg:border-border lg:pl-10">
-        <CollapsiblePanel title="Sound" summary={BEAT_SOUND_LABELS[state.beatSound]} defaultOpen={true}>
+        <CollapsiblePanel title="Guide" summary="How this works" icon={<CircleHelp className="size-4" />} defaultOpen={false}>
+          <AppGuide />
+        </CollapsiblePanel>
+
+        <VisualModePanel view={view} onChange={handleViewChange} />
+
+        <CollapsiblePanel title="Sound" summary={BEAT_SOUND_LABELS[state.beatSound]} icon={<Volume2 className="size-4" />} defaultOpen={true}>
           <Field label="Pitch" trailing={<span className="tiny-caps text-[10px] text-primary">{pitchLabel(state.pitch)}</span>}>
             <Slider
               value={[state.pitch]}
@@ -320,6 +345,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
         <CollapsiblePanel
           title="Assist"
           summary={state.hapticsEnabled ? "Haptics on" : "Haptics off"}
+          icon={<Hand className="size-4" />}
           trailing={<Switch aria-label="Haptic pulse" checked={state.hapticsEnabled} onCheckedChange={setHapticsEnabled} />}
           defaultOpen={false}
         >
@@ -328,7 +354,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
           </p>
         </CollapsiblePanel>
 
-        <CollapsiblePanel title="Setlist" summary={setlist.name} defaultOpen={false}>
+        <CollapsiblePanel title="Setlist" summary={setlist.name} icon={<ListMusic className="size-4" />} defaultOpen={false}>
           <div className="space-y-3">
             <input
               value={setlist.name}
@@ -393,6 +419,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
         <CollapsiblePanel
           title="Ramp"
           summary={state.rampEnabled ? `${state.rampConfig.startBpm} → ${state.rampConfig.endBpm}` : "Off"}
+          icon={<TrendingUp className="size-4" />}
           trailing={<Switch checked={state.rampEnabled} onCheckedChange={setRampEnabled} />}
           defaultOpen={state.rampEnabled}
         >
@@ -424,6 +451,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
         <CollapsiblePanel
           title="Mute"
           summary={state.trainerEnabled ? `${state.trainerConfig.playBars} play / ${state.trainerConfig.muteBars} mute` : "Off"}
+          icon={<VolumeX className="size-4" />}
           trailing={<Switch checked={state.trainerEnabled} onCheckedChange={setTrainerEnabled} />}
           defaultOpen={state.trainerEnabled}
         >
@@ -447,7 +475,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
         </CollapsiblePanel>
 
         {/* Practice timer */}
-        <CollapsiblePanel title="Timer" summary={formatTime(state.practiceSeconds)} defaultOpen={false}>
+        <CollapsiblePanel title="Timer" summary={formatTime(state.practiceSeconds)} icon={<Timer className="size-4" />} defaultOpen={false}>
           <div className="flex items-baseline justify-between">
             <span className="font-serif text-3xl tabular text-foreground">{formatTime(state.practiceSeconds)}</span>
             <NumberField label="Target min" value={targetMinutes} onChange={(v) => setTargetMinutes(Math.max(0, v))} compact />
@@ -465,8 +493,9 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
         <button
           type="button"
           onPointerDown={(e) => { e.preventDefault(); resetDefault(); }}
-          className="w-full rounded-md border border-border/70 px-4 py-3 tiny-caps text-[10px] text-muted-foreground hover:border-primary/60 hover:text-primary transition-colors"
+          className="flex w-full items-center justify-center gap-2 rounded-md border border-border/70 px-4 py-3 tiny-caps text-[10px] text-muted-foreground hover:border-primary/60 hover:text-primary transition-colors"
         >
+          <RotateCcw className="size-4" aria-hidden />
           Reset 4/4
         </button>
       </aside>
@@ -513,15 +542,6 @@ function WheelStage({
           onCyclePulseAccent={onCyclePulseAccent}
         />
         <div className="space-y-4">
-          <div>
-            <span className="tiny-caps text-xs text-muted-foreground">Always-on wheel</span>
-            <h2 className="mt-2 font-serif text-3xl md:text-4xl leading-none text-foreground">
-              One pulse map, three practice modes.
-            </h2>
-            <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
-              The wheel stays visible and adapts while you work in Beat Map, Levels, or Polyrhythm.
-            </p>
-          </div>
           <div className="grid grid-cols-4 gap-2">
             {pattern.map((beat, index) => {
               const active = isPlaying && currentBeat === index;
@@ -633,24 +653,18 @@ function TransportDeck({
 }
 
 function QuickSetup({
-  view,
   status,
   beatSound,
-  onViewChange,
   onBeatSoundChange,
   onPresetChange,
   onResetAccents,
 }: {
-  view: MetronomeView;
   status: string;
   beatSound: UseMetronomeReturn["state"]["beatSound"];
-  onViewChange: (view: MetronomeView) => void;
   onBeatSoundChange: (sound: UseMetronomeReturn["state"]["beatSound"]) => void;
   onPresetChange: (idx: number) => void;
   onResetAccents: () => void;
 }) {
-  const activeMode = MODE_OPTIONS.find((option) => option.id === view);
-
   return (
     <div className="rounded-lg border border-border/70 bg-card/50 p-4 md:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -658,25 +672,10 @@ function QuickSetup({
           <SectionLabel title="Quick Setup" hint={status} />
         </div>
         <div className="flex flex-wrap gap-2">
-          <SetupPill label="Mode" value={activeMode?.label ?? "Beat Map"} />
           <SetupPill label="Sound" value={BEAT_SOUND_LABELS[beatSound]} />
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-        <SelectField label="Mode">
-          <select
-            value={view}
-            onChange={(e) => onViewChange(e.target.value as MetronomeView)}
-            className="metronome-select"
-            aria-label="Metronome mode"
-          >
-            {MODE_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id} className="bg-background">
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </SelectField>
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
         <SelectField label="Sound">
           <select
             value={beatSound}
@@ -730,7 +729,7 @@ function SetupPill({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SelectField({ label, trailing, children }: { label: string; trailing?: React.ReactNode; children: React.ReactNode }) {
+function SelectField({ label, trailing, children }: { label: string; trailing?: ReactNode; children: ReactNode }) {
   return (
     <div className="rounded-md border border-border/60 bg-background/30 p-3">
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -742,37 +741,83 @@ function SelectField({ label, trailing, children }: { label: string; trailing?: 
   );
 }
 
-function TimeSignatureDropdown({ value, onChange }: { value: TimeSignature; onChange: (next: TimeSignature) => void }) {
+function AppGuide() {
   return (
-    <SelectField label="Time Signature">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
-        <select
-          value={value.numerator}
-          onChange={(e) => onChange({ ...value, numerator: Number(e.target.value) })}
-          className="metronome-select"
-          aria-label="Beat count"
-        >
-          {Array.from({ length: 15 }, (_, i) => i + 1).map((n) => (
-            <option key={n} value={n} className="bg-background">
-              {n}
-            </option>
-          ))}
-        </select>
-        <span className="font-serif text-3xl text-[hsl(var(--slate-cyan))]">/</span>
-        <select
-          value={value.denominator}
-          onChange={(e) => onChange({ ...value, denominator: Number(e.target.value) })}
-          className="metronome-select"
-          aria-label="Beat note value"
-        >
-          {[2, 4, 8, 16].map((n) => (
-            <option key={n} value={n} className="bg-background">
-              {n}
-            </option>
-          ))}
-        </select>
+    <div className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+      <GuideRow
+        icon={<Gauge className="size-4" />}
+        title="Start"
+        body="Tap the tempo, meter, or subdivision cards at the top to edit the essentials."
+      />
+      <GuideRow
+        icon={<Waves className="size-4" />}
+        title="Shape"
+        body="Use Beat Map for per-beat subdivisions, Levels for accents, and Polyrhythm for layered pulses."
+      />
+      <GuideRow
+        icon={<Music2 className="size-4" />}
+        title="Listen"
+        body="Choose a sound, then use pitch and swing only when the click needs a different feel."
+      />
+      <GuideRow
+        icon={<SlidersHorizontal className="size-4" />}
+        title="Practice"
+        body="Setlists, ramping, muting, haptics, and timer live on the right so the wheel stays clean."
+      />
+    </div>
+  );
+}
+
+function GuideRow({ icon, title, body }: { icon: ReactNode; title: string; body: string }) {
+  return (
+    <div className="grid grid-cols-[1.75rem_minmax(0,1fr)] gap-3">
+      <span className="mt-0.5 text-primary" aria-hidden>{icon}</span>
+      <span>
+        <span className="tiny-caps block text-[10px] text-foreground">{title}</span>
+        <span>{body}</span>
+      </span>
+    </div>
+  );
+}
+
+function VisualModePanel({ view, onChange }: { view: MetronomeView; onChange: (view: MetronomeView) => void }) {
+  return (
+    <div className="rounded-md border border-border/70 bg-card/50 p-4">
+      <SectionLabel title="View" hint={MODE_OPTIONS.find((option) => option.id === view)?.label} />
+      <div className="mt-3 grid gap-2">
+        {MODE_OPTIONS.map((option) => {
+          const active = view === option.id;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              onPointerDown={(e) => { e.preventDefault(); onChange(option.id); }}
+              className={
+                "grid min-h-16 grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-3 rounded-md border px-3 py-3 text-left transition-colors " +
+                (active
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border/60 text-muted-foreground hover:border-accent/70 hover:text-foreground")
+              }
+              aria-pressed={active}
+            >
+              <span
+                className="grid size-9 place-items-center rounded-full border"
+                style={{
+                  borderColor: active ? "hsl(var(--primary))" : "hsl(var(--border))",
+                  background: active ? "hsl(var(--primary) / 0.14)" : "hsl(var(--background) / 0.35)",
+                }}
+              >
+                {MODE_ICON[option.id]}
+              </span>
+              <span className="min-w-0">
+                <span className="block font-serif text-xl leading-none">{option.label}</span>
+                <span className="tiny-caps mt-1 block text-[10px] leading-relaxed">{option.detail}</span>
+              </span>
+            </button>
+          );
+        })}
       </div>
-    </SelectField>
+    </div>
   );
 }
 
@@ -781,13 +826,15 @@ function CollapsiblePanel({
   summary,
   defaultOpen = false,
   trailing,
+  icon,
   children,
 }: {
   title: string;
   summary?: string;
   defaultOpen?: boolean;
-  trailing?: React.ReactNode;
-  children: React.ReactNode;
+  trailing?: ReactNode;
+  icon?: ReactNode;
+  children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -795,9 +842,12 @@ function CollapsiblePanel({
     <Collapsible open={open} onOpenChange={setOpen} className="rounded-md border border-border/70 bg-card/50">
       <div className="flex items-center gap-2 px-4 py-3">
         <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center justify-between gap-3 text-left">
-          <span className="min-w-0">
-            <span className="tiny-caps block text-xs text-foreground">{title}</span>
-            {summary && <span className="mt-1 block truncate font-mono text-xs text-muted-foreground">{summary}</span>}
+          <span className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
+            {icon && <span className="text-primary/85" aria-hidden>{icon}</span>}
+            <span className="min-w-0">
+              <span className="tiny-caps block text-xs text-foreground">{title}</span>
+              {summary && <span className="mt-1 block truncate font-mono text-xs text-muted-foreground">{summary}</span>}
+            </span>
           </span>
           <span className="font-mono text-lg text-muted-foreground transition-transform group-data-[state=open]:rotate-45">+</span>
         </CollapsibleTrigger>
@@ -815,43 +865,6 @@ function CollapsiblePanel({
         <div className="border-t border-border/60 p-4">{children}</div>
       </CollapsibleContent>
     </Collapsible>
-  );
-}
-
-function TempoLearningStrip({ bpm, onSelect }: { bpm: number; onSelect: (bpm: number) => void }) {
-  const descriptions: Record<string, string> = {
-    Largo: "broad",
-    Adagio: "restful",
-    Andante: "walking",
-    Moderato: "measured",
-    Allegro: "lively",
-    Vivace: "brilliant",
-    Presto: "swift",
-  };
-
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-      {TEMPO_PRESETS.map((preset) => {
-        const active = Math.abs(bpm - preset.bpm) < 5;
-        return (
-          <button
-            key={preset.label}
-            type="button"
-            onPointerDown={(e) => { e.preventDefault(); onSelect(preset.bpm); }}
-            className={
-              "rounded-md border px-3 py-3 text-left transition-colors " +
-              (active
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border/70 bg-card/55 hover:border-accent/70 hover:bg-accent/5")
-            }
-          >
-            <span className="font-serif text-lg leading-none">{preset.label}</span>
-            <span className="mt-1 block font-mono text-sm tabular text-foreground/80">{preset.bpm}</span>
-            <span className="tiny-caps mt-1 block text-[10px] text-muted-foreground">{descriptions[preset.label]}</span>
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
@@ -1280,7 +1293,7 @@ function subdivisionBackground(beat: BeatPattern, active: boolean): string {
     .join(", ")})`;
 }
 
-function Field({ label, trailing, children }: { label: string; trailing?: React.ReactNode; children: React.ReactNode }) {
+function Field({ label, trailing, children }: { label: string; trailing?: ReactNode; children: ReactNode }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">

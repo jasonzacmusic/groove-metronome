@@ -129,6 +129,7 @@ export function useMetronome() {
   const [toneStarted, setToneStarted] = useState(false);
 
   const synthRef = useRef<Tone.Synth | null>(null);
+  const polySynthsRef = useRef<Tone.Synth[] | null>(null);
   const samplePlayersRef = useRef<Tone.Players | null>(null);
   const engineSoundRef = useRef<BeatSound | null>(null);
   const scheduleIdRef = useRef<number | null>(null);
@@ -189,6 +190,10 @@ export function useMetronome() {
       samplePlayersRef.current.dispose();
       samplePlayersRef.current = null;
     }
+    if (polySynthsRef.current) {
+      polySynthsRef.current.forEach((synth) => synth.dispose());
+      polySynthsRef.current = null;
+    }
     engineSoundRef.current = null;
   }, []);
 
@@ -247,6 +252,19 @@ export function useMetronome() {
     } catch {
       // ignore rapid trigger errors
     }
+  }, []);
+
+  const playPolyClick = useCallback((time: number, freq: number, vol: number, voiceIndex: number, downbeat: boolean) => {
+    if (!polySynthsRef.current) {
+      polySynthsRef.current = Array.from({ length: 4 }, (_, index) =>
+        new Tone.Synth({
+          oscillator: { type: index === 0 ? "triangle" : index === 1 ? "square" : "sine" },
+          envelope: { attack: 0.001, decay: 0.045, sustain: 0, release: 0.025 },
+        }).toDestination(),
+      );
+    }
+    const synth = polySynthsRef.current[voiceIndex % polySynthsRef.current.length];
+    synth.triggerAttackRelease(freq, downbeat ? "32n" : "64n", time, Tone.dbToGain(vol));
   }, []);
 
   const scheduleLoop = useCallback(() => {
@@ -310,7 +328,7 @@ export function useMetronome() {
         Tone.Draw.schedule(() => setCurrentPulse(pulseIndex), time + offset);
       }
 
-      Tone.Draw.schedule(() => setCurrentBeat(beatIdx), time);
+      if (!poly.enabled) Tone.Draw.schedule(() => setCurrentBeat(beatIdx), time);
 
       if (isPolyrhythmCycle) {
         const barDuration = beatDuration * ts.numerator;
@@ -321,10 +339,13 @@ export function useMetronome() {
             const offset = polyStep * k;
             const isPolyDownbeat = k === 0;
             if (!muted) {
-              const role: ClickRole = isPolyDownbeat ? "accent" : voiceIndex === 0 ? "normal" : "sub";
               const polyFreq = [1900, 1450, 1120, 850][voiceIndex] ?? 1000;
-              const polyVol = isPolyDownbeat ? -2 - voiceIndex * 2 : -8 - voiceIndex * 2;
-              playClick(time + offset, polyFreq, polyVol, role, voiceIndex + 1);
+              const polyVol = isPolyDownbeat ? -2 - voiceIndex * 2 : -9 - voiceIndex * 2;
+              playPolyClick(time + offset, polyFreq, polyVol, voiceIndex, isPolyDownbeat);
+            }
+            if (voiceIndex === 0) {
+              const mainIdx = k;
+              Tone.Draw.schedule(() => setCurrentBeat(mainIdx), time + offset);
             }
             if (voiceIndex === 1) {
               const polyIdx = k;
@@ -343,7 +364,7 @@ export function useMetronome() {
     }, `${timeSignatureRef.current.denominator}n`);
 
     scheduleIdRef.current = id;
-  }, [playClick]);
+  }, [playClick, playPolyClick]);
 
   const startRampCycle = useCallback(() => {
     const cfg = rampConfigRef.current;
