@@ -66,6 +66,9 @@ export interface MetronomeState {
 }
 
 type ClickRole = "accent" | "normal" | "sub";
+interface StartOptions {
+  delaySeconds?: number;
+}
 
 const VOICE_ACCENT_VOLUME: Record<PulseAccent, number> = {
   accent: 1,
@@ -530,7 +533,7 @@ export function useMetronome() {
     }, 200);
   }, []);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (options?: StartOptions) => {
     if (!toneStarted) {
       await Tone.start();
       setToneStarted(true);
@@ -552,7 +555,8 @@ export function useMetronome() {
 
     scheduleLoop();
     Tone.getContext().lookAhead = 0.01;
-    transport.start("+0.01");
+    const delaySeconds = clamp(options?.delaySeconds ?? 0.01, 0.01, 8);
+    transport.start(`+${delaySeconds}`);
     setIsPlaying(true);
     setPracticeSeconds(0);
 

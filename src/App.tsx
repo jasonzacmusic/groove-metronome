@@ -4,6 +4,7 @@ import { Check, Copy, MessageCircle, Share2 } from "lucide-react";
 import { useMetronome } from "@/hooks/useMetronome";
 import { AnalyzerPage } from "@/pages/AnalyzerPage";
 import { MetronomePage } from "@/pages/MetronomePage";
+import { buildDefaultPattern, type MeterDenominator, type TimeSignature } from "@/lib/metronome-types";
 
 type Tab = "metronome" | "analyzer";
 export type MetronomeView = "beatmap" | "levels" | "polyrhythm" | "polymeter";
@@ -32,6 +33,23 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("metronome");
   const [view, setView] = useState<MetronomeView>("beatmap");
   const [theme, setTheme] = useState<ThemeId>(readStoredTheme);
+  const [analyzerStartDelay, setAnalyzerStartDelay] = useState(0);
+
+  const prepareAnalyzerClick = (timeSignature: TimeSignature = metronome.state.timeSignature) => {
+    const denominator: MeterDenominator = timeSignature.denominator === 16 ? 16 : timeSignature.denominator === 8 ? 8 : 4;
+    metronome.setPattern(buildDefaultPattern(timeSignature.numerator, 1));
+    metronome.setSwing(0);
+    metronome.setTrainerEnabled(false);
+    metronome.setRampEnabled(false);
+    metronome.setPolyrhythm({
+      enabled: false,
+      dottedMode: "off",
+      tripletMode: "off",
+      polymeterEnabled: false,
+      polymeterLanes: [{ numerator: timeSignature.numerator, denominator }],
+    });
+    setView("beatmap");
+  };
 
   useEffect(() => {
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
@@ -46,11 +64,17 @@ export default function App() {
         || (target instanceof HTMLElement && target.isContentEditable);
       if (editable || event.code !== "Space") return;
       event.preventDefault();
+      if (tab === "analyzer") {
+        prepareAnalyzerClick();
+        if (metronome.state.isPlaying) metronome.stop();
+        else void metronome.start({ delaySeconds: analyzerStartDelay });
+        return;
+      }
       metronome.toggle();
     };
     window.addEventListener("keydown", handler, { capture: true });
     return () => window.removeEventListener("keydown", handler, { capture: true });
-  }, [metronome]);
+  }, [analyzerStartDelay, metronome, tab]);
 
   return (
     <div data-theme={theme} className="relative min-h-full bg-background text-foreground overflow-x-hidden">
@@ -89,7 +113,10 @@ export default function App() {
               <span className="text-border">·</span>
               <button
                 type="button"
-                onClick={() => setTab("analyzer")}
+                onClick={() => {
+                  prepareAnalyzerClick();
+                  setTab("analyzer");
+                }}
                 className={tab === "analyzer" ? "text-primary" : "text-muted-foreground hover:text-foreground transition-colors"}
               >
                 Analyzer
@@ -117,11 +144,17 @@ export default function App() {
           <AnalyzerPage
             metronome={metronome}
             active={tab === "analyzer"}
+            analyzerStartDelay={analyzerStartDelay}
+            onAnalyzerStartDelayChange={setAnalyzerStartDelay}
+            onPrepareAnalyzerClick={prepareAnalyzerClick}
             onUseAsBpm={(bpm) => {
+              prepareAnalyzerClick();
               metronome.setBpm(bpm);
             }}
             onUseAsTimeSignature={(numerator, denominator) => {
-              metronome.setTimeSignature({ numerator, denominator });
+              const next = { numerator, denominator } as TimeSignature;
+              metronome.setTimeSignature(next);
+              prepareAnalyzerClick(next);
             }}
           />
         </div>

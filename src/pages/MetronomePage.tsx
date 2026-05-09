@@ -1,17 +1,20 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   BarChart3,
   CircleHelp,
   Copy,
+  Download,
   Gauge,
   Hand,
   ListMusic,
   Music2,
   Network,
   Plus,
+  Share2,
   SlidersHorizontal,
   Timer,
   TrendingUp,
+  Upload,
   Volume2,
   VolumeX,
   Waves,
@@ -120,6 +123,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
   const [selectedBeat, setSelectedBeat] = useState<number | null>(null);
   const [songName, setSongName] = useState("New song");
   const [showHaptics, setShowHaptics] = useState(false);
+  const setlistImportRef = useRef<HTMLInputElement | null>(null);
   const [setlist, setSetlist] = useState<SetlistState>(() => {
     try {
       const saved = window.localStorage.getItem(SETLIST_STORAGE_KEY);
@@ -220,6 +224,47 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
     setTimeSignature(song.timeSignature);
     setSwing(song.swing);
     setPattern(song.pattern.map((beat) => ({ pulses: beat.pulses, accents: [...beat.accents] })));
+  };
+
+  const setlistBackupFileName = () => `${safeFileName(setlist.name || "groove-setlist")}.groove-setlist.json`;
+
+  const exportSetlist = () => {
+    const file = new Blob([JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), setlist }, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = setlistBackupFileName();
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const shareSetlist = async () => {
+    const payload = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), setlist }, null, 2);
+    const file = new File([payload], setlistBackupFileName(), { type: "application/json" });
+    const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean };
+    if (navigator.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
+      await navigator.share({ title: setlist.name, text: "Groove Metronome setlist backup", files: [file] });
+      return;
+    }
+    exportSetlist();
+  };
+
+  const importSetlist = async (file: File) => {
+    const raw = await file.text();
+    const parsed = JSON.parse(raw) as unknown;
+    const incoming = readSetlistBackup(parsed);
+    if (!incoming) return;
+    if (!incoming || typeof incoming.name !== "string" || !Array.isArray(incoming.songs)) return;
+    setSetlist({
+      name: incoming.name,
+      songs: incoming.songs.filter((song: SavedSong) => song && typeof song.name === "string").map((song: SavedSong) => ({
+        ...song,
+        id: song.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        pattern: song.pattern?.length ? song.pattern : buildDefaultPattern(song.timeSignature?.numerator ?? 4, 1),
+        timeSignature: song.timeSignature ?? { numerator: 4, denominator: 4 },
+        swing: song.swing ?? 0,
+      })),
+    });
   };
 
   const dominantSubdivision: SubdivisionCount | null = (() => {
@@ -427,7 +472,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
 
         <CollapsiblePanel title="Setlist Studio" summary={setlist.name} icon={<ListMusic className="size-4" />} defaultOpen={false}>
           <div className="space-y-3">
-            <PremiumToolNote label="Premium workflow" body="Build a concert or band book, save song tempos, then jump between songs without rebuilding your click." />
+            <PremiumToolNote label="Setlist vault" body="Build a concert book, keep it in this browser, export a backup, and share it before a show." />
             <input
               value={setlist.name}
               onChange={(e) => setSetlist((prev) => ({ ...prev, name: e.target.value }))}
@@ -448,6 +493,22 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
               >
                 Save
               </button>
+            </div>
+            <input
+              ref={setlistImportRef}
+              type="file"
+              accept=".json,.groove-setlist.json,application/json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void importSetlist(file);
+                e.currentTarget.value = "";
+              }}
+            />
+            <div className="grid grid-cols-3 gap-2">
+              <SetlistAction label="Share" icon={<Share2 className="size-3.5" />} onClick={() => void shareSetlist()} />
+              <SetlistAction label="Backup" icon={<Download className="size-3.5" />} onClick={exportSetlist} />
+              <SetlistAction label="Restore" icon={<Upload className="size-3.5" />} onClick={() => setlistImportRef.current?.click()} />
             </div>
             {setlist.songs.length > 0 && (
               <div className="space-y-1.5 max-h-48 overflow-auto pr-1">
@@ -1001,6 +1062,20 @@ function GuideRow({ icon, title, body }: { icon: ReactNode; title: string; body:
   );
 }
 
+function safeFileName(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "groove-setlist";
+}
+
+function readSetlistBackup(value: unknown): SetlistState | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as { name?: unknown; songs?: unknown; setlist?: unknown };
+  const setlist = candidate.setlist && typeof candidate.setlist === "object"
+    ? candidate.setlist as { name?: unknown; songs?: unknown }
+    : candidate;
+  if (typeof setlist.name !== "string" || !Array.isArray(setlist.songs)) return null;
+  return setlist as SetlistState;
+}
+
 function IconButton({
   label,
   onPress,
@@ -1025,6 +1100,22 @@ function IconButton({
       className="grid size-8 place-items-center rounded-sm border border-border/70 bg-card/65 text-muted-foreground transition-colors hover:border-primary/70 hover:text-primary disabled:cursor-not-allowed disabled:opacity-35"
     >
       {children}
+    </button>
+  );
+}
+
+function SetlistAction({ label, icon, onClick }: { label: string; icon: ReactNode; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onPointerDown={(e) => {
+        e.preventDefault();
+        onClick();
+      }}
+      className="tiny-caps flex min-h-9 items-center justify-center gap-1.5 rounded-sm border border-border/70 bg-background/35 px-2 text-[10px] text-muted-foreground transition-colors hover:border-primary/70 hover:text-primary"
+    >
+      {icon}
+      {label}
     </button>
   );
 }

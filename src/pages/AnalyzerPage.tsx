@@ -15,6 +15,9 @@ import type { UseMetronomeReturn } from "@/hooks/useMetronome";
 interface AnalyzerPageProps {
   metronome: UseMetronomeReturn;
   active?: boolean;
+  analyzerStartDelay: number;
+  onAnalyzerStartDelayChange: (delaySeconds: number) => void;
+  onPrepareAnalyzerClick: () => void;
   onUseAsBpm: (bpm: number) => void;
   onUseAsTimeSignature: (numerator: number, denominator: number) => void;
 }
@@ -51,7 +54,15 @@ interface Marker {
 
 type MidiInstrument = "keys" | "samplePiano" | "guitar" | "drums";
 
-export function AnalyzerPage({ metronome, active = true, onUseAsBpm, onUseAsTimeSignature }: AnalyzerPageProps) {
+export function AnalyzerPage({
+  metronome,
+  active = true,
+  analyzerStartDelay,
+  onAnalyzerStartDelayChange,
+  onPrepareAnalyzerClick,
+  onUseAsBpm,
+  onUseAsTimeSignature,
+}: AnalyzerPageProps) {
   const [items, setItems] = useState<AnalyzerItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -144,7 +155,7 @@ export function AnalyzerPage({ metronome, active = true, onUseAsBpm, onUseAsTime
         </p>
       </div>
 
-      <AnalyzerMetronomeDock metronome={metronome} />
+      <AnalyzerMetronomeDock metronome={metronome} startDelay={analyzerStartDelay} onPrepare={onPrepareAnalyzerClick} />
 
       <ImportZone onFiles={handleFiles} busy={busy} status={status} />
       <LiveRecorder onRecorded={(file) => handleFiles([{ file, kind: "audio" }])} busy={busy} />
@@ -187,6 +198,7 @@ export function AnalyzerPage({ metronome, active = true, onUseAsBpm, onUseAsTime
               active={active}
               onUseAsBpm={onUseAsBpm}
               onUseAsTimeSignature={onUseAsTimeSignature}
+              onAnalyzerStartDelayChange={onAnalyzerStartDelayChange}
             />
           )}
         </div>
@@ -204,8 +216,16 @@ export function AnalyzerPage({ metronome, active = true, onUseAsBpm, onUseAsTime
   );
 }
 
-function AnalyzerMetronomeDock({ metronome }: { metronome: UseMetronomeReturn }) {
-  const { state, toggle, setBpm, adjustBpm } = metronome;
+function AnalyzerMetronomeDock({
+  metronome,
+  startDelay,
+  onPrepare,
+}: {
+  metronome: UseMetronomeReturn;
+  startDelay: number;
+  onPrepare: () => void;
+}) {
+  const { state, start, stop, setBpm, adjustBpm } = metronome;
   const [draft, setDraft] = useState(String(Math.round(state.bpm)));
 
   useEffect(() => {
@@ -215,6 +235,11 @@ function AnalyzerMetronomeDock({ metronome }: { metronome: UseMetronomeReturn })
   const commitDraft = () => {
     const value = Number(draft);
     if (Number.isFinite(value)) setBpm(Math.max(20, Math.min(300, Math.round(value))));
+  };
+  const toggleAnalyzerClick = () => {
+    onPrepare();
+    if (state.isPlaying) stop();
+    else void start({ delaySeconds: startDelay });
   };
 
   return (
@@ -239,9 +264,9 @@ function AnalyzerMetronomeDock({ metronome }: { metronome: UseMetronomeReturn })
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" variant="outline" onClick={() => adjustBpm(-1)}>-1</Button>
-          <Button size="sm" onClick={toggle}>
+          <Button size="sm" onClick={toggleAnalyzerClick}>
             {state.isPlaying ? <Pause className="mr-2 size-4" /> : <Play className="mr-2 size-4" />}
-            {state.isPlaying ? "Stop click" : "Play click"}
+            {state.isPlaying ? "Stop click" : startDelay > 0.05 ? "Play on transient" : "Play click"}
           </Button>
           <Button size="sm" variant="outline" onClick={() => adjustBpm(1)}>+1</Button>
           <Button size="sm" variant="outline" onClick={() => setBpm(Math.max(20, Math.round(state.bpm / 2)))}>Half</Button>
@@ -323,6 +348,7 @@ function AnalysisWorkspace({
   active,
   onUseAsBpm,
   onUseAsTimeSignature,
+  onAnalyzerStartDelayChange,
 }: {
   item: AnalyzerItem;
   onRemove: () => void;
@@ -330,6 +356,7 @@ function AnalysisWorkspace({
   active: boolean;
   onUseAsBpm: (bpm: number) => void;
   onUseAsTimeSignature: (numerator: number, denominator: number) => void;
+  onAnalyzerStartDelayChange: (delaySeconds: number) => void;
 }) {
   return (
     <Card>
@@ -352,7 +379,14 @@ function AnalysisWorkspace({
         )}
 
         {item.kind === "audio" ? (
-          <AudioWorkspace item={item} active={active} onAddMarker={onAddMarker} onUseAsBpm={onUseAsBpm} onUseAsTimeSignature={onUseAsTimeSignature} />
+          <AudioWorkspace
+            item={item}
+            active={active}
+            onAddMarker={onAddMarker}
+            onUseAsBpm={onUseAsBpm}
+            onUseAsTimeSignature={onUseAsTimeSignature}
+            onAnalyzerStartDelayChange={onAnalyzerStartDelayChange}
+          />
         ) : (
           <MidiWorkspace item={item} active={active} onUseAsBpm={onUseAsBpm} onUseAsTimeSignature={onUseAsTimeSignature} />
         )}
@@ -367,12 +401,14 @@ function AudioWorkspace({
   onAddMarker,
   onUseAsBpm,
   onUseAsTimeSignature,
+  onAnalyzerStartDelayChange,
 }: {
   item: Extract<AnalyzerItem, { kind: "audio" }>;
   active: boolean;
   onAddMarker: (timeSec: number) => void;
   onUseAsBpm: (bpm: number) => void;
   onUseAsTimeSignature: (numerator: number, denominator: number) => void;
+  onAnalyzerStartDelayChange: (delaySeconds: number) => void;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const clickSynthRef = useRef<Tone.Synth | null>(null);
@@ -383,6 +419,14 @@ function AudioWorkspace({
   const result = item.result;
 
   const duration = result?.durationSec ?? audioRef.current?.duration ?? 0;
+  const updateAnalyzerDelay = () => {
+    const audio = audioRef.current;
+    if (!result || !audio || audio.paused || audio.ended) {
+      onAnalyzerStartDelayChange(0);
+      return;
+    }
+    onAnalyzerStartDelayChange(nextOnsetDelay(result.onsets, audio.currentTime));
+  };
 
   useEffect(() => {
     if (!active) return;
@@ -400,6 +444,21 @@ function AudioWorkspace({
     window.addEventListener("keydown", handler, { capture: true });
     return () => window.removeEventListener("keydown", handler, { capture: true });
   }, [active]);
+
+  useEffect(() => {
+    updateAnalyzerDelay();
+    return () => onAnalyzerStartDelayChange(0);
+    // The delay is recalculated from audio element events below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id, result]);
+
+  useEffect(() => {
+    if (!active || !result) return;
+    const timer = window.setInterval(updateAnalyzerDelay, 40);
+    return () => window.clearInterval(timer);
+    // Keep the parent start delay close to the next transient while audio rolls.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, result]);
 
   useEffect(() => {
     if (!trackClick || !result || !audioRef.current) {
@@ -452,9 +511,20 @@ function AudioWorkspace({
         src={item.url}
         controls
         className="w-full"
-        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-        onLoadedMetadata={(e) => setCurrentTime(e.currentTarget.currentTime)}
-        onSeeked={() => { lastClickTimeRef.current = -Infinity; }}
+        onTimeUpdate={(e) => {
+          setCurrentTime(e.currentTarget.currentTime);
+          updateAnalyzerDelay();
+        }}
+        onPlay={updateAnalyzerDelay}
+        onPause={updateAnalyzerDelay}
+        onLoadedMetadata={(e) => {
+          setCurrentTime(e.currentTarget.currentTime);
+          updateAnalyzerDelay();
+        }}
+        onSeeked={() => {
+          lastClickTimeRef.current = -Infinity;
+          updateAnalyzerDelay();
+        }}
       />
 
       <WaveformLane
@@ -465,6 +535,7 @@ function AudioWorkspace({
         onSeek={(timeSec) => {
           if (audioRef.current) audioRef.current.currentTime = timeSec;
           setCurrentTime(timeSec);
+          updateAnalyzerDelay();
         }}
       />
 
@@ -1167,6 +1238,14 @@ function nearestOnsetTime(onsets: number[], target: number, tolerance: number): 
     if (onset > target + tolerance) break;
   }
   return best;
+}
+
+function nextOnsetDelay(onsets: number[], currentTime: number): number {
+  for (const onset of onsets) {
+    const delay = onset - currentTime;
+    if (delay > 0.018) return Math.min(8, delay);
+  }
+  return 0;
 }
 
 function markersFromAudio(result: TempoAnalysisResult): Marker[] {
