@@ -333,6 +333,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
           targetMinutes={targetMinutes}
           onTargetMinutes={setTargetMinutes}
           onReset={resetDefault}
+          onResetAccents={resetAccents}
         />
 
         <WheelStage
@@ -1085,11 +1086,13 @@ function HeroPracticeBar({
   targetMinutes,
   onTargetMinutes,
   onReset,
+  onResetAccents,
 }: {
   practiceSeconds: number;
   targetMinutes: number;
   onTargetMinutes: (minutes: number) => void;
   onReset: () => void;
+  onResetAccents: () => void;
 }) {
   const progress = targetMinutes > 0 ? Math.min(100, (practiceSeconds / (targetMinutes * 60)) * 100) : 0;
   return (
@@ -1099,16 +1102,25 @@ function HeroPracticeBar({
           <span className="tiny-caps block text-[10px] text-muted-foreground">Practice Timer</span>
           <span className="font-serif text-5xl leading-none tabular text-foreground">{formatTime(practiceSeconds)}</span>
         </div>
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-end gap-2">
           <NumberField label="Target min" value={targetMinutes} onChange={(v) => onTargetMinutes(Math.max(0, v))} compact />
-          <button
-            type="button"
-            onPointerDown={(e) => { e.preventDefault(); onReset(); }}
-            className="inline-flex min-h-12 items-center gap-2 rounded-md border border-primary bg-primary px-4 py-3 tiny-caps text-[10px] text-primary-foreground shadow-[0_0_22px_hsl(var(--primary)/0.16)] transition-colors hover:bg-primary/90"
-          >
-            <RotateCcw className="size-4" />
-            Reset 4/4 · 100 BPM
-          </button>
+          <div className="flex items-end gap-1.5">
+            <button
+              type="button"
+              onPointerDown={(e) => { e.preventDefault(); onReset(); }}
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-sm border border-primary/70 bg-primary/10 px-2.5 py-1.5 tiny-caps text-[9px] text-primary transition-colors hover:bg-primary/15"
+            >
+              <RotateCcw className="size-3.5" />
+              Reset 4/4
+            </button>
+            <button
+              type="button"
+              onPointerDown={(e) => { e.preventDefault(); onResetAccents(); }}
+              className="min-h-8 rounded-sm border border-border/70 bg-background/40 px-2.5 py-1.5 tiny-caps text-[9px] text-muted-foreground transition-colors hover:border-primary/70 hover:text-primary"
+            >
+              Reset accents
+            </button>
+          </div>
         </div>
       </div>
       {targetMinutes > 0 && (
