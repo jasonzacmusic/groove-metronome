@@ -57,6 +57,7 @@ export default function App() {
       enabled: false,
       dottedMode: "off",
       tripletMode: "off",
+      jazzMode: "off",
       rate: "double",
       polymeterEnabled: false,
       polymeterLanes: [{ numerator: timeSignature.numerator, denominator }],

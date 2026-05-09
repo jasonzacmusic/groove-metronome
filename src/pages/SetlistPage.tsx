@@ -54,6 +54,7 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
       enabled: false,
       dottedMode: "off",
       tripletMode: "off",
+      jazzMode: "off",
       rate: "double",
       polymeterEnabled: false,
       polymeterLanes: [{ numerator: song.timeSignature.numerator, denominator: song.timeSignature.denominator === 16 ? 16 : song.timeSignature.denominator === 8 ? 8 : 4 }],

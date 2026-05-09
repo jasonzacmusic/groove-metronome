@@ -198,6 +198,7 @@ export const BEAT_PATTERN_TILES: BeatPatternTile[] = [
 
 export type DottedPlaybackMode = "off" | "quarter" | "eighth" | "sixteenth";
 export type TripletAssistMode = "off" | "half" | "quarter" | "eighth" | "sextuplet";
+export type JazzAssistMode = "off" | "twoFour" | "ands" | "twoFourAnds" | "charleston";
 export type MeterDenominator = 4 | 8 | 16;
 export type PolyrhythmRate = "double" | "pulse";
 
@@ -221,6 +222,14 @@ export const TRIPLET_ASSIST_LABELS: Record<TripletAssistMode, string> = {
   sextuplet: "Sextuplets",
 };
 
+export const JAZZ_ASSIST_LABELS: Record<JazzAssistMode, string> = {
+  off: "Off",
+  twoFour: "2 & 4 backbeat",
+  ands: "Swing ands",
+  twoFourAnds: "2 & 4 + ands",
+  charleston: "Charleston",
+};
+
 /** Polyrhythm voices fire evenly-spaced pulses across the same cycle. */
 export interface PolyrhythmConfig {
   enabled: boolean;
@@ -229,6 +238,7 @@ export interface PolyrhythmConfig {
   against: number; // legacy single-voice value
   dottedMode: DottedPlaybackMode;
   tripletMode: TripletAssistMode;
+  jazzMode: JazzAssistMode;
   rate: PolyrhythmRate;
   polymeterEnabled: boolean;
   polymeterLanes: PolymeterLane[];

@@ -4,6 +4,7 @@ import * as Tone from "tone";
 import {
   buildDefaultPattern,
   DOTTED_PLAYBACK_LABELS,
+  JAZZ_ASSIST_LABELS,
   LEVEL_TO_ACCENT,
   nextSubdivision,
   pitchToMultiplier,
@@ -18,6 +19,7 @@ import {
   type BeatPattern,
   type BeatSound,
   type DottedPlaybackMode,
+  type JazzAssistMode,
   type MeterDenominator,
   type PolyrhythmRate,
   type PolyrhythmConfig,
@@ -67,6 +69,14 @@ export interface MetronomeState {
 }
 
 type ClickRole = "accent" | "normal" | "sub";
+type JazzAssistEvent = {
+  offset: number;
+  freq: number;
+  vol: number;
+  voiceIndex: number;
+  downbeat: boolean;
+  beatNumber: number;
+};
 interface StartOptions {
   delaySeconds?: number;
 }
@@ -101,6 +111,34 @@ function tripletHitsPerBar(mode: TripletAssistMode, numerator: number, denominat
   if (mode === "eighth") return Math.max(1, Math.round(quarterNotesPerBar * 3));
   if (mode === "sextuplet") return Math.max(1, Math.round(quarterNotesPerBar * 6));
   return 0;
+}
+
+function jazzAssistEvents(mode: JazzAssistMode, numerator: number, beatDuration: number): JazzAssistEvent[] {
+  if (mode === "off") return [];
+  const events: JazzAssistEvent[] = [];
+  const addBackbeat = (beatNumber: number) => {
+    if (beatNumber <= numerator) {
+      events.push({ offset: (beatNumber - 1) * beatDuration, freq: 520, vol: -7, voiceIndex: 1, downbeat: true, beatNumber });
+    }
+  };
+  const addAnd = (beatNumber: number) => {
+    if (beatNumber <= numerator) {
+      events.push({ offset: (beatNumber - 1) * beatDuration + beatDuration * (2 / 3), freq: 760, vol: -15, voiceIndex: 2, downbeat: false, beatNumber });
+    }
+  };
+
+  if (mode === "twoFour" || mode === "twoFourAnds") {
+    addBackbeat(2);
+    addBackbeat(4);
+  }
+  if (mode === "ands" || mode === "twoFourAnds") {
+    for (let beat = 1; beat <= numerator; beat++) addAnd(beat);
+  }
+  if (mode === "charleston") {
+    events.push({ offset: 0, freq: 560, vol: -9, voiceIndex: 1, downbeat: true, beatNumber: 1 });
+    addAnd(2);
+  }
+  return events.sort((a, b) => a.offset - b.offset);
 }
 
 function normalizeMeterDenominator(value: number): MeterDenominator {
@@ -193,6 +231,7 @@ export function useMetronome() {
     against: 2,
     dottedMode: "off",
     tripletMode: "off",
+    jazzMode: "off",
     rate: "double",
     polymeterEnabled: false,
     polymeterLanes: [
@@ -371,6 +410,7 @@ export function useMetronome() {
       const poly = polyrhythmRef.current;
       const isPolyrhythmOnly = poly.enabled && !poly.polymeterEnabled;
       const isPolyrhythmCycle = isPolyrhythmOnly && beatIdx === 0;
+      const jazzAssistActive = poly.jazzMode !== "off" && !poly.enabled && !poly.polymeterEnabled;
 
       let muted = false;
       if (trainerEnabledRef.current) {
@@ -403,8 +443,8 @@ export function useMetronome() {
           ? (isFirstPulse || voiceToken ? VOICE_ACCENT_VOLUME[accent] : -Infinity)
           : PULSE_ACCENT_VOLUME[accent];
         const role: ClickRole = isFirstPulse ? (accent === "accent" ? "accent" : "normal") : "sub";
-        if (!muted && !poly.enabled && !poly.polymeterEnabled && voiceSubdivisionAllowed) playClick(time + offset, freq, vol, role, beatIdx + 1, voiceToken);
-        if (!muted && !poly.enabled && !poly.polymeterEnabled && isFirstPulse && hapticsEnabledRef.current) {
+        if (!muted && !jazzAssistActive && !poly.enabled && !poly.polymeterEnabled && voiceSubdivisionAllowed) playClick(time + offset, freq, vol, role, beatIdx + 1, voiceToken);
+        if (!muted && !jazzAssistActive && !poly.enabled && !poly.polymeterEnabled && isFirstPulse && hapticsEnabledRef.current) {
           Tone.Draw.schedule(() => {
             void triggerMetronomeHaptic(accent);
           }, time + offset);
@@ -415,6 +455,17 @@ export function useMetronome() {
       }
 
       if (!isPolyrhythmOnly) Tone.Draw.schedule(() => setCurrentBeat(beatIdx), time);
+
+      if (!muted && jazzAssistActive && beatIdx === 0) {
+        jazzAssistEvents(poly.jazzMode, ts.numerator, beatDuration).forEach((event) => {
+          playPolyClick(time + event.offset, event.freq, event.vol, event.voiceIndex, event.downbeat);
+          if (hapticsEnabledRef.current && event.downbeat) {
+            Tone.Draw.schedule(() => {
+              void triggerMetronomeHaptic("normal");
+            }, time + event.offset);
+          }
+        });
+      }
 
       if (isPolyrhythmCycle) {
         const barDuration = beatDuration * ts.numerator;
@@ -791,6 +842,7 @@ export function useMetronome() {
         voices: (next.voices.length > 0 ? next.voices : [next.against]).slice(0, 3).map((voice) => clamp(Math.round(voice), 2, 16)),
         dottedMode: DOTTED_PLAYBACK_LABELS[next.dottedMode] ? next.dottedMode : "off",
         tripletMode: TRIPLET_ASSIST_LABELS[next.tripletMode] ? next.tripletMode : "off",
+        jazzMode: JAZZ_ASSIST_LABELS[next.jazzMode] ? next.jazzMode : "off",
         rate: (["double", "pulse"] as PolyrhythmRate[]).includes(next.rate) ? next.rate : "double",
         polymeterEnabled: Boolean(next.polymeterEnabled),
         polymeterLanes: (next.polymeterLanes?.length ? next.polymeterLanes : [

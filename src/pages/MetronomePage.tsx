@@ -41,6 +41,7 @@ import {
   BEAT_SOUND_OPTIONS,
   buildDefaultPattern,
   DOTTED_PLAYBACK_LABELS,
+  JAZZ_ASSIST_LABELS,
   METRONOME_PRESETS,
   pitchLabel,
   SUBDIVISION_NOTATION,
@@ -48,6 +49,7 @@ import {
   TRIPLET_ASSIST_LABELS,
   type BeatPattern,
   type DottedPlaybackMode,
+  type JazzAssistMode,
   type MeterDenominator,
   type PolymeterLane,
   type PolyrhythmRate,
@@ -196,6 +198,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
       against: 2,
       dottedMode: "off",
       tripletMode: "off",
+      jazzMode: "off",
       rate: "double",
       polymeterEnabled: false,
       polymeterLanes: [
@@ -453,8 +456,10 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
         <RhythmAssistPanel
           dottedMode={state.polyrhythm.dottedMode}
           tripletMode={state.polyrhythm.tripletMode}
+          jazzMode={state.polyrhythm.jazzMode}
           onDottedMode={(dottedMode) => setPolyrhythm({ dottedMode })}
           onTripletMode={(tripletMode) => setPolyrhythm({ tripletMode })}
+          onJazzMode={(jazzMode) => setPolyrhythm({ jazzMode })}
         />
 
         <CollapsiblePanel
@@ -949,7 +954,7 @@ function NotationStage({
           onCycleBeatSubdivision={onCycleBeatSubdivision}
         />
       </div>
-      <AssistNotationStrip dottedMode={polyrhythm.dottedMode} tripletMode={polyrhythm.tripletMode} />
+      <AssistNotationStrip dottedMode={polyrhythm.dottedMode} tripletMode={polyrhythm.tripletMode} jazzMode={polyrhythm.jazzMode} />
     </section>
   );
 }
@@ -1221,10 +1226,11 @@ function HeroPracticeBar({
   );
 }
 
-function AssistNotationStrip({ dottedMode, tripletMode }: { dottedMode: DottedPlaybackMode; tripletMode: TripletAssistMode }) {
+function AssistNotationStrip({ dottedMode, tripletMode, jazzMode }: { dottedMode: DottedPlaybackMode; tripletMode: TripletAssistMode; jazzMode: JazzAssistMode }) {
   const items = [
     dottedMode !== "off" ? assistNotationForDotted(dottedMode) : null,
     tripletMode !== "off" ? assistNotationForTriplet(tripletMode) : null,
+    jazzMode !== "off" ? assistNotationForJazz(jazzMode) : null,
   ].filter(Boolean) as Array<{ label: string; glyph: string; detail: string }>;
   if (items.length === 0) return null;
   return (
@@ -1253,6 +1259,13 @@ function assistNotationForTriplet(mode: TripletAssistMode) {
   if (mode === "quarter") return { label: "Triplet Assist", glyph: "♩³", detail: "quarter-note triplets" };
   if (mode === "eighth") return { label: "Triplet Assist", glyph: "♪³", detail: "eighth-note triplets" };
   return { label: "Triplet Assist", glyph: "♬⁶", detail: "sextuplets" };
+}
+
+function assistNotationForJazz(mode: JazzAssistMode) {
+  if (mode === "twoFour") return { label: "Jazz Assist", glyph: "𝄽 2 𝄽 4", detail: "backbeat only" };
+  if (mode === "ands") return { label: "Jazz Assist", glyph: "& & & &", detail: "swung offbeats" };
+  if (mode === "twoFourAnds") return { label: "Jazz Assist", glyph: "2 & 4 &", detail: "backbeat plus ands" };
+  return { label: "Jazz Assist", glyph: "1 𝄽 &", detail: "Charleston push" };
 }
 
 function TransportDeck({
@@ -1567,17 +1580,22 @@ function VisualModePanel({ view, onChange }: { view: MetronomeView; onChange: (v
 function RhythmAssistPanel({
   dottedMode,
   tripletMode,
+  jazzMode,
   onDottedMode,
   onTripletMode,
+  onJazzMode,
 }: {
   dottedMode: DottedPlaybackMode;
   tripletMode: TripletAssistMode;
+  jazzMode: JazzAssistMode;
   onDottedMode: (mode: DottedPlaybackMode) => void;
   onTripletMode: (mode: TripletAssistMode) => void;
+  onJazzMode: (mode: JazzAssistMode) => void;
 }) {
   const activeHint = [
     dottedMode !== "off" ? DOTTED_PLAYBACK_LABELS[dottedMode] : null,
     tripletMode !== "off" ? TRIPLET_ASSIST_LABELS[tripletMode] : null,
+    jazzMode !== "off" ? JAZZ_ASSIST_LABELS[jazzMode] : null,
   ].filter(Boolean).join(" + ") || "Off";
 
   return (
@@ -1611,9 +1629,49 @@ function RhythmAssistPanel({
             ))}
           </select>
         </SelectField>
+        <div className="rounded-md border border-primary/35 bg-primary/10 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <span className="tiny-caps block text-[10px] text-primary">Jazz Assist</span>
+              <p className="mt-1 text-sm leading-relaxed text-foreground/85">
+                Practice the pocket with 2 and 4, swung offbeats, or a Charleston push.
+              </p>
+            </div>
+            <span className="rounded-full border border-primary/40 px-2 py-1 tiny-caps text-[9px] text-primary">Swing</span>
+          </div>
+          <div className="mt-3 grid gap-2">
+            {(Object.keys(JAZZ_ASSIST_LABELS) as JazzAssistMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  onJazzMode(mode);
+                }}
+                className={cn(
+                  "rounded-md border px-3 py-2 text-left transition-colors",
+                  jazzMode === mode
+                    ? "border-primary bg-primary/16 text-foreground"
+                    : "border-border/70 bg-background/48 text-muted-foreground hover:border-primary/60 hover:text-foreground",
+                )}
+              >
+                <span className="block font-mono text-sm">{JAZZ_ASSIST_LABELS[mode]}</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{jazzAssistDescription(mode)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </CollapsiblePanel>
   );
+}
+
+function jazzAssistDescription(mode: JazzAssistMode): string {
+  if (mode === "twoFour") return "Silences the main click and gives only beats 2 and 4.";
+  if (mode === "ands") return "Silences the main click and plays the swung ands.";
+  if (mode === "twoFourAnds") return "Backbeat plus light swung ands for jazz time feel.";
+  if (mode === "charleston") return "A classic short-long comping push: 1 and the and of 2.";
+  return "Keep the normal rhythm assist behavior.";
 }
 
 function PolymeterPanel({
