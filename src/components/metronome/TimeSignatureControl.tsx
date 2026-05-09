@@ -21,7 +21,7 @@ export function TimeSignatureControl({ value, onChange }: TimeSignatureControlPr
   return (
     <div className="flex items-center justify-between gap-3 w-full">
       <div className="flex flex-col items-center gap-1">
-        <span className="tiny-caps text-[9px] text-muted-foreground">Beat</span>
+        <span className="tiny-caps text-[10px] text-muted-foreground">Beat</span>
         <div className="flex items-center gap-1">
           <Stepper onTap={() => setBeats(-1)} label="−" />
           <Stepper onTap={() => setBeats(+1)} label="+" />
@@ -29,14 +29,14 @@ export function TimeSignatureControl({ value, onChange }: TimeSignatureControlPr
       </div>
 
       <div className="flex flex-col items-center">
-        <span className="tiny-caps text-[9px] text-muted-foreground">T.S.</span>
+        <span className="tiny-caps text-[10px] text-muted-foreground">T.S.</span>
         <div className="font-serif text-3xl tabular text-[hsl(var(--slate-cyan))] leading-none mt-1">
           {value.numerator}<span className="text-muted-foreground/60 mx-1">/</span>{value.denominator}
         </div>
       </div>
 
       <div className="flex flex-col items-center gap-1">
-        <span className="tiny-caps text-[9px] text-muted-foreground">Note</span>
+        <span className="tiny-caps text-[10px] text-muted-foreground">Note</span>
         <div className="flex items-center gap-1">
           <Stepper onTap={() => setNote(-1)} label="−" />
           <Stepper onTap={() => setNote(+1)} label="+" />

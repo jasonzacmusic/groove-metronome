@@ -33,14 +33,14 @@ export function TapPad({ onTap, count, avgBpm }: TapPadProps) {
         boxShadow: flash ? "inset 0 0 24px hsla(36, 84%, 64%, 0.35)" : undefined,
       }}
     >
-      <span className="tiny-caps text-[10px] text-muted-foreground">Tap Tempo</span>
+      <span className="tiny-caps text-xs text-muted-foreground">Tap Tempo</span>
       <div className="flex items-baseline gap-3 mt-0.5">
         <span className="font-serif text-3xl tabular text-primary leading-none">
           {avgBpm !== null ? avgBpm : "—"}
         </span>
-        <span className="tiny-caps text-[9px] text-muted-foreground">BPM avg</span>
+        <span className="tiny-caps text-[10px] text-muted-foreground">BPM avg</span>
       </div>
-      <span className="tiny-caps text-[9px] text-muted-foreground/70 mt-1">
+      <span className="tiny-caps text-[10px] text-muted-foreground/70 mt-1">
         {count > 0 ? `${count} tap${count === 1 ? "" : "s"}` : "Tap or press T"}
       </span>
     </button>

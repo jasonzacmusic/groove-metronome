@@ -51,10 +51,10 @@ function pulsesToNoteSpecs(pat: BeatPattern): NoteSpec[] {
   return notes;
 }
 
-const AMBER = "rgb(242, 190, 74)";
-const FG = "rgb(247, 240, 219)";
-const GHOST = "rgba(168, 186, 204, 0.58)";
-const STAFF = "rgba(190, 205, 220, 0.72)";
+const AMBER = "rgb(174, 112, 16)";
+const FG = "rgb(17, 24, 39)";
+const GHOST = "rgba(17, 24, 39, 0.42)";
+const STAFF = "rgba(17, 24, 39, 0.68)";
 
 function colorFor(accent: PulseAccent, isActive: boolean): string {
   if (isActive) return AMBER;
@@ -75,7 +75,7 @@ export function NotationPanel({ pattern, timeSignature, currentBeat, isPlaying }
     host.innerHTML = "";
 
     const width = Math.max(380, host.clientWidth || 600);
-    const height = 150;
+    const height = 170;
 
     let renderer: Renderer | null = null;
     let ctx: RenderContext | null = null;
@@ -87,7 +87,7 @@ export function NotationPanel({ pattern, timeSignature, currentBeat, isPlaying }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (ctx as any).setBackgroundFillStyle?.("transparent");
 
-      const stave = new Stave(10, 18, width - 20);
+      const stave = new Stave(10, 26, width - 20);
       stave.addClef("percussion");
       stave.addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
       stave.setStyle({ strokeStyle: STAFF, fillStyle: STAFF });

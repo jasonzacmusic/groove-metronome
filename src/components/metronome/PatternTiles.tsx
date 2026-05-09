@@ -11,13 +11,13 @@ export function PatternTiles({ selectedBeat, beatCount, onSelectBeat, onApply }:
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <span className="tiny-caps text-[10px] text-foreground">Pattern Tiles</span>
+        <span className="tiny-caps text-xs text-foreground">Pattern Tiles</span>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="tiny-caps text-[9px] text-muted-foreground">Apply to</span>
+          <span className="tiny-caps text-[10px] text-muted-foreground">Apply to</span>
           <button
             type="button"
             onPointerDown={(e) => { e.preventDefault(); onSelectBeat(null); }}
-            className={`px-2 py-1 text-[10px] font-mono border transition-colors ${
+            className={`px-2 py-1 text-xs font-mono border transition-colors ${
               selectedBeat === null
                 ? "border-primary text-primary"
                 : "border-border text-muted-foreground hover:text-foreground"
@@ -30,7 +30,7 @@ export function PatternTiles({ selectedBeat, beatCount, onSelectBeat, onApply }:
               key={i}
               type="button"
               onPointerDown={(e) => { e.preventDefault(); onSelectBeat(i); }}
-              className={`px-2 py-1 text-[10px] font-mono border transition-colors ${
+              className={`px-2 py-1 text-xs font-mono border transition-colors ${
                 selectedBeat === i
                   ? "border-primary text-primary"
                   : "border-border text-muted-foreground hover:text-foreground"
@@ -54,7 +54,7 @@ export function PatternTiles({ selectedBeat, beatCount, onSelectBeat, onApply }:
             <span className="text-2xl text-foreground/85 group-hover:text-primary transition-colors leading-none">
               {tile.glyph}
             </span>
-            <span className="tiny-caps text-[8px] text-muted-foreground mt-1.5 px-1 text-center leading-tight">
+            <span className="tiny-caps text-[10px] text-muted-foreground mt-1.5 px-1 text-center leading-tight">
               {tile.label}
             </span>
           </button>

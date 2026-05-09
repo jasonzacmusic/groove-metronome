@@ -5,12 +5,12 @@ import { AnalyzerPage } from "@/pages/AnalyzerPage";
 import { MetronomePage } from "@/pages/MetronomePage";
 
 type Tab = "metronome" | "analyzer";
-type View = "wheel" | "bar";
+export type MetronomeView = "beatmap" | "wheel" | "levels" | "polyrhythm";
 
 export default function App() {
   const metronome = useMetronome();
   const [tab, setTab] = useState<Tab>("metronome");
-  const [view, setView] = useState<View>("wheel");
+  const [view, setView] = useState<MetronomeView>("beatmap");
 
   return (
     <div className="relative min-h-full bg-background text-foreground overflow-x-hidden">
@@ -27,12 +27,12 @@ export default function App() {
               <span className="text-primary">·</span>
               Metronome
             </h1>
-            <span className="hidden md:inline tiny-caps text-[9px] text-muted-foreground/70">
+            <span className="hidden md:inline tiny-caps text-[10px] text-muted-foreground/70">
               Atelier Edition
             </span>
           </div>
 
-          <nav className="flex w-full sm:w-auto items-center justify-between sm:justify-start gap-4 sm:gap-5 tiny-caps text-[9px] sm:text-[10px]">
+          <nav className="flex w-full sm:w-auto items-center justify-between sm:justify-start gap-4 sm:gap-5 tiny-caps text-[11px] sm:text-xs">
             <button
               type="button"
               onClick={() => setTab("metronome")}

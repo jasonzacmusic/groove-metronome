@@ -410,7 +410,7 @@ export function nextSubdivision(n: SubdivisionCount): SubdivisionCount {
 export function withSubdivision(beat: BeatPattern, pulses: SubdivisionCount): BeatPattern {
   const accents: PulseAccent[] = Array.from({ length: pulses }, (_, p) => {
     if (p < beat.accents.length) return beat.accents[p];
-    return "ghost";
+    return "normal";
   });
   if (accents.length > 0 && accents[0] === "mute") accents[0] = "normal";
   return { pulses, accents };

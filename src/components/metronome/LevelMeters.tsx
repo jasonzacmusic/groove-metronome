@@ -92,7 +92,7 @@ export function LevelMeters({
                 >
                   {i + 1}
                 </span>
-                <span className="tiny-caps text-[9px] text-muted-foreground">{beat.pulses}p</span>
+                <span className="tiny-caps text-[10px] text-muted-foreground">{beat.pulses}p</span>
               </button>
             </div>
           );

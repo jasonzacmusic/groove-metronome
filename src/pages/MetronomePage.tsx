@@ -10,6 +10,7 @@ import { TimeSignatureControl } from "@/components/metronome/TimeSignatureContro
 import { TransportButton } from "@/components/metronome/TransportButton";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import type { MetronomeView } from "@/App";
 import type { UseMetronomeReturn } from "@/hooks/useMetronome";
 import {
   BEAT_SOUND_LABELS,
@@ -29,6 +30,13 @@ import { clamp, formatTime } from "@/lib/utils";
 
 const SETLIST_STORAGE_KEY = "groove-metronome.setlists.v1";
 
+const MODE_OPTIONS: Array<{ id: MetronomeView; label: string; detail: string }> = [
+  { id: "beatmap", label: "Beat Map", detail: "per-beat subdivisions" },
+  { id: "wheel", label: "Wheel", detail: "circular pulse view" },
+  { id: "levels", label: "Levels", detail: "accent strength" },
+  { id: "polyrhythm", label: "Polyrhythm", detail: "LCM grid" },
+];
+
 interface SavedSong {
   id: string;
   name: string;
@@ -45,8 +53,8 @@ interface SetlistState {
 
 interface MetronomePageProps {
   metronome: UseMetronomeReturn;
-  view: "wheel" | "bar";
-  onViewChange: (v: "wheel" | "bar") => void;
+  view: MetronomeView;
+  onViewChange: (v: MetronomeView) => void;
 }
 
 export function MetronomePage({ metronome, view, onViewChange }: MetronomePageProps) {
@@ -129,6 +137,12 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
     setSwing(0);
     setPattern(buildDefaultPattern(4, 1));
     setPolyrhythm({ enabled: false, against: 3 });
+    onViewChange("beatmap");
+  };
+
+  const handleViewChange = (next: MetronomeView) => {
+    onViewChange(next);
+    setPolyrhythm({ enabled: next === "polyrhythm" });
   };
 
   const saveCurrentSong = () => {
@@ -167,64 +181,38 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
 
         <TempoLearningStrip bpm={state.bpm} onSelect={setBpm} />
 
-        <div className="grid grid-cols-1 xl:grid-cols-[190px_minmax(0,1fr)] gap-4">
+        <div className="grid grid-cols-1 xl:grid-cols-[220px_minmax(0,1fr)] gap-4 items-start">
           <SubdivisionPalette
             dominantSubdivision={dominantSubdivision}
             onApply={setGlobalSubdivision}
             onReset={resetAccents}
           />
-          <BeatSubdivisionEditor
-            pattern={state.pattern}
-            isPlaying={state.isPlaying}
-            currentBeat={state.currentBeat}
-            currentPulse={state.currentPulse}
-            onSetSubdivision={(beatIndex, pulses) => applyPatternToBeat(beatIndex, {
-              pulses,
-              accents: Array.from({ length: pulses }, (_, pulseIndex) => {
-                const existing = state.pattern[beatIndex]?.accents[pulseIndex];
-                if (existing) return existing;
-                return pulseIndex === 0 ? "normal" : "mute";
-              }),
-            })}
-            onCyclePulse={cyclePulse}
+          <ModeSwitcher
+            view={view}
+            onChange={handleViewChange}
+            status={state.isPlaying ? `Bar ${state.barCount + 1}` : "Stopped"}
           />
-        </div>
-
-        <PolyrhythmIntro
-          numerator={state.timeSignature.numerator}
-          against={state.polyrhythm.against}
-          enabled={state.polyrhythm.enabled}
-          onToggle={(enabled) => setPolyrhythm({ enabled })}
-          onAgainst={(against) => setPolyrhythm({ against })}
-        />
-
-        {/* View toggle */}
-        <div className="flex items-center justify-between">
-          <span className="tiny-caps text-[10px] text-muted-foreground">
-            {state.isPlaying ? `Bar ${state.barCount + 1}` : "Stopped"}
-          </span>
-          <div className="inline-flex items-center gap-3 tiny-caps text-[10px]">
-            <button
-              type="button"
-              onPointerDown={(e) => { e.preventDefault(); onViewChange("wheel"); }}
-              className={view === "wheel" ? "text-primary" : "text-muted-foreground hover:text-foreground"}
-            >
-              Wheel
-            </button>
-            <span className="text-border">/</span>
-            <button
-              type="button"
-              onPointerDown={(e) => { e.preventDefault(); onViewChange("bar"); }}
-              className={view === "bar" ? "text-primary" : "text-muted-foreground hover:text-foreground"}
-            >
-              Levels
-            </button>
-          </div>
         </div>
 
         {/* Hero view */}
         <div className="relative">
-          {view === "wheel" ? (
+          {view === "beatmap" ? (
+            <BeatSubdivisionEditor
+              pattern={state.pattern}
+              isPlaying={state.isPlaying}
+              currentBeat={state.currentBeat}
+              currentPulse={state.currentPulse}
+              onSetSubdivision={(beatIndex, pulses) => applyPatternToBeat(beatIndex, {
+                pulses,
+                accents: Array.from({ length: pulses }, (_, pulseIndex) => {
+                  const existing = state.pattern[beatIndex]?.accents[pulseIndex];
+                  if (existing) return existing;
+                  return "normal";
+                }),
+              })}
+              onCyclePulse={cyclePulse}
+            />
+          ) : view === "wheel" ? (
             <PolyrhythmWheel
               pattern={state.pattern}
               bpm={state.bpm}
@@ -234,7 +222,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
               onCycleBeatSubdivision={cycleBeatSubdivision}
               onCyclePulseAccent={cyclePulse}
             />
-          ) : (
+          ) : view === "levels" ? (
             <LevelMeters
               pattern={state.pattern}
               isPlaying={state.isPlaying}
@@ -243,13 +231,24 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
               onCycleBeatSubdivision={cycleBeatSubdivision}
               onSetPulseLevel={setPulseLevel}
             />
+          ) : (
+            <PolyrhythmMode
+              numerator={state.timeSignature.numerator}
+              against={state.polyrhythm.against}
+              enabled={state.polyrhythm.enabled}
+              isPlaying={state.isPlaying}
+              currentBeat={state.currentBeat}
+              currentPoly={state.currentPoly}
+              onToggle={(enabled) => setPolyrhythm({ enabled })}
+              onAgainst={(against) => setPolyrhythm({ against, enabled: true })}
+            />
           )}
         </div>
 
         {/* Notation */}
         <div className="space-y-2">
-          <span className="tiny-caps text-[10px] text-foreground">Notation</span>
-          <div className="notation-surface border border-border rounded-md px-2 py-2 overflow-x-auto shadow-[0_0_0_1px_hsl(var(--accent)/0.08)]">
+          <span className="tiny-caps text-xs text-foreground">Notation</span>
+          <div className="notation-surface border border-border rounded-md px-3 py-3 overflow-x-auto shadow-[0_0_0_1px_hsl(var(--accent)/0.08)]">
             <NotationPanel
               pattern={state.pattern}
               timeSignature={state.timeSignature}
@@ -279,7 +278,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
             <TransportButton isPlaying={state.isPlaying} onToggle={toggle} />
           </div>
           <div className="flex flex-col items-center gap-2">
-            <span className="tiny-caps text-[10px] text-muted-foreground">BPM</span>
+            <span className="tiny-caps text-xs text-muted-foreground">BPM</span>
             <div className="flex items-center gap-1">
               <Stepper label="−10" onTap={() => adjustBpm(-10)} />
               <Stepper label="−1" onTap={() => adjustBpm(-1)} primary />
@@ -357,7 +356,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
               <button
                 type="button"
                 onPointerDown={(e) => { e.preventDefault(); saveCurrentSong(); }}
-                className="tiny-caps text-[9px] px-2 py-1 border border-primary/60 text-primary rounded-sm hover:bg-primary/10"
+                className="tiny-caps text-[10px] px-2 py-1 border border-primary/60 text-primary rounded-sm hover:bg-primary/10"
               >
                 Save
               </button>
@@ -373,7 +372,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
                       className="min-w-0 text-left"
                     >
                       <span className="block truncate text-xs text-foreground">{song.name}</span>
-                      <span className="block tiny-caps text-[8px] text-muted-foreground">{song.bpm} BPM · {song.timeSignature.numerator}/{song.timeSignature.denominator}</span>
+                      <span className="block tiny-caps text-[10px] text-muted-foreground">{song.bpm} BPM · {song.timeSignature.numerator}/{song.timeSignature.denominator}</span>
                     </button>
                     <button
                       type="button"
@@ -393,7 +392,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
             <button
               type="button"
               onPointerDown={(e) => { e.preventDefault(); resetDefault(); }}
-              className="tiny-caps text-[9px] text-muted-foreground hover:text-primary"
+              className="tiny-caps text-[10px] text-muted-foreground hover:text-primary"
             >
               Reset to 4/4 default
             </button>
@@ -418,15 +417,15 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
                         : "border-border/60 text-muted-foreground hover:text-foreground hover:border-border")
                     }
                   >
-                    <span className="tiny-caps block text-[10px] tracking-[0.12em]">{BEAT_SOUND_LABELS[sound.id]}</span>
-                    <span className="tiny-caps block mt-1 text-[7px] tracking-[0.12em] opacity-50">{sound.family}</span>
+                    <span className="tiny-caps block text-[11px] tracking-[0.12em]">{BEAT_SOUND_LABELS[sound.id]}</span>
+                    <span className="tiny-caps block mt-1 text-[9px] tracking-[0.12em] opacity-55">{sound.family}</span>
                   </button>
                 );
               })}
             </div>
 
             <div className="space-y-1.5">
-              <div className="flex items-baseline justify-between tiny-caps text-[9px] tracking-[0.2em]">
+              <div className="flex items-baseline justify-between tiny-caps text-[10px] tracking-[0.18em]">
                 <span className="text-muted-foreground/60">Deep</span>
                 <span className="text-primary">{pitchLabel(state.pitch)}</span>
                 <span className="text-muted-foreground/60">Piercing</span>
@@ -471,11 +470,11 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
           </div>
           <label className="flex items-center gap-2 mt-3">
             <Switch checked={state.rampConfig.loop} onCheckedChange={(c) => setRampConfig({ ...state.rampConfig, loop: c })} />
-            <span className="tiny-caps text-[9px] text-muted-foreground">Loop</span>
+            <span className="tiny-caps text-[10px] text-muted-foreground">Loop</span>
           </label>
           {state.rampProgress && (
             <div className="mt-3">
-              <p className="tiny-caps text-[9px] text-primary">
+              <p className="tiny-caps text-[10px] text-primary">
                 Bar {state.rampProgress.bar}/{state.rampConfig.durationBars} · {state.rampProgress.currentBpm} → {state.rampConfig.endBpm}
               </p>
               <div className="mt-1 w-full bg-border h-px overflow-hidden">
@@ -506,7 +505,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
             ))}
           </div>
           {state.trainerEnabled && state.isPlaying && (
-            <p className="tiny-caps text-[9px] mt-2" style={{ color: state.trainerPhase === "muted" ? "hsl(var(--muted-foreground))" : "hsl(var(--primary))" }}>
+            <p className="tiny-caps text-[10px] mt-2" style={{ color: state.trainerPhase === "muted" ? "hsl(var(--muted-foreground))" : "hsl(var(--primary))" }}>
               {state.trainerPhase}
             </p>
           )}
@@ -529,7 +528,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
         </Field>
 
         <hr className="rule" />
-        <p className="tiny-caps text-[9px] text-muted-foreground/60 leading-relaxed">
+        <p className="tiny-caps text-[10px] text-muted-foreground/60 leading-relaxed">
           Space play · T tap · ↑↓ ±1 · [ ] ±5
         </p>
       </aside>
@@ -540,8 +539,8 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
 function SectionLabel({ title, hint }: { title: string; hint?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <span className="tiny-caps text-[10px] text-foreground">{title}</span>
-      {hint && <span className="tiny-caps text-[9px] text-muted-foreground/70">{hint}</span>}
+      <span className="tiny-caps text-xs text-foreground">{title}</span>
+      {hint && <span className="tiny-caps text-[11px] text-muted-foreground/70">{hint}</span>}
     </div>
   );
 }
@@ -567,15 +566,15 @@ function TempoLearningStrip({ bpm, onSelect }: { bpm: number; onSelect: (bpm: nu
             type="button"
             onPointerDown={(e) => { e.preventDefault(); onSelect(preset.bpm); }}
             className={
-              "rounded-md border px-3 py-2 text-left transition-colors " +
+              "rounded-md border px-3 py-3 text-left transition-colors " +
               (active
                 ? "border-primary bg-primary/10 text-primary"
                 : "border-border/70 bg-card/55 hover:border-accent/70 hover:bg-accent/5")
             }
           >
-            <span className="font-serif text-base leading-none">{preset.label}</span>
-            <span className="mt-1 block font-mono text-[11px] tabular text-foreground/80">{preset.bpm}</span>
-            <span className="tiny-caps mt-1 block text-[7px] text-muted-foreground">{descriptions[preset.label]}</span>
+            <span className="font-serif text-lg leading-none">{preset.label}</span>
+            <span className="mt-1 block font-mono text-sm tabular text-foreground/80">{preset.bpm}</span>
+            <span className="tiny-caps mt-1 block text-[10px] text-muted-foreground">{descriptions[preset.label]}</span>
           </button>
         );
       })}
@@ -593,7 +592,7 @@ function SubdivisionPalette({
   onReset: () => void;
 }) {
   return (
-    <div className="rounded-md border border-border/70 bg-card/60 p-3">
+    <div className="rounded-md border border-border/70 bg-card/60 p-4">
       <SectionLabel
         title="Subdivision"
         hint={dominantSubdivision ? `${dominantSubdivision}` : "mixed"}
@@ -608,16 +607,16 @@ function SubdivisionPalette({
               type="button"
               onPointerDown={(e) => { e.preventDefault(); onApply(n); }}
               className={
-                "flex items-center gap-2 rounded-sm border px-2 py-1.5 text-left transition-colors " +
+                "flex items-center gap-3 rounded-sm border px-3 py-2.5 text-left transition-colors " +
                 (active
                   ? "border-primary text-primary bg-primary/10"
                   : "border-border/60 text-muted-foreground hover:text-foreground hover:border-accent/60")
               }
             >
-              <span className="w-10 text-center text-lg leading-none text-foreground">{notation.glyph}</span>
+              <span className="w-12 text-center text-2xl leading-none text-foreground">{notation.glyph}</span>
               <span className="min-w-0">
-                <span className="block font-mono text-[11px] tabular">{n}</span>
-                <span className="tiny-caps block text-[7px] truncate">{notation.label}</span>
+                <span className="block font-mono text-sm tabular">{n}</span>
+                <span className="tiny-caps block text-[10px] truncate">{notation.label}</span>
               </span>
             </button>
           );
@@ -626,7 +625,7 @@ function SubdivisionPalette({
       <button
         type="button"
         onPointerDown={(e) => { e.preventDefault(); onReset(); }}
-        className="tiny-caps mt-3 text-[9px] text-muted-foreground hover:text-primary"
+        className="tiny-caps mt-3 text-[10px] text-muted-foreground hover:text-primary"
       >
         Reset accents
       </button>
@@ -650,34 +649,34 @@ function BeatSubdivisionEditor({
   onCyclePulse: (beatIndex: number, pulseIndex: number) => void;
 }) {
   return (
-    <div className="rounded-md border border-border/70 bg-card/60 p-3">
+    <div className="rounded-md border border-border/70 bg-card/60 p-4">
       <SectionLabel title="Beat Map" hint="subdivision + played pulses" />
-      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 gap-4">
         {pattern.map((beat, beatIndex) => {
           const activeBeat = isPlaying && currentBeat === beatIndex;
           return (
             <div
               key={beatIndex}
               className={
-                "rounded-md border p-3 transition-colors " +
+                "rounded-md border p-5 transition-colors " +
                 (activeBeat ? "border-accent bg-accent/6" : "border-border/60 bg-background/35")
               }
             >
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-2">
                   <span
-                    className="relative grid size-10 place-items-center rounded-full border"
+                    className="relative grid size-16 place-items-center rounded-full border"
                     style={{
                       background: subdivisionBackground(beat, activeBeat),
                       borderColor: activeBeat ? "hsl(var(--accent))" : "hsl(var(--border))",
                     }}
                   >
                     <span className="absolute inset-[30%] rounded-full bg-background/90" />
-                    <span className="relative font-serif text-base">{beatIndex + 1}</span>
+                    <span className="relative font-serif text-2xl">{beatIndex + 1}</span>
                   </span>
                   <div>
-                    <span className="tiny-caps block text-[8px] text-muted-foreground">Beat</span>
-                    <span className="font-mono text-xs tabular">{beat.pulses} pulse{beat.pulses > 1 ? "s" : ""}</span>
+                    <span className="tiny-caps block text-[11px] text-muted-foreground">Beat</span>
+                    <span className="font-mono text-lg tabular">{beat.pulses} pulse{beat.pulses > 1 ? "s" : ""}</span>
                   </div>
                 </div>
               </div>
@@ -685,7 +684,7 @@ function BeatSubdivisionEditor({
                 <select
                   value={beat.pulses}
                   onChange={(e) => onSetSubdivision(beatIndex, Number(e.target.value) as SubdivisionCount)}
-                  className="w-full bg-transparent border-b border-border py-1 font-mono text-xs focus:outline-none focus:border-primary"
+                  className="w-full bg-transparent border-b border-border py-2 font-mono text-base focus:outline-none focus:border-primary"
                   aria-label={`Subdivision for beat ${beatIndex + 1}`}
                 >
                   {SUBDIVISION_OPTIONS.map((n) => (
@@ -703,7 +702,7 @@ function BeatSubdivisionEditor({
                       key={pulseIndex}
                       type="button"
                       onPointerDown={(e) => { e.preventDefault(); onCyclePulse(beatIndex, pulseIndex); }}
-                      className="min-h-10 rounded-sm border text-center font-mono text-[11px] transition-colors"
+                      className="min-h-16 rounded-sm border text-center font-mono text-lg transition-colors"
                       style={{
                         borderColor: activePulse ? "hsl(var(--primary))" : "hsl(var(--border))",
                         background: accentColor(accent, activePulse),
@@ -724,54 +723,226 @@ function BeatSubdivisionEditor({
   );
 }
 
-function PolyrhythmIntro({
+function ModeSwitcher({
+  view,
+  onChange,
+  status,
+}: {
+  view: MetronomeView;
+  onChange: (view: MetronomeView) => void;
+  status: string;
+}) {
+  return (
+    <div className="rounded-md border border-border/70 bg-card/60 p-4">
+      <SectionLabel title="Mode" hint={status} />
+      <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-2">
+        {MODE_OPTIONS.map((option) => {
+          const active = view === option.id;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              onPointerDown={(e) => { e.preventDefault(); onChange(option.id); }}
+              className={
+                "min-h-20 rounded-md border px-3 py-3 text-left transition-colors " +
+                (active
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border/60 text-muted-foreground hover:border-accent/70 hover:text-foreground")
+              }
+            >
+              <span className="block font-serif text-xl leading-tight">{option.label}</span>
+              <span className="tiny-caps mt-2 block text-[11px] leading-relaxed">{option.detail}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PolyrhythmMode({
   numerator,
   against,
   enabled,
+  isPlaying,
+  currentBeat,
+  currentPoly,
   onToggle,
   onAgainst,
 }: {
   numerator: number;
   against: number;
   enabled: boolean;
+  isPlaying: boolean;
+  currentBeat: number;
+  currentPoly: number;
   onToggle: (enabled: boolean) => void;
   onAgainst: (against: number) => void;
 }) {
+  const sharedSlots = lcm(numerator, against);
+  const mainStep = sharedSlots / numerator;
+  const crossStep = sharedSlots / against;
+  const mainActiveSlot = currentBeat >= 0 ? currentBeat * mainStep : -1;
+  const crossActiveSlot = currentPoly >= 0 ? currentPoly * crossStep : -1;
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-4 rounded-md border border-border/70 bg-card/55 p-4">
-      <div>
-        <div className="flex items-center gap-3">
-          <span className="tiny-caps text-[10px] text-foreground">Polyrhythm</span>
-          <Switch checked={enabled} onCheckedChange={onToggle} />
+    <div className="rounded-md border border-border/70 bg-card/60 p-5 md:p-6">
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-5 md:items-start">
+        <div>
+          <div className="flex items-center gap-3">
+            <span className="tiny-caps text-xs text-foreground">Polyrhythm Mode</span>
+            <Switch checked={enabled} onCheckedChange={onToggle} />
+          </div>
+          <div className="mt-3 flex flex-wrap items-end gap-4">
+            <span className="font-serif text-6xl md:text-7xl leading-none tabular text-primary">
+              {numerator}<span className="mx-2 text-muted-foreground">:</span>{against}
+            </span>
+            <span className="tiny-caps mb-2 text-xs text-muted-foreground">
+              {sharedSlots} shared LCM slots
+            </span>
+          </div>
         </div>
-        <div className="mt-2 flex items-baseline gap-3">
-          <span className="font-serif text-4xl tabular text-primary">
-            {numerator}<span className="mx-1 text-muted-foreground">:</span>{against}
-          </span>
-          <span className="tiny-caps text-[9px] text-muted-foreground">main bar vs cross voice</span>
+        <div className="flex flex-wrap items-center gap-2 md:justify-end">
+          {[2, 3, 4, 5, 7].map((value) => (
+            <button
+              key={value}
+              type="button"
+              onPointerDown={(e) => { e.preventDefault(); onAgainst(value); }}
+              className={
+                "px-3 py-2.5 rounded-sm border font-mono text-sm transition-colors " +
+                (against === value && enabled
+                  ? "border-primary text-primary bg-primary/10"
+                  : "border-border text-muted-foreground hover:text-foreground hover:border-accent/70")
+              }
+            >
+              {numerator}:{value}
+            </button>
+          ))}
+          <Stepper label="−" onTap={() => onAgainst(Math.max(2, against - 1))} />
+          <Stepper label="+" onTap={() => onAgainst(Math.min(16, against + 1))} />
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2 md:justify-end">
-        {[2, 3, 4, 5, 7].map((value) => (
-          <button
-            key={value}
-            type="button"
-            onPointerDown={(e) => { e.preventDefault(); onAgainst(value); onToggle(true); }}
-            className={
-              "px-3 py-2 rounded-sm border font-mono text-xs transition-colors " +
-              (against === value && enabled
-                ? "border-primary text-primary bg-primary/10"
-                : "border-border text-muted-foreground hover:text-foreground hover:border-accent/70")
-            }
-          >
-            {numerator}:{value}
-          </button>
-        ))}
-        <Stepper label="−" onTap={() => onAgainst(Math.max(2, against - 1))} />
-        <Stepper label="+" onTap={() => onAgainst(Math.min(16, against + 1))} />
+
+      <div className="mt-6 space-y-4">
+        <PolyrhythmRow
+          label="Main"
+          slots={sharedSlots}
+          step={mainStep}
+          activeSlot={isPlaying ? mainActiveSlot : -1}
+          color="hsl(var(--primary))"
+        />
+        <PolyrhythmRow
+          label="Cross"
+          slots={sharedSlots}
+          step={crossStep}
+          activeSlot={isPlaying && enabled ? crossActiveSlot : -1}
+          color="hsl(var(--slate-cyan))"
+        />
+        <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${sharedSlots}, minmax(0, 1fr))` }}>
+          {Array.from({ length: sharedSlots }, (_, index) => {
+            const mainHit = index % mainStep === 0;
+            const crossHit = index % crossStep === 0;
+            const active = isPlaying && ((mainHit && index === mainActiveSlot) || (enabled && crossHit && index === crossActiveSlot));
+            return (
+              <div
+                key={index}
+                className="relative grid min-h-12 place-items-center rounded-sm border border-border/50 bg-background/35"
+                aria-label={`LCM slot ${index + 1}${mainHit ? " main" : ""}${crossHit ? " cross" : ""}`}
+              >
+                <span
+                  className="absolute inset-0 rounded-sm transition-opacity"
+                  style={{
+                    opacity: active ? 0.28 : 0,
+                    background: "hsl(var(--amber))",
+                  }}
+                />
+                <span
+                  className="relative block size-4 rounded-full transition-transform"
+                  style={{
+                    background: mainHit && crossHit
+                      ? "linear-gradient(135deg, hsl(var(--primary)) 0 50%, hsl(var(--slate-cyan)) 50% 100%)"
+                      : mainHit
+                        ? "hsl(var(--primary))"
+                        : crossHit
+                          ? "hsl(var(--slate-cyan))"
+                          : "hsl(var(--border) / 0.45)",
+                    transform: active ? "scale(1.35)" : "scale(1)",
+                  }}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+        <div className="rounded-sm border border-border/60 bg-background/35 p-3">
+          <span className="tiny-caps block text-[11px] text-muted-foreground">Main voice</span>
+          <span className="font-mono text-lg tabular">{numerator} hits</span>
+        </div>
+        <div className="rounded-sm border border-border/60 bg-background/35 p-3">
+          <span className="tiny-caps block text-[11px] text-muted-foreground">Cross voice</span>
+          <span className="font-mono text-lg tabular">{against} hits</span>
+        </div>
+        <div className="rounded-sm border border-border/60 bg-background/35 p-3">
+          <span className="tiny-caps block text-[11px] text-muted-foreground">Meeting point</span>
+          <span className="font-mono text-lg tabular">Every {sharedSlots} slots</span>
+        </div>
       </div>
     </div>
   );
+}
+
+function PolyrhythmRow({
+  label,
+  slots,
+  step,
+  activeSlot,
+  color,
+}: {
+  label: string;
+  slots: number;
+  step: number;
+  activeSlot: number;
+  color: string;
+}) {
+  return (
+    <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-3">
+      <span className="tiny-caps text-xs text-muted-foreground">{label}</span>
+      <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${slots}, minmax(0, 1fr))` }}>
+        {Array.from({ length: slots }, (_, index) => {
+          const hit = index % step === 0;
+          const active = index === activeSlot;
+          return (
+            <span
+              key={index}
+              className="h-3 rounded-full transition-all"
+              style={{
+                background: hit ? color : "hsl(var(--border) / 0.35)",
+                opacity: hit ? 1 : 0.5,
+                transform: active ? "scaleY(1.8)" : "scaleY(1)",
+              }}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function gcd(a: number, b: number): number {
+  let x = Math.abs(Math.round(a));
+  let y = Math.abs(Math.round(b));
+  while (y !== 0) {
+    const next = x % y;
+    x = y;
+    y = next;
+  }
+  return x || 1;
+}
+
+function lcm(a: number, b: number): number {
+  return Math.max(1, Math.abs(Math.round((a * b) / gcd(a, b))));
 }
 
 function accentColor(accent: PulseAccent, active: boolean): string {
@@ -804,7 +975,7 @@ function Field({ label, trailing, children }: { label: string; trailing?: React.
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="tiny-caps text-[10px] text-muted-foreground">{label}</span>
+        <span className="tiny-caps text-xs text-muted-foreground">{label}</span>
         {trailing}
       </div>
       {children}
@@ -817,7 +988,7 @@ function Stepper({ label, onTap, primary }: { label: string; onTap: () => void; 
     <button
       type="button"
       onPointerDown={(e) => { e.preventDefault(); onTap(); }}
-      className={`px-2 py-1 font-mono text-[10px] border border-transparent hover:border-primary/40 rounded-sm transition-all touch-manipulation select-none active:scale-95 ${
+      className={`px-2.5 py-1.5 font-mono text-xs border border-transparent hover:border-primary/40 rounded-sm transition-all touch-manipulation select-none active:scale-95 ${
         primary ? "text-foreground hover:text-primary" : "text-muted-foreground hover:text-foreground"
       }`}
     >
@@ -842,7 +1013,7 @@ function NumberField({ label, value, onChange, compact = false }: { label: strin
 
   return (
     <div className={compact ? "text-right" : ""}>
-      <label className="tiny-caps text-[9px] text-muted-foreground block">{label}</label>
+      <label className="tiny-caps text-[10px] text-muted-foreground block">{label}</label>
       <input
         type="number"
         value={draft}

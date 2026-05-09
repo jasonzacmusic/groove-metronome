@@ -249,14 +249,14 @@ export function PolyrhythmWheel({
 
       {/* Center BPM readout — overlay so DM Serif Display renders crisply */}
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <span className="tiny-caps text-[10px] text-muted-foreground/80">{getTempoMarking(bpm)}</span>
+        <span className="tiny-caps text-xs text-muted-foreground/80">{getTempoMarking(bpm)}</span>
         <span
           className="font-serif tabular leading-none text-foreground"
           style={{ fontSize: "clamp(3.5rem, 14vw, 5.5rem)" }}
         >
           {Math.round(bpm)}
         </span>
-        <span className="tiny-caps text-[9px] text-muted-foreground/70 mt-1">BPM</span>
+        <span className="tiny-caps text-[10px] text-muted-foreground/70 mt-1">BPM</span>
       </div>
     </div>
   );

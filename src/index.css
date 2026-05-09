@@ -148,8 +148,9 @@
 
 .notation-surface {
   background:
-    linear-gradient(180deg, hsl(220 16% 13%), hsl(220 18% 9%)),
-    repeating-linear-gradient(0deg, transparent 0 23px, hsl(var(--border) / 0.28) 23px 24px);
+    linear-gradient(180deg, hsl(46 46% 95%), hsl(42 34% 88%)),
+    repeating-linear-gradient(0deg, transparent 0 23px, hsl(220 17% 28% / 0.08) 23px 24px);
+  color: hsl(220 19% 8%);
 }
 
 /* Hairline editorial divider with center diamond */
