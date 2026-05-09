@@ -7,9 +7,11 @@ iPhone, iPad, and Android.
 ## Current State
 
 - Capacitor config is present.
+- Native `ios/` and `android/` shells are committed and can be synced from the
+  shared web build.
+- The iOS project includes a native watchOS target: `GrooveWatch Watch App`.
 - Native haptic pulse is wired through Capacitor Haptics, with a browser
   vibration fallback where supported.
-- Native `ios/` and `android/` shells are not committed yet.
 - App Store deployment still requires Apple signing, an App Store Connect app,
   and a TestFlight/App Store upload from Xcode or CI.
 
@@ -26,6 +28,24 @@ For local iOS work after the native shell exists:
 pnpm mobile:ios
 ```
 
+Android build check:
+
+```bash
+pnpm mobile:android:build
+```
+
+Android builds require a local Java runtime. If Gradle says "Unable to locate a
+Java Runtime", install a current JDK and rerun the command.
+
+Watch build check:
+
+```bash
+xcodebuild -project ios/App/App.xcodeproj \
+  -scheme "GrooveWatch Watch App" \
+  -destination "generic/platform=watchOS Simulator" \
+  CODE_SIGNING_ALLOWED=NO build
+```
+
 ## Seamless Deployment Target
 
 For every production change:
@@ -40,17 +60,15 @@ The first two steps are automated in this repo workflow now. Step 3 is scripted.
 Step 4 needs the Apple developer account and signing setup before it can be fully
 automated.
 
-## Apple Watch Path
+## Apple Watch Design
 
-The shared React/Tone app can package for iPhone, iPad, and Android through
-Capacitor. Apple Watch needs a native watchOS companion target rather than the
-web UI running directly on the watch.
+The watch target is a native SwiftUI companion focused on fast practice use:
 
-Recommended implementation:
+- Digital Crown BPM control.
+- Large tempo readout with classical tempo word.
+- Circular beat visualizer.
+- Play/stop plus ±1 BPM controls.
+- Watch haptic pulses with a stronger downbeat feel.
 
-1. Generate and commit the native `ios/` shell.
-2. Open the iOS workspace in Xcode and add a watchOS companion app target.
-3. Share tempo, meter, pattern, and play/stop state using WatchConnectivity.
-4. Trigger watch haptics from the watch target with `WKInterfaceDevice` patterns
-   that mirror the phone haptic accents.
-5. Keep the phone/web app as the source of truth for presets and playlist data.
+The next Apple-only integration step is pairing live iPhone state to the watch
+with WatchConnectivity after signing is configured in Xcode.

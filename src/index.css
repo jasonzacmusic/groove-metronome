@@ -72,11 +72,122 @@
   --destructive-foreground: 48 32% 96%;
   --input: 218 16% 16%;
   --ring: 181 47% 61%;
+  --glow-a: 172 78% 58%;
+  --glow-b: 252 68% 48%;
+  --glow-c: 48 96% 60%;
 
   --app-font-sans: 'IBM Plex Sans', system-ui, sans-serif;
   --app-font-serif: 'DM Serif Display', serif;
   --app-font-mono: 'IBM Plex Mono', ui-monospace, monospace;
   --radius: 0.5rem;
+}
+
+[data-theme="concert"] {
+  --graphite: 264 39% 6%;
+  --ink: 265 32% 9%;
+  --amber: 338 100% 66%;
+  --slate-cyan: 145 64% 55%;
+  --background: 264 39% 6%;
+  --foreground: 42 38% 94%;
+  --border: 264 21% 28%;
+  --card: 265 30% 10%;
+  --card-foreground: 42 38% 94%;
+  --popover: 265 36% 8%;
+  --popover-foreground: 42 38% 94%;
+  --primary: 338 100% 66%;
+  --primary-foreground: 264 39% 6%;
+  --secondary: 271 26% 18%;
+  --secondary-foreground: 42 38% 94%;
+  --muted: 266 22% 15%;
+  --muted-foreground: 272 18% 76%;
+  --accent: 145 64% 55%;
+  --accent-foreground: 264 39% 6%;
+  --input: 265 22% 16%;
+  --ring: 338 100% 66%;
+  --glow-a: 338 100% 66%;
+  --glow-b: 145 64% 55%;
+  --glow-c: 280 70% 62%;
+}
+
+[data-theme="aqua"] {
+  --graphite: 188 62% 5%;
+  --ink: 188 48% 8%;
+  --amber: 42 98% 67%;
+  --slate-cyan: 160 89% 67%;
+  --background: 188 62% 5%;
+  --foreground: 178 40% 94%;
+  --border: 188 28% 27%;
+  --card: 188 44% 9%;
+  --card-foreground: 178 40% 94%;
+  --popover: 188 48% 7%;
+  --popover-foreground: 178 40% 94%;
+  --primary: 160 89% 67%;
+  --primary-foreground: 188 62% 5%;
+  --secondary: 192 33% 17%;
+  --secondary-foreground: 178 40% 94%;
+  --muted: 189 30% 14%;
+  --muted-foreground: 181 22% 76%;
+  --accent: 42 98% 67%;
+  --accent-foreground: 188 62% 5%;
+  --input: 189 27% 15%;
+  --ring: 160 89% 67%;
+  --glow-a: 160 89% 67%;
+  --glow-b: 210 88% 62%;
+  --glow-c: 42 98% 67%;
+}
+
+[data-theme="graphite"] {
+  --graphite: 210 9% 6%;
+  --ink: 210 8% 9%;
+  --amber: 39 90% 61%;
+  --slate-cyan: 204 18% 84%;
+  --background: 210 9% 6%;
+  --foreground: 210 22% 92%;
+  --border: 214 10% 29%;
+  --card: 210 8% 10%;
+  --card-foreground: 210 22% 92%;
+  --popover: 210 9% 8%;
+  --popover-foreground: 210 22% 92%;
+  --primary: 210 22% 92%;
+  --primary-foreground: 210 9% 6%;
+  --secondary: 214 10% 18%;
+  --secondary-foreground: 210 22% 92%;
+  --muted: 214 10% 15%;
+  --muted-foreground: 210 14% 74%;
+  --accent: 39 90% 61%;
+  --accent-foreground: 210 9% 6%;
+  --input: 214 10% 16%;
+  --ring: 39 90% 61%;
+  --glow-a: 204 18% 84%;
+  --glow-b: 39 90% 61%;
+  --glow-c: 210 22% 92%;
+}
+
+[data-theme="contrast"] {
+  --graphite: 222 84% 3%;
+  --ink: 224 71% 5%;
+  --amber: 112 100% 54%;
+  --slate-cyan: 0 0% 100%;
+  --background: 222 84% 3%;
+  --foreground: 0 0% 100%;
+  --border: 220 28% 36%;
+  --card: 224 71% 5%;
+  --card-foreground: 0 0% 100%;
+  --popover: 224 71% 5%;
+  --popover-foreground: 0 0% 100%;
+  --primary: 0 0% 100%;
+  --primary-foreground: 222 84% 3%;
+  --secondary: 220 42% 16%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 220 42% 14%;
+  --muted-foreground: 213 32% 82%;
+  --accent: 112 100% 54%;
+  --accent-foreground: 222 84% 3%;
+  --input: 220 42% 14%;
+  --ring: 112 100% 54%;
+  --glow-a: 112 100% 54%;
+  --glow-b: 0 0% 100%;
+  --glow-c: 200 100% 62%;
 }
 
 @layer base {
@@ -140,11 +251,26 @@
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(180deg, hsla(172, 78%, 58%, 0.10), transparent 34%),
-    linear-gradient(135deg, hsla(252, 68%, 48%, 0.13), transparent 42%),
-    linear-gradient(225deg, hsla(48, 96%, 60%, 0.07), transparent 38%),
+    linear-gradient(180deg, hsl(var(--glow-a) / 0.10), transparent 34%),
+    linear-gradient(135deg, hsl(var(--glow-b) / 0.13), transparent 42%),
+    linear-gradient(225deg, hsl(var(--glow-c) / 0.07), transparent 38%),
     repeating-linear-gradient(90deg, hsla(224, 28%, 42%, 0.045) 0 1px, transparent 1px 96px);
   z-index: 0;
+}
+
+.theme-dot {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 999px;
+  border: 1px solid hsl(var(--border) / 0.8);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 1px hsl(var(--background) / 0.5);
+  transition: transform 120ms ease, outline-color 120ms ease;
+}
+
+.theme-dot:hover {
+  transform: translateY(-1px);
 }
 
 .notation-surface {

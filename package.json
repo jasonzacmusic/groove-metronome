@@ -9,11 +9,16 @@
     "serve": "vite preview",
     "typecheck": "tsc --noEmit",
     "mobile:sync": "pnpm build && npx cap sync",
-    "mobile:ios": "pnpm build && npx cap sync ios && npx cap open ios"
+    "mobile:ios": "pnpm build && npx cap sync ios && npx cap open ios",
+    "mobile:ios:build": "pnpm build && npx cap sync ios && xcodebuild -project ios/App/App.xcodeproj -scheme App -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build",
+    "mobile:watch:build": "xcodebuild -project ios/App/App.xcodeproj -scheme 'GrooveWatch Watch App' -destination 'generic/platform=watchOS Simulator' CODE_SIGNING_ALLOWED=NO build",
+    "mobile:android:build": "pnpm build && npx cap sync android && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
+    "@capacitor/android": "^8.3.2",
     "@capacitor/core": "^8.3.2",
     "@capacitor/haptics": "^8.0.2",
+    "@capacitor/ios": "^8.3.2",
     "@tonejs/midi": "^2.0.28",
     "tone": "^14.9.17",
     "vexflow": "^4.2.5",
