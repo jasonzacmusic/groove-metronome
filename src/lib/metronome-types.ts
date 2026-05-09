@@ -9,7 +9,9 @@ export type BeatSound =
   | "sample-clave"
   | "sample-marimba"
   | "sample-rim"
-  | "sample-ping";
+  | "sample-ping"
+  | "voice-male"
+  | "voice-female";
 
 export const BEAT_SOUND_LABELS: Record<BeatSound, string> = {
   tone: "Tone",
@@ -21,12 +23,14 @@ export const BEAT_SOUND_LABELS: Record<BeatSound, string> = {
   "sample-marimba": "Marimba",
   "sample-rim": "Rim",
   "sample-ping": "Ping",
+  "voice-male": "Voice M",
+  "voice-female": "Voice F",
 };
 
 export interface BeatSoundOption {
   id: BeatSound;
   label: string;
-  family: "Modeled" | "Sampled";
+  family: "Modeled" | "Sampled" | "Voice";
 }
 
 export const BEAT_SOUND_OPTIONS: BeatSoundOption[] = [
@@ -39,45 +43,71 @@ export const BEAT_SOUND_OPTIONS: BeatSoundOption[] = [
   { id: "sample-marimba", label: BEAT_SOUND_LABELS["sample-marimba"], family: "Sampled" },
   { id: "sample-rim", label: BEAT_SOUND_LABELS["sample-rim"], family: "Sampled" },
   { id: "sample-ping", label: BEAT_SOUND_LABELS["sample-ping"], family: "Sampled" },
+  { id: "voice-male", label: BEAT_SOUND_LABELS["voice-male"], family: "Voice" },
+  { id: "voice-female", label: BEAT_SOUND_LABELS["voice-female"], family: "Voice" },
 ];
 
 export interface SampleSoundSet {
-  accent: string;
-  normal: string;
-  sub: string;
+  urls: Record<string, string>;
   gainDb?: number;
+  beatNumbered?: boolean;
+  maxBeatNumber?: number;
+  pitchResponsive?: boolean;
+}
+
+function clickUrls(name: string): Record<string, string> {
+  return {
+    accent: `/metronome-sounds/reapertips/${name}-accent.wav`,
+    normal: `/metronome-sounds/reapertips/${name}-normal.wav`,
+    sub: `/metronome-sounds/reapertips/${name}-sub.wav`,
+  };
+}
+
+function voiceUrls(folder: "male" | "female"): Record<string, string> {
+  const urls: Record<string, string> = {
+    sub: "/metronome-sounds/reapertips/tight-sub.wav",
+  };
+  for (let beat = 1; beat <= 16; beat++) {
+    urls[`normal-${beat}`] = `/metronome-sounds/voices/${folder}/normal-${beat}.wav`;
+    urls[`accent-${beat}`] = `/metronome-sounds/voices/${folder}/accent-${beat}.wav`;
+  }
+  return urls;
 }
 
 export const SAMPLE_SOUND_SETS: Partial<Record<BeatSound, SampleSoundSet>> = {
   "sample-tight": {
-    accent: "/metronome-sounds/reapertips/tight-accent.wav",
-    normal: "/metronome-sounds/reapertips/tight-normal.wav",
-    sub: "/metronome-sounds/reapertips/tight-sub.wav",
+    urls: clickUrls("tight"),
     gainDb: -2,
   },
   "sample-clave": {
-    accent: "/metronome-sounds/reapertips/clave-accent.wav",
-    normal: "/metronome-sounds/reapertips/clave-normal.wav",
-    sub: "/metronome-sounds/reapertips/clave-sub.wav",
+    urls: clickUrls("clave"),
     gainDb: -1,
   },
   "sample-marimba": {
-    accent: "/metronome-sounds/reapertips/marimba-accent.wav",
-    normal: "/metronome-sounds/reapertips/marimba-normal.wav",
-    sub: "/metronome-sounds/reapertips/marimba-sub.wav",
+    urls: clickUrls("marimba"),
     gainDb: -3,
   },
   "sample-rim": {
-    accent: "/metronome-sounds/reapertips/rim-accent.wav",
-    normal: "/metronome-sounds/reapertips/rim-normal.wav",
-    sub: "/metronome-sounds/reapertips/rim-sub.wav",
+    urls: clickUrls("rim"),
     gainDb: -5,
   },
   "sample-ping": {
-    accent: "/metronome-sounds/reapertips/ping-accent.wav",
-    normal: "/metronome-sounds/reapertips/ping-normal.wav",
-    sub: "/metronome-sounds/reapertips/ping-sub.wav",
+    urls: clickUrls("ping"),
     gainDb: -6,
+  },
+  "voice-male": {
+    urls: voiceUrls("male"),
+    gainDb: -1,
+    beatNumbered: true,
+    maxBeatNumber: 16,
+    pitchResponsive: false,
+  },
+  "voice-female": {
+    urls: voiceUrls("female"),
+    gainDb: -1,
+    beatNumbered: true,
+    maxBeatNumber: 16,
+    pitchResponsive: false,
   },
 };
 
@@ -175,6 +205,8 @@ export const SOUND_FREQS: Record<BeatSound, { accent: number; normal: number; su
   "sample-marimba": { accent: 820,  normal: 620,  sub: 460 },
   "sample-rim":     { accent: 1700, normal: 1300, sub: 900 },
   "sample-ping":    { accent: 1400, normal: 1050, sub: 760 },
+  "voice-male":     { accent: 1000, normal: 800,  sub: 600 },
+  "voice-female":   { accent: 1000, normal: 800,  sub: 600 },
 };
 
 export const SOUND_ENVELOPES: Record<BeatSound, { attack: number; decay: number; sustain: number; release: number }> = {
@@ -187,6 +219,8 @@ export const SOUND_ENVELOPES: Record<BeatSound, { attack: number; decay: number;
   "sample-marimba": { attack: 0.001, decay: 0.12, sustain: 0.01, release: 0.05 },
   "sample-rim":     { attack: 0.001, decay: 0.09, sustain: 0,    release: 0.04 },
   "sample-ping":    { attack: 0.001, decay: 0.12, sustain: 0,    release: 0.08 },
+  "voice-male":     { attack: 0.001, decay: 0.05, sustain: 0,    release: 0.05 },
+  "voice-female":   { attack: 0.001, decay: 0.05, sustain: 0,    release: 0.05 },
 };
 
 export type SynthOscillatorType = "sine" | "triangle" | "square";

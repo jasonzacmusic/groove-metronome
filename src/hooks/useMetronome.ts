@@ -61,6 +61,13 @@ export interface MetronomeState {
 
 type ClickRole = "accent" | "normal" | "sub";
 
+const VOICE_ACCENT_VOLUME: Record<PulseAccent, number> = {
+  accent: 1,
+  normal: -3,
+  ghost: -12,
+  mute: -Infinity,
+};
+
 function displayBpmToTransportBpm(displayBpm: number, denominator: number): number {
   return displayBpm * (4 / denominator);
 }
@@ -68,6 +75,12 @@ function displayBpmToTransportBpm(displayBpm: number, denominator: number): numb
 function samplePlaybackRate(pitch: number): number {
   const clamped = Math.max(0, Math.min(100, pitch));
   return 0.82 + (clamped / 100) * 0.36;
+}
+
+function numberedVoiceKey(role: ClickRole, beatNumber: number | undefined, maxBeatNumber = 16): string | null {
+  if (role === "sub" || beatNumber === undefined) return null;
+  const wrapped = ((Math.max(1, Math.round(beatNumber)) - 1) % maxBeatNumber) + 1;
+  return `${role === "accent" ? "accent" : "normal"}-${wrapped}`;
 }
 
 /**
@@ -171,11 +184,7 @@ export function useMetronome() {
     const sampleSet = SAMPLE_SOUND_SETS[sound];
     if (sampleSet) {
       samplePlayersRef.current = new Tone.Players({
-        urls: {
-          accent: sampleSet.accent,
-          normal: sampleSet.normal,
-          sub: sampleSet.sub,
-        },
+        urls: sampleSet.urls,
         fadeOut: 0.006,
         volume: sampleSet.gainDb ?? 0,
       }).toDestination();
@@ -192,13 +201,23 @@ export function useMetronome() {
     engineSoundRef.current = sound;
   }, [disposeEngine]);
 
-  const playClick = useCallback((time: number, freq: number, vol: number, role: ClickRole) => {
+  const playClick = useCallback((time: number, freq: number, vol: number, role: ClickRole, beatNumber?: number) => {
     if (vol === -Infinity) return;
     try {
       const players = samplePlayersRef.current;
-      if (players?.loaded && players.has(role)) {
-        const player = players.player(role);
-        player.playbackRate = samplePlaybackRate(pitchRef.current);
+      const sampleSet = SAMPLE_SOUND_SETS[beatSoundRef.current];
+      const voiceKey = sampleSet?.beatNumbered
+        ? numberedVoiceKey(role, beatNumber, sampleSet.maxBeatNumber)
+        : null;
+      const sampleKey = voiceKey && players?.has(voiceKey)
+        ? voiceKey
+        : players?.has(role)
+          ? role
+          : "sub";
+
+      if (players?.loaded && players.has(sampleKey)) {
+        const player = players.player(sampleKey);
+        player.playbackRate = sampleSet?.pitchResponsive === false ? 1 : samplePlaybackRate(pitchRef.current);
         player.volume.setValueAtTime(vol, time);
         player.start(time);
         return;
@@ -252,9 +271,12 @@ export function useMetronome() {
         const freq = isFirstPulse
           ? (accent === "accent" ? freqs.accent : freqs.normal)
           : freqs.sub;
-        const vol = PULSE_ACCENT_VOLUME[accent];
+        const sampleSet = SAMPLE_SOUND_SETS[sound];
+        const vol = sampleSet?.beatNumbered && isFirstPulse
+          ? VOICE_ACCENT_VOLUME[accent]
+          : PULSE_ACCENT_VOLUME[accent];
         const role: ClickRole = isFirstPulse ? (accent === "accent" ? "accent" : "normal") : "sub";
-        if (!muted) playClick(time + offset, freq, vol, role);
+        if (!muted) playClick(time + offset, freq, vol, role, beatIdx + 1);
 
         const pulseIndex = p;
         Tone.Draw.schedule(() => setCurrentPulse(pulseIndex), time + offset);
@@ -330,6 +352,9 @@ export function useMetronome() {
       setToneStarted(true);
     }
     ensureSoundEngine();
+    if (samplePlayersRef.current) {
+      await Tone.loaded();
+    }
     beatRef.current = 0;
     barCountRef.current = 0;
     setCurrentBeat(-1);
