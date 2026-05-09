@@ -9,6 +9,7 @@ import { analyzeMidi, type MidiAnalysis } from "@/lib/midi-analyzer";
 interface AnalyzerPageProps {
   onUseAsBpm: (bpm: number) => void;
   onUseAsTimeSignature: (numerator: number, denominator: number) => void;
+  onAnalysisDetected: (analysis: { bpm: number; timeSignature?: { numerator: number; denominator: number } }) => void;
 }
 
 interface AudioState {
@@ -16,7 +17,7 @@ interface AudioState {
   result: TempoAnalysisResult;
 }
 
-export function AnalyzerPage({ onUseAsBpm, onUseAsTimeSignature }: AnalyzerPageProps) {
+export function AnalyzerPage({ onUseAsBpm, onUseAsTimeSignature, onAnalysisDetected }: AnalyzerPageProps) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | undefined>(undefined);
   const [audio, setAudio] = useState<AudioState | null>(null);
@@ -31,10 +32,16 @@ export function AnalyzerPage({ onUseAsBpm, onUseAsTimeSignature }: AnalyzerPageP
         setStatus(`Decoding ${file.name}…`);
         const result = await analyzeAudioTempo(file);
         setAudio({ fileName: file.name, result });
+        onAnalysisDetected({ bpm: Math.round(result.weightedBpm || result.bpm) });
       } else if (kind === "midi") {
         setStatus(`Parsing ${file.name}…`);
         const analysis = await analyzeMidi(file);
         setMidi(analysis);
+        const ts = analysis.timeSignatures[0];
+        onAnalysisDetected({
+          bpm: Math.round(analysis.weightedBpm || analysis.bpm),
+          timeSignature: ts ? { numerator: ts.numerator, denominator: ts.denominator } : undefined,
+        });
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : "Failed to analyze file.";
@@ -50,7 +57,7 @@ export function AnalyzerPage({ onUseAsBpm, onUseAsTimeSignature }: AnalyzerPageP
       <div className="rounded-lg border border-border bg-card/55 p-5">
         <h2 className="font-serif text-3xl">Tempo & MIDI Lab</h2>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Audio gets tempo, confidence, stability, and weighted BPM. MIDI gets tempo map, sections, chords, key, and track behavior.
+          Drop audio or MIDI here. The strongest tempo result is applied to the metronome automatically, while the full analysis stays here for checking.
         </p>
       </div>
 

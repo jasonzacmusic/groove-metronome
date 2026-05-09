@@ -66,6 +66,9 @@ function clickUrls(name: string): Record<string, string> {
 function voiceUrls(folder: "male" | "female"): Record<string, string> {
   const urls: Record<string, string> = {
     sub: "/metronome-sounds/reapertips/tight-sub.wav",
+    "sub-and": `/metronome-sounds/voices/${folder}/sub-and.wav`,
+    "sub-a": `/metronome-sounds/voices/${folder}/sub-a.wav`,
+    "sub-e": `/metronome-sounds/voices/${folder}/sub-e.wav`,
   };
   for (let beat = 1; beat <= 16; beat++) {
     urls[`normal-${beat}`] = `/metronome-sounds/voices/${folder}/normal-${beat}.wav`;
@@ -185,10 +188,12 @@ export const BEAT_PATTERN_TILES: BeatPatternTile[] = [
   { id: "rest",           label: "Silent beat",     glyph: "𝄽",   pattern: { pulses: 1, accents: ["mute"] } },
 ];
 
-/** Polyrhythm: cross-voice fires `against` evenly-spaced clicks per bar. 0/1 = off. */
+/** Polyrhythm voices fire evenly-spaced pulses across the same cycle. */
 export interface PolyrhythmConfig {
   enabled: boolean;
-  against: number; // 2..16
+  main: number; // 2..16
+  voices: number[]; // 1..3 secondary voices, each 2..16
+  against: number; // legacy single-voice value
 }
 
 /**

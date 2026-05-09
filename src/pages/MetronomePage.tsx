@@ -136,7 +136,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
     setTimeSignature({ numerator: 4, denominator: 4 });
     setSwing(0);
     setPattern(buildDefaultPattern(4, 1));
-    setPolyrhythm({ enabled: false, against: 3 });
+    setPolyrhythm({ enabled: false, main: 3, voices: [2], against: 2 });
     onViewChange("beatmap");
   };
 
@@ -176,8 +176,14 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-8 lg:gap-12 pb-16">
       {/* HERO column */}
       <section className="space-y-5">
-        {/* Top digital readout strip */}
-        <TempoHeaderStrip bpm={state.bpm} timeSignature={state.timeSignature} pattern={state.pattern} />
+        <TempoHeaderStrip
+          bpm={state.bpm}
+          timeSignature={state.timeSignature}
+          pattern={state.pattern}
+          onSetBpm={setBpm}
+          onSetTimeSignature={setTimeSignature}
+          onSetSubdivision={setGlobalSubdivision}
+        />
 
         <WheelStage
           pattern={state.pattern}
@@ -203,14 +209,6 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
           currentBeat={state.currentBeat}
           isPlaying={state.isPlaying}
         />
-
-        <CollapsiblePanel
-          title="Classical Tempo Words"
-          summary="Largo, Andante, Vivace"
-          defaultOpen={false}
-        >
-          <TempoLearningStrip bpm={state.bpm} onSelect={setBpm} />
-        </CollapsiblePanel>
 
         <CollapsiblePanel
           title="Subdivision Palette"
@@ -253,14 +251,15 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
             />
           ) : (
             <PolyrhythmMode
-              numerator={state.timeSignature.numerator}
-              against={state.polyrhythm.against}
+              main={state.polyrhythm.main}
+              voices={state.polyrhythm.voices}
               enabled={state.polyrhythm.enabled}
               isPlaying={state.isPlaying}
               currentBeat={state.currentBeat}
               currentPoly={state.currentPoly}
               onToggle={(enabled) => setPolyrhythm({ enabled })}
-              onAgainst={(against) => setPolyrhythm({ against, enabled: true })}
+              onMain={(main) => setPolyrhythm({ main, enabled: true })}
+              onVoices={(voices) => setPolyrhythm({ voices, enabled: true })}
             />
           )}
         </div>
@@ -268,13 +267,9 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
         <QuickSetup
           view={view}
           status={state.isPlaying ? `Bar ${state.barCount + 1}` : "Stopped"}
-          timeSignature={state.timeSignature}
           beatSound={state.beatSound}
-          dominantSubdivision={dominantSubdivision}
           onViewChange={handleViewChange}
-          onTimeSignatureChange={setTimeSignature}
           onBeatSoundChange={setBeatSound}
-          onSubdivisionChange={setGlobalSubdivision}
           onPresetChange={loadPreset}
           onResetAccents={resetAccents}
         />
@@ -295,7 +290,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
 
       {/* SIDEBAR column */}
       <aside className="space-y-4 lg:border-l lg:border-border lg:pl-10">
-        <CollapsiblePanel title="Sound Detail" summary={BEAT_SOUND_LABELS[state.beatSound]} defaultOpen={true}>
+        <CollapsiblePanel title="Sound" summary={BEAT_SOUND_LABELS[state.beatSound]} defaultOpen={true}>
           <Field label="Pitch" trailing={<span className="tiny-caps text-[10px] text-primary">{pitchLabel(state.pitch)}</span>}>
             <Slider
               value={[state.pitch]}
@@ -323,17 +318,17 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
         </CollapsiblePanel>
 
         <CollapsiblePanel
-          title="Practice Assist"
-          summary={state.hapticsEnabled ? "Haptic pulse on" : "Haptic pulse off"}
+          title="Assist"
+          summary={state.hapticsEnabled ? "Haptics on" : "Haptics off"}
           trailing={<Switch aria-label="Haptic pulse" checked={state.hapticsEnabled} onCheckedChange={setHapticsEnabled} />}
           defaultOpen={false}
         >
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Haptic pulse follows the main beat on phones and tablets that support native haptics. Accents feel stronger, ghost notes lighter, and muted beats stay silent.
+            Haptics follow the main beat on supported phones and tablets. Accents feel stronger, ghost notes lighter, and muted beats stay silent.
           </p>
         </CollapsiblePanel>
 
-        <CollapsiblePanel title="Playlist / Setlist" summary={setlist.name} defaultOpen={false}>
+        <CollapsiblePanel title="Setlist" summary={setlist.name} defaultOpen={false}>
           <div className="space-y-3">
             <input
               value={setlist.name}
@@ -396,7 +391,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
 
         {/* Tempo Ramp */}
         <CollapsiblePanel
-          title="Practice Ramp"
+          title="Ramp"
           summary={state.rampEnabled ? `${state.rampConfig.startBpm} → ${state.rampConfig.endBpm}` : "Off"}
           trailing={<Switch checked={state.rampEnabled} onCheckedChange={setRampEnabled} />}
           defaultOpen={state.rampEnabled}
@@ -427,7 +422,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
 
         {/* Mute trainer */}
         <CollapsiblePanel
-          title="Mute Trainer"
+          title="Mute"
           summary={state.trainerEnabled ? `${state.trainerConfig.playBars} play / ${state.trainerConfig.muteBars} mute` : "Off"}
           trailing={<Switch checked={state.trainerEnabled} onCheckedChange={setTrainerEnabled} />}
           defaultOpen={state.trainerEnabled}
@@ -452,7 +447,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
         </CollapsiblePanel>
 
         {/* Practice timer */}
-        <CollapsiblePanel title="Practice Timer" summary={formatTime(state.practiceSeconds)} defaultOpen={false}>
+        <CollapsiblePanel title="Timer" summary={formatTime(state.practiceSeconds)} defaultOpen={false}>
           <div className="flex items-baseline justify-between">
             <span className="font-serif text-3xl tabular text-foreground">{formatTime(state.practiceSeconds)}</span>
             <NumberField label="Target min" value={targetMinutes} onChange={(v) => setTargetMinutes(Math.max(0, v))} compact />
@@ -472,11 +467,8 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
           onPointerDown={(e) => { e.preventDefault(); resetDefault(); }}
           className="w-full rounded-md border border-border/70 px-4 py-3 tiny-caps text-[10px] text-muted-foreground hover:border-primary/60 hover:text-primary transition-colors"
         >
-          Reset to simple 4/4
+          Reset 4/4
         </button>
-        <p className="tiny-caps text-[10px] text-muted-foreground/60 leading-relaxed">
-          Space play · T tap · ↑↓ ±1 · [ ] ±5
-        </p>
       </aside>
     </div>
   );
@@ -569,7 +561,7 @@ function NotationStage({
     <section className="rounded-lg border border-border/70 bg-card/55 p-4">
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <SectionLabel title="Notation Preview" hint={`${timeSignature.numerator}/${timeSignature.denominator}`} />
-        <span className="tiny-caps text-[10px] text-primary/85">live VexFlow</span>
+        <span className="tiny-caps text-[10px] text-primary/85">notation</span>
       </div>
       <div className="notation-surface border border-border rounded-md px-3 py-3 overflow-x-auto shadow-[0_0_0_1px_hsl(var(--accent)/0.08)]">
         <NotationPanel
@@ -643,25 +635,17 @@ function TransportDeck({
 function QuickSetup({
   view,
   status,
-  timeSignature,
   beatSound,
-  dominantSubdivision,
   onViewChange,
-  onTimeSignatureChange,
   onBeatSoundChange,
-  onSubdivisionChange,
   onPresetChange,
   onResetAccents,
 }: {
   view: MetronomeView;
   status: string;
-  timeSignature: TimeSignature;
   beatSound: UseMetronomeReturn["state"]["beatSound"];
-  dominantSubdivision: SubdivisionCount | null;
   onViewChange: (view: MetronomeView) => void;
-  onTimeSignatureChange: (next: TimeSignature) => void;
   onBeatSoundChange: (sound: UseMetronomeReturn["state"]["beatSound"]) => void;
-  onSubdivisionChange: (subdivision: SubdivisionCount) => void;
   onPresetChange: (idx: number) => void;
   onResetAccents: () => void;
 }) {
@@ -672,18 +656,13 @@ function QuickSetup({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <SectionLabel title="Quick Setup" hint={status} />
-          <p className="mt-1 text-sm text-muted-foreground">
-            Fast changes live lower on the page so the wheel, transport, notation, and active mode stay easy to read.
-          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <SetupPill label="Mode" value={activeMode?.label ?? "Beat Map"} />
-          <SetupPill label="Sig" value={`${timeSignature.numerator}/${timeSignature.denominator}`} />
           <SetupPill label="Sound" value={BEAT_SOUND_LABELS[beatSound]} />
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        <TimeSignatureDropdown value={timeSignature} onChange={onTimeSignatureChange} />
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
         <SelectField label="Mode">
           <select
             value={view}
@@ -694,32 +673,6 @@ function QuickSetup({
             {MODE_OPTIONS.map((option) => (
               <option key={option.id} value={option.id} className="bg-background">
                 {option.label}
-              </option>
-            ))}
-          </select>
-        </SelectField>
-        <SelectField
-          label="Subdivision"
-          trailing={
-            <button
-              type="button"
-              onPointerDown={(e) => { e.preventDefault(); onResetAccents(); }}
-              className="tiny-caps text-[9px] text-muted-foreground hover:text-primary"
-            >
-              Reset
-            </button>
-          }
-        >
-          <select
-            value={dominantSubdivision ?? ""}
-            onChange={(e) => onSubdivisionChange(Number(e.target.value) as SubdivisionCount)}
-            className="metronome-select"
-            aria-label="Global subdivision"
-          >
-            <option value="" disabled className="bg-background">Mixed per beat</option>
-            {SUBDIVISION_OPTIONS.map((n) => (
-              <option key={n} value={n} className="bg-background">
-                {SUBDIVISION_NOTATION[n].glyph} {n} — {SUBDIVISION_NOTATION[n].label}
               </option>
             ))}
           </select>
@@ -738,8 +691,6 @@ function QuickSetup({
             ))}
           </select>
         </SelectField>
-      </div>
-      <div className="mt-3">
         <SelectField label="Load Preset">
           <select
             onChange={(e) => {
@@ -759,6 +710,13 @@ function QuickSetup({
           </select>
         </SelectField>
       </div>
+      <button
+        type="button"
+        onPointerDown={(e) => { e.preventDefault(); onResetAccents(); }}
+        className="tiny-caps mt-3 text-[10px] text-muted-foreground hover:text-primary"
+      >
+        Reset accents
+      </button>
     </div>
   );
 }
@@ -1041,29 +999,49 @@ function BeatMapRow({
 }
 
 function PolyrhythmMode({
-  numerator,
-  against,
+  main,
+  voices,
   enabled,
   isPlaying,
   currentBeat,
   currentPoly,
   onToggle,
-  onAgainst,
+  onMain,
+  onVoices,
 }: {
-  numerator: number;
-  against: number;
+  main: number;
+  voices: number[];
   enabled: boolean;
   isPlaying: boolean;
   currentBeat: number;
   currentPoly: number;
   onToggle: (enabled: boolean) => void;
-  onAgainst: (against: number) => void;
+  onMain: (main: number) => void;
+  onVoices: (voices: number[]) => void;
 }) {
-  const sharedSlots = lcm(numerator, against);
-  const mainStep = sharedSlots / numerator;
-  const crossStep = sharedSlots / against;
-  const mainActiveSlot = currentBeat >= 0 ? currentBeat * mainStep : -1;
-  const crossActiveSlot = currentPoly >= 0 ? currentPoly * crossStep : -1;
+  const allVoices = [main, ...voices].slice(0, 4);
+  const sharedSlots = lcmMany(allVoices);
+  const mainStep = sharedSlots / main;
+  const crossStep = sharedSlots / (voices[0] ?? 2);
+  const mainActiveSlot = currentBeat >= 0 ? (currentBeat % main) * mainStep : -1;
+  const crossActiveSlot = currentPoly >= 0 ? (currentPoly % (voices[0] ?? 2)) * crossStep : -1;
+  const pairLabel = `${main}:${voices.join(":")}`;
+
+  const setVoice = (index: number, value: number) => {
+    const next = [...voices];
+    next[index] = clamp(value, 2, 16);
+    onVoices(next);
+  };
+
+  const addVoice = () => {
+    if (voices.length >= 3) return;
+    onVoices([...voices, voices[voices.length - 1] + 1 || 3]);
+  };
+
+  const removeVoice = (index: number) => {
+    if (voices.length <= 1) return;
+    onVoices(voices.filter((_, i) => i !== index));
+  };
 
   return (
     <div className="rounded-md border border-border/70 bg-card/60 p-5 md:p-6">
@@ -1075,7 +1053,7 @@ function PolyrhythmMode({
           </div>
           <div className="mt-3 flex flex-wrap items-end gap-4">
             <span className="font-serif text-6xl md:text-7xl leading-none tabular text-primary">
-              {numerator}<span className="mx-2 text-muted-foreground">:</span>{against}
+              {pairLabel}
             </span>
             <span className="tiny-caps mb-2 text-xs text-muted-foreground">
               {sharedSlots} shared LCM slots
@@ -1083,45 +1061,75 @@ function PolyrhythmMode({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 md:justify-end">
-          {[2, 3, 4, 5, 7].map((value) => (
+          {[
+            [3, 2],
+            [2, 3],
+            [4, 3],
+            [5, 4],
+          ].map(([presetMain, presetCross]) => (
             <button
-              key={value}
+              key={`${presetMain}:${presetCross}`}
               type="button"
-              onPointerDown={(e) => { e.preventDefault(); onAgainst(value); }}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                onMain(presetMain);
+                onVoices([presetCross]);
+              }}
               className={
                 "px-3 py-2.5 rounded-sm border font-mono text-sm transition-colors " +
-                (against === value && enabled
+                (main === presetMain && voices[0] === presetCross && enabled
                   ? "border-primary text-primary bg-primary/10"
                   : "border-border text-muted-foreground hover:text-foreground hover:border-accent/70")
               }
             >
-              {numerator}:{value}
+              {presetMain}:{presetCross}
             </button>
           ))}
-          <Stepper label="−" onTap={() => onAgainst(Math.max(2, against - 1))} />
-          <Stepper label="+" onTap={() => onAgainst(Math.min(16, against + 1))} />
         </div>
       </div>
 
+      <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <NumberField label="Main" value={main} onChange={(value) => onMain(clamp(value, 2, 16))} />
+        {voices.map((voice, index) => (
+          <div key={index} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+            <NumberField label={`Voice ${index + 2}`} value={voice} onChange={(value) => setVoice(index, value)} />
+            <button
+              type="button"
+              onPointerDown={(e) => { e.preventDefault(); removeVoice(index); }}
+              className="self-end rounded-sm border border-border/70 px-3 py-2 tiny-caps text-[10px] text-muted-foreground hover:text-primary"
+              disabled={voices.length <= 1}
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+        {voices.length < 3 && (
+          <button
+            type="button"
+            onPointerDown={(e) => { e.preventDefault(); addVoice(); }}
+            className="rounded-sm border border-border/70 px-3 py-3 tiny-caps text-[10px] text-muted-foreground hover:text-primary md:col-span-2"
+          >
+            Add voice
+          </button>
+        )}
+      </div>
+
       <div className="mt-6 space-y-4">
-        <PolyrhythmRow
-          label="Main"
-          slots={sharedSlots}
-          step={mainStep}
-          activeSlot={isPlaying ? mainActiveSlot : -1}
-          color="hsl(var(--primary))"
-        />
-        <PolyrhythmRow
-          label="Cross"
-          slots={sharedSlots}
-          step={crossStep}
-          activeSlot={isPlaying && enabled ? crossActiveSlot : -1}
-          color="hsl(var(--slate-cyan))"
-        />
+        {allVoices.map((voice, index) => (
+          <PolyrhythmRow
+            key={`${voice}-${index}`}
+            label={index === 0 ? "Main" : `Voice ${index + 1}`}
+            slots={sharedSlots}
+            step={sharedSlots / voice}
+            activeSlot={isPlaying && enabled ? (index === 0 ? mainActiveSlot : index === 1 ? crossActiveSlot : -1) : -1}
+            color={["hsl(var(--primary))", "hsl(var(--slate-cyan))", "hsl(var(--amber))", "hsl(338 82% 66%)"][index]}
+          />
+        ))}
         <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${sharedSlots}, minmax(0, 1fr))` }}>
           {Array.from({ length: sharedSlots }, (_, index) => {
-            const mainHit = index % mainStep === 0;
-            const crossHit = index % crossStep === 0;
+            const hits = allVoices.map((voice) => index % (sharedSlots / voice) === 0);
+            const mainHit = hits[0];
+            const crossHit = hits.slice(1).some(Boolean);
             const active = isPlaying && ((mainHit && index === mainActiveSlot) || (enabled && crossHit && index === crossActiveSlot));
             return (
               <div
@@ -1139,8 +1147,8 @@ function PolyrhythmMode({
                 <span
                   className="relative block size-4 rounded-full transition-transform"
                   style={{
-                    background: mainHit && crossHit
-                      ? "linear-gradient(135deg, hsl(var(--primary)) 0 50%, hsl(var(--slate-cyan)) 50% 100%)"
+                    background: hits.filter(Boolean).length > 1
+                      ? "linear-gradient(135deg, hsl(var(--primary)) 0 34%, hsl(var(--slate-cyan)) 34% 67%, hsl(var(--amber)) 67% 100%)"
                       : mainHit
                         ? "hsl(var(--primary))"
                         : crossHit
@@ -1158,11 +1166,11 @@ function PolyrhythmMode({
       <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
         <div className="rounded-sm border border-border/60 bg-background/35 p-3">
           <span className="tiny-caps block text-[11px] text-muted-foreground">Main voice</span>
-          <span className="font-mono text-lg tabular">{numerator} hits</span>
+          <span className="font-mono text-lg tabular">{main} hits</span>
         </div>
         <div className="rounded-sm border border-border/60 bg-background/35 p-3">
-          <span className="tiny-caps block text-[11px] text-muted-foreground">Cross voice</span>
-          <span className="font-mono text-lg tabular">{against} hits</span>
+          <span className="tiny-caps block text-[11px] text-muted-foreground">Other voices</span>
+          <span className="font-mono text-lg tabular">{voices.join(" / ")}</span>
         </div>
         <div className="rounded-sm border border-border/60 bg-background/35 p-3">
           <span className="tiny-caps block text-[11px] text-muted-foreground">Meeting point</span>
@@ -1223,6 +1231,10 @@ function gcd(a: number, b: number): number {
 
 function lcm(a: number, b: number): number {
   return Math.max(1, Math.abs(Math.round((a * b) / gcd(a, b))));
+}
+
+function lcmMany(values: number[]): number {
+  return values.reduce((acc, value) => lcm(acc, value), 1);
 }
 
 function subdivisionColor(pulses: number, alpha = 1): string {

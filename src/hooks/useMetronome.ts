@@ -85,6 +85,18 @@ function numberedVoiceKey(role: ClickRole, beatNumber: number | undefined, maxBe
   return `${role === "accent" ? "accent" : "normal"}-${wrapped}`;
 }
 
+function voiceSubdivisionKey(pulses: number, pulseIndex: number): string | null {
+  if (pulseIndex === 0) return null;
+  if (pulses === 2) return pulseIndex === 1 ? "sub-and" : null;
+  if (pulses === 3) return pulseIndex === 1 ? "sub-and" : pulseIndex === 2 ? "sub-a" : null;
+  if (pulses === 4) {
+    if (pulseIndex === 1) return "sub-e";
+    if (pulseIndex === 2) return "sub-and";
+    if (pulseIndex === 3) return "sub-a";
+  }
+  return null;
+}
+
 /**
  * Per-beat metronome engine. Each beat in the bar carries its own subdivision count
  * (1–8) plus a per-pulse accent (normal / accent / ghost / mute). Tone.Transport
@@ -101,7 +113,7 @@ export function useMetronome() {
   const [pattern, setPattern] = useState<BeatPattern[]>(() => buildDefaultPattern(4, 1));
   const [swing, setSwing] = useState(0);
   const [barCount, setBarCount] = useState(0);
-  const [polyrhythm, setPolyrhythmState] = useState<PolyrhythmConfig>({ enabled: false, against: 3 });
+  const [polyrhythm, setPolyrhythmState] = useState<PolyrhythmConfig>({ enabled: false, main: 3, voices: [2], against: 2 });
   const [currentPoly, setCurrentPoly] = useState(-1);
 
   const [trainerEnabled, setTrainerEnabled] = useState(false);
@@ -206,12 +218,14 @@ export function useMetronome() {
     engineSoundRef.current = sound;
   }, [disposeEngine]);
 
-  const playClick = useCallback((time: number, freq: number, vol: number, role: ClickRole, beatNumber?: number) => {
+  const playClick = useCallback((time: number, freq: number, vol: number, role: ClickRole, beatNumber?: number, voiceToken?: string | null) => {
     if (vol === -Infinity) return;
     try {
       const players = samplePlayersRef.current;
       const sampleSet = SAMPLE_SOUND_SETS[beatSoundRef.current];
-      const voiceKey = sampleSet?.beatNumbered
+      const voiceKey = sampleSet?.beatNumbered && voiceToken && players?.has(voiceToken)
+        ? voiceToken
+        : sampleSet?.beatNumbered
         ? numberedVoiceKey(role, beatNumber, sampleSet.maxBeatNumber)
         : null;
       const sampleKey = voiceKey && players?.has(voiceKey)
@@ -251,6 +265,8 @@ export function useMetronome() {
       const sw = swingRef.current;
       const beatPat = pat[beatIdx] ?? { pulses: 1 as SubdivisionCount, accents: ["normal" as PulseAccent] };
       const beatDuration = 60 / bpmRef.current;
+      const poly = polyrhythmRef.current;
+      const isPolyrhythmCycle = poly.enabled && beatIdx === 0;
 
       let muted = false;
       if (trainerEnabledRef.current) {
@@ -277,12 +293,14 @@ export function useMetronome() {
           ? (accent === "accent" ? freqs.accent : freqs.normal)
           : freqs.sub;
         const sampleSet = SAMPLE_SOUND_SETS[sound];
-        const vol = sampleSet?.beatNumbered && isFirstPulse
-          ? VOICE_ACCENT_VOLUME[accent]
+        const voiceToken = sampleSet?.beatNumbered ? voiceSubdivisionKey(pulses, p) : null;
+        const voiceSubdivisionAllowed = !sampleSet?.beatNumbered || isFirstPulse || Boolean(voiceToken);
+        const vol = sampleSet?.beatNumbered
+          ? (isFirstPulse || voiceToken ? VOICE_ACCENT_VOLUME[accent] : -Infinity)
           : PULSE_ACCENT_VOLUME[accent];
         const role: ClickRole = isFirstPulse ? (accent === "accent" ? "accent" : "normal") : "sub";
-        if (!muted) playClick(time + offset, freq, vol, role, beatIdx + 1);
-        if (!muted && isFirstPulse && hapticsEnabledRef.current) {
+        if (!muted && !poly.enabled && voiceSubdivisionAllowed) playClick(time + offset, freq, vol, role, beatIdx + 1, voiceToken);
+        if (!muted && !poly.enabled && isFirstPulse && hapticsEnabledRef.current) {
           Tone.Draw.schedule(() => {
             void triggerMetronomeHaptic(accent);
           }, time + offset);
@@ -294,22 +312,26 @@ export function useMetronome() {
 
       Tone.Draw.schedule(() => setCurrentBeat(beatIdx), time);
 
-      // Polyrhythm cross-voice — schedule N evenly-spaced clicks across the bar
-      // at the start of every bar. Uses a brighter/different pitch (clave-like).
-      const poly = polyrhythmRef.current;
-      if (beatIdx === 0 && poly.enabled && poly.against >= 2) {
+      if (isPolyrhythmCycle) {
         const barDuration = beatDuration * ts.numerator;
-        const polyStep = barDuration / poly.against;
-        for (let k = 0; k < poly.against; k++) {
-          const offset = polyStep * k;
-          const isPolyDownbeat = k === 0;
-          if (!muted) {
-            const polyFreq = isPolyDownbeat ? 1800 : 1500;
-            playClick(time + offset, polyFreq, isPolyDownbeat ? -4 : -10, isPolyDownbeat ? "accent" : "normal");
+        const voiceCounts = [poly.main, ...poly.voices].filter((count) => count >= 2).slice(0, 4);
+        voiceCounts.forEach((count, voiceIndex) => {
+          const polyStep = barDuration / count;
+          for (let k = 0; k < count; k++) {
+            const offset = polyStep * k;
+            const isPolyDownbeat = k === 0;
+            if (!muted) {
+              const role: ClickRole = isPolyDownbeat ? "accent" : voiceIndex === 0 ? "normal" : "sub";
+              const polyFreq = [1900, 1450, 1120, 850][voiceIndex] ?? 1000;
+              const polyVol = isPolyDownbeat ? -2 - voiceIndex * 2 : -8 - voiceIndex * 2;
+              playClick(time + offset, polyFreq, polyVol, role, voiceIndex + 1);
+            }
+            if (voiceIndex === 1) {
+              const polyIdx = k;
+              Tone.Draw.schedule(() => setCurrentPoly(polyIdx), time + offset);
+            }
           }
-          const polyIdx = k;
-          Tone.Draw.schedule(() => setCurrentPoly(polyIdx), time + offset);
-        }
+        });
       }
 
       beatRef.current = (beatIdx + 1) % ts.numerator;
@@ -593,7 +615,20 @@ export function useMetronome() {
   }, []);
 
   const setPolyrhythm = useCallback((cfg: Partial<PolyrhythmConfig>) => {
-    setPolyrhythmState((prev) => ({ ...prev, ...cfg }));
+    setPolyrhythmState((prev) => {
+      const next = { ...prev, ...cfg };
+      if (cfg.against !== undefined && cfg.voices === undefined) {
+        next.voices = [cfg.against, ...prev.voices.slice(1)].slice(0, 3);
+      }
+      if (cfg.voices !== undefined) {
+        next.against = cfg.voices[0] ?? next.against;
+      }
+      return {
+        ...next,
+        main: clamp(Math.round(next.main || 3), 2, 16),
+        voices: (next.voices.length > 0 ? next.voices : [next.against]).slice(0, 3).map((voice) => clamp(Math.round(voice), 2, 16)),
+      };
+    });
   }, []);
 
   const setGlobalSubdivision = useCallback((pulses: SubdivisionCount) => {
