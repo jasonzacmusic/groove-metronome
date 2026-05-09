@@ -10,6 +10,7 @@ import {
   Music2,
   Network,
   Plus,
+  RotateCcw,
   Share2,
   SlidersHorizontal,
   Timer,
@@ -47,6 +48,7 @@ import {
   type DottedPlaybackMode,
   type MeterDenominator,
   type PolymeterLane,
+  type PolyrhythmRate,
   type PolyrhythmConfig,
   type PulseAccent,
   type SubdivisionCount,
@@ -189,6 +191,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
       against: 2,
       dottedMode: "off",
       tripletMode: "off",
+      rate: "double",
       polymeterEnabled: false,
       polymeterLanes: [
         { numerator: 4, denominator: 4 },
@@ -224,6 +227,13 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
     setTimeSignature(song.timeSignature);
     setSwing(song.swing);
     setPattern(song.pattern.map((beat) => ({ pulses: beat.pulses, accents: [...beat.accents] })));
+  };
+
+  const setAllPulseAccents = (accent: PulseAccent) => {
+    setPattern((prev) => prev.map((beat) => ({
+      ...beat,
+      accents: Array.from({ length: beat.pulses }, () => accent),
+    })));
   };
 
   const setlistBackupFileName = () => `${safeFileName(setlist.name || "groove-setlist")}.groove-setlist.json`;
@@ -353,6 +363,8 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
               onToggle={(enabled) => setPolyrhythm({ enabled })}
               onMain={(main) => setPolyrhythm({ main, enabled: true })}
               onVoices={(voices) => setPolyrhythm({ voices, enabled: true })}
+              rate={state.polyrhythm.rate}
+              onRate={(rate) => setPolyrhythm({ rate, enabled: true })}
             />
           ) : (
             <PolymeterPanel
@@ -384,6 +396,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
           onBeatSoundChange={setBeatSound}
           onPresetChange={loadPreset}
           onResetAccents={resetAccents}
+          onSetAllPulseAccents={setAllPulseAccents}
         />
       </section>
 
@@ -550,11 +563,11 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
 
         {/* Tempo Ramp */}
         <CollapsiblePanel
-          title="Ramp"
+          title="Practice Ramp"
           summary={state.rampEnabled ? `${state.rampConfig.startBpm} → ${state.rampConfig.endBpm}` : "Off"}
           icon={<TrendingUp className="size-4" />}
           trailing={<Switch checked={state.rampEnabled} onCheckedChange={setRampEnabled} />}
-          defaultOpen={state.rampEnabled}
+          defaultOpen
         >
           <PremiumToolNote label="Practice builder" body="Ramp gradually across a phrase so speed increases feel musical, not sudden." />
           <div className="grid grid-cols-3 gap-3">
@@ -583,11 +596,11 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
 
         {/* Mute trainer */}
         <CollapsiblePanel
-          title="Mute"
+          title="Mute Trainer"
           summary={state.trainerEnabled ? `${state.trainerConfig.playBars} play / ${state.trainerConfig.muteBars} mute` : "Off"}
           icon={<VolumeX className="size-4" />}
           trailing={<Switch checked={state.trainerEnabled} onCheckedChange={setTrainerEnabled} />}
-          defaultOpen={state.trainerEnabled}
+          defaultOpen
         >
           <PremiumToolNote label="Inner clock" body="Alternate playing and silent bars to test whether your pulse survives without the click." />
           <div className="grid grid-cols-2 gap-3">
@@ -828,8 +841,9 @@ function HeroPracticeBar({
           <button
             type="button"
             onPointerDown={(e) => { e.preventDefault(); onReset(); }}
-            className="rounded-md border border-primary/70 bg-background/50 px-4 py-3 tiny-caps text-[10px] text-primary transition-colors hover:bg-primary/10"
+            className="inline-flex min-h-12 items-center gap-2 rounded-md border border-primary bg-primary px-4 py-3 tiny-caps text-[10px] text-primary-foreground shadow-[0_0_22px_hsl(var(--primary)/0.16)] transition-colors hover:bg-primary/90"
           >
+            <RotateCcw className="size-4" />
             Reset 4/4 · 100 BPM
           </button>
         </div>
@@ -940,12 +954,14 @@ function QuickSetup({
   onBeatSoundChange,
   onPresetChange,
   onResetAccents,
+  onSetAllPulseAccents,
 }: {
   status: string;
   beatSound: UseMetronomeReturn["state"]["beatSound"];
   onBeatSoundChange: (sound: UseMetronomeReturn["state"]["beatSound"]) => void;
   onPresetChange: (idx: number) => void;
   onResetAccents: () => void;
+  onSetAllPulseAccents: (accent: PulseAccent) => void;
 }) {
   return (
     <div className="rounded-lg border border-border/70 bg-card/80 p-4 md:p-5 shadow-[0_1px_0_hsl(var(--accent)/0.08)]">
@@ -991,6 +1007,14 @@ function QuickSetup({
           </select>
         </SelectField>
       </div>
+      <div className="mt-3 rounded-md border border-border/60 bg-background/30 p-2">
+        <div className="mb-2 tiny-caps text-[10px] text-muted-foreground">Make every pulse</div>
+        <div className="grid grid-cols-3 gap-1.5">
+          <UniformAccentButton label="Loud" onClick={() => onSetAllPulseAccents("accent")} />
+          <UniformAccentButton label="Soft" onClick={() => onSetAllPulseAccents("normal")} />
+          <UniformAccentButton label="Softer" onClick={() => onSetAllPulseAccents("ghost")} />
+        </div>
+      </div>
       <button
         type="button"
         onPointerDown={(e) => { e.preventDefault(); onResetAccents(); }}
@@ -999,6 +1023,21 @@ function QuickSetup({
         Reset accents
       </button>
     </div>
+  );
+}
+
+function UniformAccentButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onPointerDown={(e) => {
+        e.preventDefault();
+        onClick();
+      }}
+      className="rounded-sm border border-border/70 px-2 py-2 tiny-caps text-[10px] text-muted-foreground transition-colors hover:border-primary hover:bg-primary/10 hover:text-primary"
+    >
+      {label}
+    </button>
   );
 }
 
@@ -1635,22 +1674,26 @@ function PolyrhythmMode({
   main,
   voices,
   enabled,
+  rate,
   isPlaying,
   currentBeat,
   currentPoly,
   onToggle,
   onMain,
   onVoices,
+  onRate,
 }: {
   main: number;
   voices: number[];
   enabled: boolean;
+  rate: PolyrhythmRate;
   isPlaying: boolean;
   currentBeat: number;
   currentPoly: number;
   onToggle: (enabled: boolean) => void;
   onMain: (main: number) => void;
   onVoices: (voices: number[]) => void;
+  onRate: (rate: PolyrhythmRate) => void;
 }) {
   const allVoices = [main, ...voices].slice(0, 4);
   const sharedSlots = lcmMany(allVoices);
@@ -1691,6 +1734,31 @@ function PolyrhythmMode({
             <span className="tiny-caps mb-2 text-xs text-muted-foreground">
               {sharedSlots} shared LCM slots
             </span>
+          </div>
+          <div className="mt-4 inline-grid grid-cols-2 rounded-md border border-border/70 bg-background/35 p-1">
+            {[
+              ["double", "Double"],
+              ["pulse", "Pulse"],
+            ].map(([id, label]) => {
+              const active = rate === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    onRate(id as PolyrhythmRate);
+                  }}
+                  className={
+                    "rounded-sm px-3 py-2 tiny-caps text-[10px] transition-colors " +
+                    (active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")
+                  }
+                  aria-pressed={active}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 md:justify-end">

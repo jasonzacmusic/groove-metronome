@@ -19,6 +19,7 @@ import {
   type BeatSound,
   type DottedPlaybackMode,
   type MeterDenominator,
+  type PolyrhythmRate,
   type PolyrhythmConfig,
   type PulseAccent,
   type SubdivisionCount,
@@ -192,6 +193,7 @@ export function useMetronome() {
     against: 2,
     dottedMode: "off",
     tripletMode: "off",
+    rate: "double",
     polymeterEnabled: false,
     polymeterLanes: [
       { numerator: 4, denominator: 4 },
@@ -341,8 +343,8 @@ export function useMetronome() {
     if (!polySynthsRef.current) {
       polySynthsRef.current = Array.from({ length: 4 }, (_, index) =>
         new Tone.Synth({
-          oscillator: { type: index === 0 ? "triangle" : index === 1 ? "square" : index === 2 ? "sawtooth" : "sine" },
-          envelope: { attack: 0.001, decay: 0.045, sustain: 0, release: 0.025 },
+          oscillator: { type: index === 0 ? "triangle" : index === 1 ? "sine" : index === 2 ? "triangle" : "sine" },
+          envelope: { attack: 0.0015, decay: 0.075, sustain: 0, release: 0.045 },
         }).toDestination(),
       );
     }
@@ -416,27 +418,32 @@ export function useMetronome() {
 
       if (isPolyrhythmCycle) {
         const barDuration = beatDuration * ts.numerator;
+        const cyclesPerBar = poly.rate === "pulse" ? 1 : 2;
+        const cycleDuration = barDuration / cyclesPerBar;
         const voiceCounts = [poly.main, ...poly.voices].filter((count) => count >= 2).slice(0, 4);
-        voiceCounts.forEach((count, voiceIndex) => {
-          const polyStep = barDuration / count;
-          for (let k = 0; k < count; k++) {
-            const offset = polyStep * k;
-            const isPolyDownbeat = k === 0;
-            if (!muted) {
-              const polyFreq = [1900, 1450, 1120, 850][voiceIndex] ?? 1000;
-              const polyVol = isPolyDownbeat ? -2 - voiceIndex * 2 : -9 - voiceIndex * 2;
-              playPolyClick(time + offset, polyFreq, polyVol, voiceIndex, isPolyDownbeat);
+        for (let cycle = 0; cycle < cyclesPerBar; cycle++) {
+          const cycleOffset = cycle * cycleDuration;
+          voiceCounts.forEach((count, voiceIndex) => {
+            const polyStep = cycleDuration / count;
+            for (let k = 0; k < count; k++) {
+              const offset = cycleOffset + polyStep * k;
+              const isPolyDownbeat = k === 0;
+              if (!muted) {
+                const polyFreq = [760, 560, 430, 330][voiceIndex] ?? 420;
+                const polyVol = isPolyDownbeat ? -4 - voiceIndex * 1.5 : -11 - voiceIndex * 1.5;
+                playPolyClick(time + offset, polyFreq, polyVol, voiceIndex, isPolyDownbeat);
+              }
+              if (voiceIndex === 0) {
+                const mainIdx = k;
+                Tone.Draw.schedule(() => setCurrentBeat(mainIdx), time + offset);
+              }
+              if (voiceIndex === 1) {
+                const polyIdx = k;
+                Tone.Draw.schedule(() => setCurrentPoly(polyIdx), time + offset);
+              }
             }
-            if (voiceIndex === 0) {
-              const mainIdx = k;
-              Tone.Draw.schedule(() => setCurrentBeat(mainIdx), time + offset);
-            }
-            if (voiceIndex === 1) {
-              const polyIdx = k;
-              Tone.Draw.schedule(() => setCurrentPoly(polyIdx), time + offset);
-            }
-          }
-        });
+          });
+        }
       }
 
       if (!muted && beatIdx === 0) {
@@ -784,6 +791,7 @@ export function useMetronome() {
         voices: (next.voices.length > 0 ? next.voices : [next.against]).slice(0, 3).map((voice) => clamp(Math.round(voice), 2, 16)),
         dottedMode: DOTTED_PLAYBACK_LABELS[next.dottedMode] ? next.dottedMode : "off",
         tripletMode: TRIPLET_ASSIST_LABELS[next.tripletMode] ? next.tripletMode : "off",
+        rate: (["double", "pulse"] as PolyrhythmRate[]).includes(next.rate) ? next.rate : "double",
         polymeterEnabled: Boolean(next.polymeterEnabled),
         polymeterLanes: (next.polymeterLanes?.length ? next.polymeterLanes : [
           { numerator: 4, denominator: 4 },

@@ -199,6 +199,7 @@ export const BEAT_PATTERN_TILES: BeatPatternTile[] = [
 export type DottedPlaybackMode = "off" | "quarter" | "eighth" | "sixteenth";
 export type TripletAssistMode = "off" | "half" | "quarter" | "eighth" | "sextuplet";
 export type MeterDenominator = 4 | 8 | 16;
+export type PolyrhythmRate = "double" | "pulse";
 
 export interface PolymeterLane {
   numerator: number;
@@ -228,6 +229,7 @@ export interface PolyrhythmConfig {
   against: number; // legacy single-voice value
   dottedMode: DottedPlaybackMode;
   tripletMode: TripletAssistMode;
+  rate: PolyrhythmRate;
   polymeterEnabled: boolean;
   polymeterLanes: PolymeterLane[];
 }

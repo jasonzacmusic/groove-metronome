@@ -45,6 +45,7 @@ export default function App() {
       enabled: false,
       dottedMode: "off",
       tripletMode: "off",
+      rate: "double",
       polymeterEnabled: false,
       polymeterLanes: [{ numerator: timeSignature.numerator, denominator }],
     });
@@ -250,7 +251,6 @@ function ThemeSwitch({ theme, onThemeChange }: { theme: ThemeId; onThemeChange: 
                 className="theme-swatch-palette"
                 style={{ background: `linear-gradient(135deg, ${option.colors[0]} 0 38%, ${option.colors[1]} 38% 69%, ${option.colors[2]} 69% 100%)` }}
               />
-              <span className="theme-swatch-label">{option.label}</span>
             </button>
           );
         })}
