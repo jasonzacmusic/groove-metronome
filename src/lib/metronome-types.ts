@@ -170,22 +170,30 @@ export interface BeatPatternTile {
   id: string;
   label: string;
   glyph: string; // unicode music glyph(s)
+  color: string;
   pattern: BeatPattern;
 }
 
 export const BEAT_PATTERN_TILES: BeatPatternTile[] = [
-  { id: "quarter",        label: "Quarter",         glyph: "♩",   pattern: { pulses: 1, accents: ["normal"] } },
-  { id: "eighths",        label: "Eighths",         glyph: "♫",   pattern: { pulses: 2, accents: ["normal", "ghost"] } },
-  { id: "dotted",         label: "Dotted-8 + 16",   glyph: "♪.♬", pattern: { pulses: 4, accents: ["normal", "mute", "mute", "ghost"] } },
-  { id: "triplet",        label: "Triplet",         glyph: "♬³",  pattern: { pulses: 3, accents: ["normal", "ghost", "ghost"] } },
-  { id: "tripletRestA",   label: "Trip · Rest first", glyph: "𝄾♬", pattern: { pulses: 3, accents: ["mute", "ghost", "ghost"] } },
-  { id: "tripletRestB",   label: "Trip · Rest mid",   glyph: "♬𝄾", pattern: { pulses: 3, accents: ["ghost", "mute", "ghost"] } },
-  { id: "tripletRestC",   label: "Trip · Rest last",  glyph: "♬♬𝄾", pattern: { pulses: 3, accents: ["ghost", "ghost", "mute"] } },
-  { id: "sixteenths",     label: "Sixteenths",      glyph: "♬♬",  pattern: { pulses: 4, accents: ["normal", "ghost", "ghost", "ghost"] } },
-  { id: "quintuplet",     label: "5-let",           glyph: "♬⁵",  pattern: { pulses: 5, accents: ["normal", "ghost", "ghost", "ghost", "ghost"] } },
-  { id: "sextuplet",      label: "6-let",           glyph: "♬⁶",  pattern: { pulses: 6, accents: ["normal", "ghost", "ghost", "ghost", "ghost", "ghost"] } },
-  { id: "septuplet",      label: "7-let",           glyph: "♬⁷",  pattern: { pulses: 7, accents: ["normal", "ghost", "ghost", "ghost", "ghost", "ghost", "ghost"] } },
-  { id: "rest",           label: "Silent beat",     glyph: "𝄽",   pattern: { pulses: 1, accents: ["mute"] } },
+  { id: "quarter",        label: "Quarter",           glyph: "♩",    color: "188 87% 42%", pattern: { pulses: 1, accents: ["normal"] } },
+  { id: "eighths",        label: "Eighths",           glyph: "♫",    color: "192 64% 42%", pattern: { pulses: 2, accents: ["normal", "ghost"] } },
+  { id: "eighthOff",      label: "Off eighth",        glyph: "𝄾♪",   color: "202 68% 48%", pattern: { pulses: 2, accents: ["mute", "normal"] } },
+  { id: "dotted",         label: "Dotted 8 + 16",     glyph: "♪.♬",  color: "35 78% 48%", pattern: { pulses: 4, accents: ["normal", "mute", "mute", "ghost"] } },
+  { id: "triplet",        label: "Triplet",           glyph: "♬³",   color: "266 55% 58%", pattern: { pulses: 3, accents: ["normal", "ghost", "ghost"] } },
+  { id: "tripletOuter",   label: "Triplet 1 + 3",     glyph: "♪𝄾♪", color: "278 48% 52%", pattern: { pulses: 3, accents: ["normal", "mute", "normal"] } },
+  { id: "tripletRestA",   label: "Trip rest first",   glyph: "𝄾♬",  color: "300 44% 48%", pattern: { pulses: 3, accents: ["mute", "ghost", "ghost"] } },
+  { id: "tripletRestB",   label: "Trip rest mid",     glyph: "♬𝄾",  color: "315 48% 48%", pattern: { pulses: 3, accents: ["ghost", "mute", "ghost"] } },
+  { id: "tripletRestC",   label: "Trip rest last",    glyph: "♬♬𝄾", color: "330 52% 50%", pattern: { pulses: 3, accents: ["ghost", "ghost", "mute"] } },
+  { id: "sixteenths",     label: "16ths light",       glyph: "♬♬",   color: "150 58% 40%", pattern: { pulses: 4, accents: ["normal", "ghost", "ghost", "ghost"] } },
+  { id: "sixteenthAll",   label: "16ths all",         glyph: "♬♬",   color: "164 64% 38%", pattern: { pulses: 4, accents: ["normal", "normal", "normal", "normal"] } },
+  { id: "sixteenthOffs",  label: "16ths off",         glyph: "𝄾♪𝄾♪", color: "174 64% 38%", pattern: { pulses: 4, accents: ["mute", "normal", "mute", "normal"] } },
+  { id: "sixteenthE",     label: "16th e",            glyph: "𝄾♪𝄾𝄾", color: "126 45% 42%", pattern: { pulses: 4, accents: ["mute", "normal", "mute", "mute"] } },
+  { id: "sixteenthA",     label: "16th a",            glyph: "𝄾𝄾𝄾♪", color: "112 46% 42%", pattern: { pulses: 4, accents: ["mute", "mute", "mute", "normal"] } },
+  { id: "sixteenthClave", label: "16th 3 + 4",        glyph: "♪𝄾♪♪", color: "20 78% 52%", pattern: { pulses: 4, accents: ["normal", "mute", "normal", "normal"] } },
+  { id: "quintuplet",     label: "5-let",             glyph: "♬⁵",   color: "50 72% 44%", pattern: { pulses: 5, accents: ["normal", "ghost", "ghost", "ghost", "ghost"] } },
+  { id: "sextuplet",      label: "6-let",             glyph: "♬⁶",   color: "215 58% 54%", pattern: { pulses: 6, accents: ["normal", "ghost", "ghost", "ghost", "ghost", "ghost"] } },
+  { id: "septuplet",      label: "7-let",             glyph: "♬⁷",   color: "245 48% 58%", pattern: { pulses: 7, accents: ["normal", "ghost", "ghost", "ghost", "ghost", "ghost", "ghost"] } },
+  { id: "rest",           label: "Silent beat",       glyph: "𝄽",    color: "214 16% 48%", pattern: { pulses: 1, accents: ["mute"] } },
 ];
 
 /** Polyrhythm voices fire evenly-spaced pulses across the same cycle. */

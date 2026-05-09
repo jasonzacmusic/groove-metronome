@@ -12,15 +12,22 @@ import {
 
 import {
   type BeatPattern,
+  type PolyrhythmConfig,
   type PulseAccent,
   type TimeSignature,
 } from "@/lib/metronome-types";
 
 interface NotationPanelProps {
+  view?: "beatmap" | "levels" | "polyrhythm";
   pattern: BeatPattern[];
+  polyrhythm?: PolyrhythmConfig;
   timeSignature: TimeSignature;
   currentBeat: number;
+  currentPulse?: number;
+  currentPoly?: number;
   isPlaying: boolean;
+  onCyclePulse?: (beatIndex: number, pulseIndex: number) => void;
+  onCycleBeatSubdivision?: (beatIndex: number) => void;
 }
 
 interface NoteSpec {
@@ -66,7 +73,18 @@ function colorFor(accent: PulseAccent, isActive: boolean): string {
   }
 }
 
-export function NotationPanel({ pattern, timeSignature, currentBeat, isPlaying }: NotationPanelProps) {
+export function NotationPanel({
+  view = "beatmap",
+  pattern,
+  polyrhythm,
+  timeSignature,
+  currentBeat,
+  currentPulse = -1,
+  currentPoly = -1,
+  isPlaying,
+  onCyclePulse,
+  onCycleBeatSubdivision,
+}: NotationPanelProps) {
   const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -75,7 +93,9 @@ export function NotationPanel({ pattern, timeSignature, currentBeat, isPlaying }
     host.innerHTML = "";
 
     const width = Math.max(380, host.clientWidth || 600);
-    const height = 170;
+    const polyVoiceCounts = polyrhythm?.enabled ? [polyrhythm.main, ...polyrhythm.voices].filter((count) => count >= 2).slice(0, 4) : [];
+    const isPolyPreview = view === "polyrhythm" && polyVoiceCounts.length > 0;
+    const height = isPolyPreview ? Math.max(170, 64 + polyVoiceCounts.length * 58) : 170;
 
     let renderer: Renderer | null = null;
     let ctx: RenderContext | null = null;
@@ -86,6 +106,11 @@ export function NotationPanel({ pattern, timeSignature, currentBeat, isPlaying }
       ctx = renderer.getContext();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (ctx as any).setBackgroundFillStyle?.("transparent");
+
+      if (isPolyPreview) {
+        drawPolyrhythmNotation(ctx, host, width, polyVoiceCounts, currentBeat, currentPoly, isPlaying);
+        return;
+      }
 
       const stave = new Stave(10, 26, width - 20);
       stave.addClef("percussion");
@@ -99,14 +124,13 @@ export function NotationPanel({ pattern, timeSignature, currentBeat, isPlaying }
 
       pattern.forEach((beat, beatIdx) => {
         const specs = pulsesToNoteSpecs(beat);
-        const isActiveBeat = isPlaying && currentBeat === beatIdx;
-        const beatNotes: StaveNote[] = specs.map((spec) => {
+        const beatNotes: StaveNote[] = specs.map((spec, pulseIdx) => {
           const note = new StaveNote({
             keys: ["b/4"],
             duration: spec.rest ? `${spec.duration}r` : spec.duration,
             stem_direction: 1,
           });
-          const color = colorFor(spec.accent, isActiveBeat);
+          const color = colorFor(spec.accent, isPlaying && currentBeat === beatIdx && currentPulse === pulseIdx);
           note.setStyle({ fillStyle: color, strokeStyle: color });
           if (spec.accent === "ghost" && !spec.rest) {
             // Visual cue for ghost: smaller / parenthesized — VexFlow has limited support here,
@@ -149,11 +173,102 @@ export function NotationPanel({ pattern, timeSignature, currentBeat, isPlaying }
     return () => {
       if (host) host.innerHTML = "";
     };
-  }, [pattern, timeSignature.numerator, timeSignature.denominator, currentBeat, isPlaying]);
+  }, [view, pattern, polyrhythm, timeSignature.numerator, timeSignature.denominator, currentBeat, currentPulse, currentPoly, isPlaying]);
 
-  return <div ref={ref} className="w-full overflow-x-auto" />;
+  const canEditNotation = view !== "polyrhythm" && Boolean(onCyclePulse);
+
+  return (
+    <div className="relative">
+      <div ref={ref} className="w-full overflow-x-auto" />
+      {canEditNotation && (
+        <div className="absolute inset-x-2 top-12 bottom-8 grid" style={{ gridTemplateColumns: `repeat(${Math.max(1, pattern.length)}, minmax(0, 1fr))` }}>
+          {pattern.map((beat, beatIndex) => (
+            <div key={beatIndex} className="grid" style={{ gridTemplateColumns: `repeat(${beat.pulses}, minmax(0, 1fr))` }}>
+              {beat.accents.map((accent, pulseIndex) => (
+                <button
+                  key={`${beatIndex}-${pulseIndex}`}
+                  type="button"
+                  className="rounded-sm border border-transparent hover:border-primary/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/70"
+                  title={`Beat ${beatIndex + 1}, pulse ${pulseIndex + 1}: ${accent}. Click to toggle accent, double-click to change subdivision.`}
+                  aria-label={`Edit beat ${beatIndex + 1}, pulse ${pulseIndex + 1}`}
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onCyclePulse?.(beatIndex, pulseIndex);
+                  }}
+                  onDoubleClick={(e) => {
+                    e.preventDefault();
+                    onCycleBeatSubdivision?.(beatIndex);
+                  }}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Helper: VexFlow's StaveNote duration accessor.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function spec(n: StaveNote): string { return (n as any).duration ?? "q"; }
+
+function drawPolyrhythmNotation(
+  ctx: RenderContext,
+  host: HTMLDivElement,
+  width: number,
+  voiceCounts: number[],
+  currentBeat: number,
+  currentPoly: number,
+  isPlaying: boolean,
+) {
+  const voices: Voice[] = [];
+  const staves: Stave[] = [];
+  const labels = ["Main", "Voice 2", "Voice 3", "Voice 4"];
+  const colors = ["rgb(174, 112, 16)", "rgb(31, 119, 142)", "rgb(124, 92, 188)", "rgb(198, 89, 82)"];
+
+  voiceCounts.forEach((count, row) => {
+    const y = 18 + row * 58;
+    const stave = new Stave(62, y, width - 78);
+    stave.setStyle({ strokeStyle: STAFF, fillStyle: STAFF });
+    stave.setContext(ctx).draw();
+    staves.push(stave);
+
+    const notes = Array.from({ length: count }, (_, index) => {
+      const note = new StaveNote({ keys: ["b/4"], duration: "q", stem_direction: 1 });
+      const isActive = isPlaying && ((row === 0 && currentBeat === index) || (row === 1 && currentPoly === index));
+      const color = isActive || index === 0 ? colors[row] ?? FG : row === 0 ? FG : "rgba(17, 24, 39, 0.54)";
+      note.setStyle({ fillStyle: color, strokeStyle: color });
+      return note;
+    });
+    const voice = new Voice({ num_beats: count, beat_value: 4 });
+    voice.setStrict(false);
+    voice.addTickables(notes);
+    voices.push(voice);
+  });
+
+  voices.forEach((voice) => {
+    new Formatter().format([voice], Math.max(220, width - 150));
+  });
+  voices.forEach((voice, index) => voice.draw(ctx, staves[index]));
+
+  const svg = host.querySelector("svg");
+  if (!svg) return;
+  voiceCounts.forEach((count, row) => {
+    appendSvgText(svg, labels[row] ?? `Voice ${row + 1}`, 14, 48 + row * 58, colors[row] ?? FG, "11", "700");
+    appendSvgText(svg, String(count), 47, 48 + row * 58, colors[row] ?? FG, "18", "500");
+  });
+}
+
+function appendSvgText(svg: Element, text: string, x: number, y: number, fill: string, size: string, weight: string) {
+  const node = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  node.setAttribute("x", String(x));
+  node.setAttribute("y", String(y));
+  node.setAttribute("fill", fill);
+  node.setAttribute("font-size", size);
+  node.setAttribute("font-family", "var(--app-font-mono)");
+  node.setAttribute("font-weight", weight);
+  node.textContent = text;
+  svg.appendChild(node);
+}

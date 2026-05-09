@@ -37,6 +37,7 @@ import {
   SUBDIVISION_NOTATION,
   SUBDIVISION_OPTIONS,
   type BeatPattern,
+  type PolyrhythmConfig,
   type PulseAccent,
   type SubdivisionCount,
   type TimeSignature,
@@ -107,6 +108,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
   const [targetMinutes, setTargetMinutes] = useState(5);
   const [selectedBeat, setSelectedBeat] = useState<number | null>(null);
   const [songName, setSongName] = useState("New song");
+  const [showHaptics, setShowHaptics] = useState(false);
   const [setlist, setSetlist] = useState<SetlistState>(() => {
     try {
       const saved = window.localStorage.getItem(SETLIST_STORAGE_KEY);
@@ -120,6 +122,13 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
   useEffect(() => {
     window.localStorage.setItem(SETLIST_STORAGE_KEY, JSON.stringify(setlist));
   }, [setlist]);
+
+  useEffect(() => {
+    const ua = navigator.userAgent;
+    const platform = navigator.platform;
+    const isIOS = /iPad|iPhone|iPod/.test(ua) || (platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    setShowHaptics(isIOS);
+  }, []);
 
   // Keep selectedBeat in range if numerator changes
   useEffect(() => {
@@ -207,7 +216,9 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
         />
 
         <WheelStage
+          view={view}
           pattern={state.pattern}
+          polyrhythm={state.polyrhythm}
           bpm={state.bpm}
           isPlaying={state.isPlaying}
           currentBeat={state.currentBeat}
@@ -223,25 +234,6 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
           onAdjustBpm={adjustBpm}
           onSetBpm={setBpm}
         />
-
-        <NotationStage
-          pattern={state.pattern}
-          timeSignature={state.timeSignature}
-          currentBeat={state.currentBeat}
-          isPlaying={state.isPlaying}
-        />
-
-        <CollapsiblePanel
-          title="Subdivision Palette"
-          summary={dominantSubdivision ? `${SUBDIVISION_NOTATION[dominantSubdivision].label}` : "Mixed beats"}
-          defaultOpen={false}
-        >
-          <SubdivisionPalette
-            dominantSubdivision={dominantSubdivision}
-            onApply={setGlobalSubdivision}
-            onReset={resetAccents}
-          />
-        </CollapsiblePanel>
 
         {/* Mode detail */}
         <div className="relative">
@@ -285,6 +277,19 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
           )}
         </div>
 
+        <NotationStage
+          view={view}
+          pattern={state.pattern}
+          polyrhythm={state.polyrhythm}
+          timeSignature={state.timeSignature}
+          currentBeat={state.currentBeat}
+          currentPulse={state.currentPulse}
+          currentPoly={state.currentPoly}
+          isPlaying={state.isPlaying}
+          onCyclePulse={cyclePulse}
+          onCycleBeatSubdivision={cycleBeatSubdivision}
+        />
+
         <QuickSetup
           status={state.isPlaying ? `Bar ${state.barCount + 1}` : "Stopped"}
           beatSound={state.beatSound}
@@ -292,9 +297,30 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
           onPresetChange={loadPreset}
           onResetAccents={resetAccents}
         />
+      </section>
 
-        {/* Pattern tiles (Pro-Metronome style) */}
-        <CollapsiblePanel title="Pattern Tiles" summary="Apply rhythm presets" defaultOpen={false}>
+      {/* SIDEBAR column */}
+      <aside className="space-y-4 lg:border-l lg:border-border lg:pl-10">
+        <CollapsiblePanel title="Guide" summary="How this works" icon={<CircleHelp className="size-4" />} defaultOpen={false}>
+          <AppGuide />
+        </CollapsiblePanel>
+
+        <VisualModePanel view={view} onChange={handleViewChange} />
+
+        <CollapsiblePanel
+          title="Subdivision"
+          summary={dominantSubdivision ? `${SUBDIVISION_NOTATION[dominantSubdivision].label}` : "Mixed beats"}
+          icon={<Waves className="size-4" />}
+          defaultOpen={true}
+        >
+          <SubdivisionPalette
+            dominantSubdivision={dominantSubdivision}
+            onApply={setGlobalSubdivision}
+            onReset={resetAccents}
+          />
+        </CollapsiblePanel>
+
+        <CollapsiblePanel title="Patterns" summary="Apply rhythm tiles" icon={<Music2 className="size-4" />} defaultOpen={false}>
           <PatternTiles
             selectedBeat={selectedBeat}
             beatCount={state.timeSignature.numerator}
@@ -305,15 +331,6 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
             }}
           />
         </CollapsiblePanel>
-      </section>
-
-      {/* SIDEBAR column */}
-      <aside className="space-y-4 lg:border-l lg:border-border lg:pl-10">
-        <CollapsiblePanel title="Guide" summary="How this works" icon={<CircleHelp className="size-4" />} defaultOpen={false}>
-          <AppGuide />
-        </CollapsiblePanel>
-
-        <VisualModePanel view={view} onChange={handleViewChange} />
 
         <CollapsiblePanel title="Sound" summary={BEAT_SOUND_LABELS[state.beatSound]} icon={<Volume2 className="size-4" />} defaultOpen={true}>
           <Field label="Pitch" trailing={<span className="tiny-caps text-[10px] text-primary">{pitchLabel(state.pitch)}</span>}>
@@ -342,17 +359,19 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
           </div>
         </CollapsiblePanel>
 
-        <CollapsiblePanel
-          title="Assist"
-          summary={state.hapticsEnabled ? "Haptics on" : "Haptics off"}
-          icon={<Hand className="size-4" />}
-          trailing={<Switch aria-label="Haptic pulse" checked={state.hapticsEnabled} onCheckedChange={setHapticsEnabled} />}
-          defaultOpen={false}
-        >
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Haptics follow the main beat on supported phones and tablets. Accents feel stronger, ghost notes lighter, and muted beats stay silent.
-          </p>
-        </CollapsiblePanel>
+        {showHaptics && (
+          <CollapsiblePanel
+            title="Assist"
+            summary={state.hapticsEnabled ? "Haptics on" : "Haptics off"}
+            icon={<Hand className="size-4" />}
+            trailing={<Switch aria-label="Haptic pulse" checked={state.hapticsEnabled} onCheckedChange={setHapticsEnabled} />}
+            defaultOpen={false}
+          >
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Haptics follow the main beat on supported iPhone and iPad browsers. Accents feel stronger, ghost notes lighter, and muted beats stay silent.
+            </p>
+          </CollapsiblePanel>
+        )}
 
         <CollapsiblePanel title="Setlist" summary={setlist.name} icon={<ListMusic className="size-4" />} defaultOpen={false}>
           <div className="space-y-3">
@@ -513,7 +532,9 @@ function SectionLabel({ title, hint }: { title: string; hint?: string }) {
 }
 
 function WheelStage({
+  view,
   pattern,
+  polyrhythm,
   bpm,
   isPlaying,
   currentBeat,
@@ -521,7 +542,9 @@ function WheelStage({
   onCycleBeatSubdivision,
   onCyclePulseAccent,
 }: {
+  view: MetronomeView;
   pattern: BeatPattern[];
+  polyrhythm: PolyrhythmConfig;
   bpm: number;
   isPlaying: boolean;
   currentBeat: number;
@@ -529,11 +552,18 @@ function WheelStage({
   onCycleBeatSubdivision: (beatIndex: number) => void;
   onCyclePulseAccent: (beatIndex: number, pulseIndex: number) => void;
 }) {
+  const wheelPattern: BeatPattern[] = view === "polyrhythm" && polyrhythm.enabled
+    ? Array.from({ length: polyrhythm.main }, (_, index) => ({
+      pulses: 1,
+      accents: [index === 0 ? "accent" : "normal"],
+    }))
+    : pattern;
+
   return (
-    <div className="relative overflow-hidden rounded-lg border border-border/70 bg-card/55 p-4 md:p-5">
-      <div className="relative grid grid-cols-1 lg:grid-cols-[minmax(280px,440px)_minmax(0,1fr)] gap-5 items-center">
+    <div className="relative overflow-hidden rounded-lg border border-border/70 bg-card/70 p-3 md:p-5">
+      <div className="relative flex justify-center">
         <PolyrhythmWheel
-          pattern={pattern}
+          pattern={wheelPattern}
           bpm={bpm}
           isPlaying={isPlaying}
           currentBeat={currentBeat}
@@ -541,54 +571,56 @@ function WheelStage({
           onCycleBeatSubdivision={onCycleBeatSubdivision}
           onCyclePulseAccent={onCyclePulseAccent}
         />
-        <div className="space-y-4">
-          <div className="grid grid-cols-4 gap-2">
-            {pattern.map((beat, index) => {
-              const active = isPlaying && currentBeat === index;
-              return (
-                <div
-                  key={index}
-                  className="rounded-sm border px-2 py-2 text-center"
-                  style={{
-                    borderColor: active ? "hsl(var(--primary))" : subdivisionColor(beat.pulses, 0.34),
-                    background: active ? `${subdivisionColor(beat.pulses, 0.22)}` : "hsl(var(--background) / 0.3)",
-                  }}
-                >
-                  <span className="font-serif text-xl leading-none">{index + 1}</span>
-                  <span className="tiny-caps block text-[9px] text-muted-foreground">{beat.pulses}p</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
       </div>
     </div>
   );
 }
 
 function NotationStage({
+  view,
   pattern,
+  polyrhythm,
   timeSignature,
   currentBeat,
+  currentPulse,
+  currentPoly,
   isPlaying,
+  onCyclePulse,
+  onCycleBeatSubdivision,
 }: {
+  view: MetronomeView;
   pattern: BeatPattern[];
+  polyrhythm: PolyrhythmConfig;
   timeSignature: TimeSignature;
   currentBeat: number;
+  currentPulse: number;
+  currentPoly: number;
   isPlaying: boolean;
+  onCyclePulse: (beatIndex: number, pulseIndex: number) => void;
+  onCycleBeatSubdivision: (beatIndex: number) => void;
 }) {
+  const previewHint = view === "polyrhythm" && polyrhythm.enabled
+    ? `${polyrhythm.main}:${polyrhythm.voices.join(":") || polyrhythm.against}`
+    : `${timeSignature.numerator}/${timeSignature.denominator}`;
+
   return (
     <section className="rounded-lg border border-border/70 bg-card/55 p-4">
       <div className="mb-3 flex items-baseline justify-between gap-3">
-        <SectionLabel title="Notation Preview" hint={`${timeSignature.numerator}/${timeSignature.denominator}`} />
-        <span className="tiny-caps text-[10px] text-primary/85">notation</span>
+        <SectionLabel title="Notation Preview" hint={previewHint} />
+        <span className="tiny-caps text-[10px] text-primary/85">touch notes</span>
       </div>
       <div className="notation-surface border border-border rounded-md px-3 py-3 overflow-x-auto shadow-[0_0_0_1px_hsl(var(--accent)/0.08)]">
         <NotationPanel
+          view={view}
           pattern={pattern}
+          polyrhythm={polyrhythm}
           timeSignature={timeSignature}
           currentBeat={currentBeat}
+          currentPulse={currentPulse}
+          currentPoly={currentPoly}
           isPlaying={isPlaying}
+          onCyclePulse={onCyclePulse}
+          onCycleBeatSubdivision={onCycleBeatSubdivision}
         />
       </div>
     </section>
@@ -666,7 +698,7 @@ function QuickSetup({
   onResetAccents: () => void;
 }) {
   return (
-    <div className="rounded-lg border border-border/70 bg-card/50 p-4 md:p-5">
+    <div className="rounded-lg border border-border/70 bg-card/80 p-4 md:p-5 shadow-[0_1px_0_hsl(var(--accent)/0.08)]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <SectionLabel title="Quick Setup" hint={status} />
@@ -722,8 +754,8 @@ function QuickSetup({
 
 function SetupPill({ label, value }: { label: string; value: string }) {
   return (
-    <span className="rounded-full border border-border/70 bg-background/40 px-3 py-1.5">
-      <span className="tiny-caps mr-2 text-[9px] text-muted-foreground">{label}</span>
+    <span className="rounded-full border border-border/70 bg-background/70 px-3 py-1.5">
+      <span className="tiny-caps mr-2 text-[9px] text-muted-foreground/90">{label}</span>
       <span className="font-mono text-xs text-foreground">{value}</span>
     </span>
   );
@@ -731,9 +763,9 @@ function SetupPill({ label, value }: { label: string; value: string }) {
 
 function SelectField({ label, trailing, children }: { label: string; trailing?: ReactNode; children: ReactNode }) {
   return (
-    <div className="rounded-md border border-border/60 bg-background/30 p-3">
+    <div className="rounded-md border border-border/70 bg-background/65 p-3">
       <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="tiny-caps text-xs text-muted-foreground">{label}</span>
+        <span className="tiny-caps text-xs text-foreground/85">{label}</span>
         {trailing}
       </div>
       {children}

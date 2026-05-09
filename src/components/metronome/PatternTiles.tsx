@@ -42,20 +42,39 @@ export function PatternTiles({ selectedBeat, beatCount, onSelectBeat, onApply }:
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         {BEAT_PATTERN_TILES.map((tile) => (
           <button
             key={tile.id}
             type="button"
             onPointerDown={(e) => { e.preventDefault(); onApply(tile.pattern, selectedBeat); }}
-            className="group flex flex-col items-center justify-center aspect-square border border-border hover:border-primary/60 rounded-sm bg-[hsl(var(--ink))] transition-colors select-none touch-manipulation"
+            className="group relative flex min-h-24 flex-col items-center justify-center overflow-hidden rounded-md border bg-background/65 px-2 py-3 transition-colors select-none touch-manipulation hover:border-primary/60"
+            style={{
+              borderColor: `hsl(${tile.color} / 0.38)`,
+              boxShadow: `inset 0 3px 0 hsl(${tile.color} / 0.9)`,
+            }}
             title={tile.label}
           >
-            <span className="text-2xl text-foreground/85 group-hover:text-primary transition-colors leading-none">
+            <span
+              className="text-2xl text-foreground/90 transition-colors leading-none"
+              style={{ color: `hsl(${tile.color})` }}
+            >
               {tile.glyph}
             </span>
-            <span className="tiny-caps text-[10px] text-muted-foreground mt-1.5 px-1 text-center leading-tight">
+            <span className="tiny-caps text-[10px] text-foreground/80 mt-1.5 px-1 text-center leading-tight">
               {tile.label}
+            </span>
+            <span className="mt-2 flex w-full items-end justify-center gap-1" aria-hidden>
+              {tile.pattern.accents.map((accent, index) => (
+                <span
+                  key={index}
+                  className="block w-2 rounded-t-sm"
+                  style={{
+                    height: accent === "accent" ? 18 : accent === "normal" ? 14 : accent === "ghost" ? 8 : 3,
+                    background: accent === "mute" ? "hsl(var(--border))" : `hsl(${tile.color} / ${accent === "ghost" ? 0.45 : 0.9})`,
+                  }}
+                />
+              ))}
             </span>
           </button>
         ))}

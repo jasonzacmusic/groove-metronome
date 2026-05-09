@@ -6,7 +6,6 @@ import {
   LEVEL_TO_ACCENT,
   nextSubdivision,
   pitchToMultiplier,
-  PULSE_ACCENT_CYCLE,
   PULSE_ACCENT_LEVEL,
   PULSE_ACCENT_VOLUME,
   SAMPLE_SOUND_SETS,
@@ -585,8 +584,7 @@ export function useMetronome() {
       if (pulseIndex < 0 || pulseIndex >= beat.accents.length) return prev;
       const accents = [...beat.accents];
       const cur = accents[pulseIndex];
-      const idx = PULSE_ACCENT_CYCLE.indexOf(cur);
-      accents[pulseIndex] = PULSE_ACCENT_CYCLE[(idx + 1) % PULSE_ACCENT_CYCLE.length];
+      accents[pulseIndex] = cur === "normal" ? "accent" : "normal";
       const next = [...prev];
       next[beatIndex] = { ...beat, accents };
       return next;

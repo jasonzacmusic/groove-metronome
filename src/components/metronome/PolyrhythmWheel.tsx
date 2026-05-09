@@ -84,7 +84,7 @@ export function PolyrhythmWheel({
   }, [currentBeat, currentPulse, pattern, beatSpan, numerator]);
 
   return (
-    <div className="relative w-full max-w-[380px] mx-auto select-none">
+    <div className="relative w-full max-w-[560px] mx-auto select-none">
       <svg
         viewBox={`0 0 ${VIEW} ${VIEW}`}
         className="block w-full h-auto touch-none"
@@ -252,7 +252,7 @@ export function PolyrhythmWheel({
         <span className="tiny-caps text-xs text-muted-foreground/80">{getTempoMarking(bpm)}</span>
         <span
           className="font-serif tabular leading-none text-foreground"
-          style={{ fontSize: "clamp(3.5rem, 14vw, 5.5rem)" }}
+          style={{ fontSize: "clamp(4rem, 16vw, 6.5rem)" }}
         >
           {Math.round(bpm)}
         </span>
