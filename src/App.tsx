@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Copy, MessageCircle, Share2 } from "lucide-react";
+import { AudioWaveform, Check, Copy, Gauge, ListMusic, MessageCircle, Share2 } from "lucide-react";
 
 import { useMetronome } from "@/hooks/useMetronome";
 import { AnalyzerPage } from "@/pages/AnalyzerPage";
@@ -21,6 +21,17 @@ const THEMES: Array<{ id: ThemeId; label: string; colors: [string, string, strin
   { id: "aqua", label: "Aqua", colors: ["#062326", "#62f4c8", "#ffd166"] },
   { id: "graphite", label: "Graphite", colors: ["#111315", "#d9e2ec", "#f5b642"] },
   { id: "contrast", label: "Contrast", colors: ["#020617", "#ffffff", "#39ff14"] },
+];
+
+const APP_TABS: Array<{
+  id: Tab;
+  label: string;
+  detail: string;
+  icon: typeof Gauge;
+}> = [
+  { id: "metronome", label: "Metronome", detail: "Practice click", icon: Gauge },
+  { id: "analyzer", label: "Analyzer", detail: "Audio & MIDI", icon: AudioWaveform },
+  { id: "setlist", label: "Setlist Studio", detail: "Concert mode", icon: ListMusic },
 ];
 
 function readStoredTheme(): ThemeId {
@@ -84,61 +95,42 @@ export default function App() {
       <div className="warm-glow" aria-hidden />
       <div className="film-grain" aria-hidden />
 
-      {/* Slim masthead */}
+      {/* Compact app masthead */}
       <header className="relative z-10 border-b border-border/70">
-        <div className="max-w-6xl mx-auto px-5 md:px-10 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <img
-              src="/brand/nsm-white.png"
-              alt="Nathaniel School of Music"
-              className="h-9 w-auto shrink-0 object-contain md:h-11"
-            />
-            <div className="min-w-0 border-l border-border/70 pl-3">
-              <h1 className="font-serif text-xl md:text-2xl leading-none tracking-tight text-foreground">
-                Groove Metronome
-              </h1>
-              <p className="mt-1 tiny-caps text-[9px] text-muted-foreground/75 truncate">
-                See it. Count it. Lock it in.
-              </p>
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-4 md:px-10 md:py-5">
+          <div className="grid gap-4 lg:grid-cols-[minmax(220px,0.75fr)_minmax(0,1.7fr)_auto] lg:items-center">
+            <div className="flex min-w-0 items-center gap-3">
+              <img
+                src="/brand/nsm-white.png"
+                alt="Nathaniel School of Music"
+                className="h-9 w-auto shrink-0 object-contain md:h-11"
+              />
+              <div className="min-w-0 border-l border-border/70 pl-3">
+                <h1 className="font-serif text-xl leading-none tracking-tight text-foreground md:text-2xl">
+                  Groove Metronome
+                </h1>
+                <p className="mt-1 truncate text-xs text-muted-foreground/80">
+                  See it. Count it. Lock it in.
+                </p>
+              </div>
             </div>
-          </div>
 
-          <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:items-end">
-            <nav className="flex w-full items-center justify-between gap-4 tiny-caps text-[11px] sm:w-auto sm:justify-start sm:gap-5 sm:text-xs">
-              <button
-                type="button"
-                onClick={() => setTab("metronome")}
-                className={tab === "metronome" ? "text-primary" : "text-muted-foreground hover:text-foreground transition-colors"}
-              >
-                Metronome
-              </button>
-              <span className="text-border">·</span>
-              <button
-                type="button"
-                onClick={() => {
-                  prepareAnalyzerClick();
-                  setTab("analyzer");
-                }}
-                className={tab === "analyzer" ? "text-primary" : "text-muted-foreground hover:text-foreground transition-colors"}
-              >
-                Analyzer
-              </button>
-              <span className="text-border">·</span>
-              <button
-                type="button"
-                onClick={() => setTab("setlist")}
-                className={tab === "setlist" ? "text-primary" : "text-muted-foreground hover:text-foreground transition-colors"}
-              >
-                Setlist Studio
-              </button>
-              {metronome.state.isPlaying && (
-                <span className="ml-1 tiny-caps text-[10px] text-primary tabular flex items-center gap-1.5">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                  {Math.round(metronome.state.bpm)}
-                </span>
-              )}
+            <nav className="grid grid-cols-3 gap-2" aria-label="Main app spaces">
+              {APP_TABS.map((item) => (
+                <AppTabButton
+                  key={item.id}
+                  item={item}
+                  active={tab === item.id}
+                  bpm={item.id === "metronome" && metronome.state.isPlaying ? Math.round(metronome.state.bpm) : undefined}
+                  onSelect={() => {
+                    if (item.id === "analyzer") prepareAnalyzerClick();
+                    setTab(item.id);
+                  }}
+                />
+              ))}
             </nav>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+
+            <div className="grid grid-cols-[auto_minmax(0,1fr)] items-end gap-3 lg:grid-cols-1 lg:justify-items-end">
               <ShareStrip />
               <ThemeSwitch theme={theme} onThemeChange={setTheme} />
             </div>
@@ -174,6 +166,36 @@ export default function App() {
       </main>
       <SeoFooter />
     </div>
+  );
+}
+
+function AppTabButton({
+  item,
+  active,
+  bpm,
+  onSelect,
+}: {
+  item: (typeof APP_TABS)[number];
+  active: boolean;
+  bpm?: number;
+  onSelect: () => void;
+}) {
+  const Icon = item.icon;
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`hero-tab ${active ? "hero-tab-active" : ""}`}
+      aria-current={active ? "page" : undefined}
+    >
+      <span className="hero-tab-icon">
+        <Icon className="size-4" aria-hidden />
+      </span>
+      <span className="min-w-0 text-left">
+        <span className="hero-tab-title">{item.label}</span>
+        <span className="hero-tab-detail">{bpm ? `${bpm} BPM live` : item.detail}</span>
+      </span>
+    </button>
   );
 }
 
