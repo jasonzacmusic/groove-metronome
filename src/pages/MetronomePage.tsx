@@ -85,9 +85,10 @@ interface MetronomePageProps {
   metronome: UseMetronomeReturn;
   view: MetronomeView;
   onViewChange: (v: MetronomeView) => void;
+  active?: boolean;
 }
 
-export function MetronomePage({ metronome, view, onViewChange }: MetronomePageProps) {
+export function MetronomePage({ metronome, view, onViewChange, active = true }: MetronomePageProps) {
   const {
     state,
     setBpm,
@@ -148,9 +149,10 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
 
   // Keyboard shortcuts
   useEffect(() => {
+    if (!active) return;
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.code === "Space") { e.preventDefault(); toggle(); }
+      if (e.code === "Space") { e.preventDefault(); }
       else if (e.code === "ArrowUp") { e.preventDefault(); adjustBpm(1); }
       else if (e.code === "ArrowDown") { e.preventDefault(); adjustBpm(-1); }
       else if (e.key === "t" || e.key === "T") tap();
@@ -159,7 +161,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [toggle, adjustBpm, tap]);
+  }, [active, adjustBpm, tap]);
 
   const loadPreset = (idx: number) => {
     const p = METRONOME_PRESETS[idx];

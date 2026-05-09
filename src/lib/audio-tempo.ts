@@ -82,7 +82,7 @@ export async function analyzeAudioTempo(file: File): Promise<TempoAnalysisResult
 
   let explanation = `Detected ${refined.toFixed(1)} BPM from ${onsetTimes.length} onsets `;
   explanation += `via onset grid scoring and autocorrelation (confidence ${(confidence * 100).toFixed(0)}%). `;
-  explanation += `Weighted average across stable windows is ${weightedBpm.toFixed(1)} BPM. `;
+  explanation += `Stable-window average is ${weightedBpm.toFixed(1)} BPM. `;
   if (timeSignature) {
     explanation += `Meter guess: ${timeSignature.numerator}/${timeSignature.denominator} (${(timeSignature.confidence * 100).toFixed(0)}%). `;
   }
@@ -113,12 +113,22 @@ function weightedWindowBpm(windows: TempoWindow[], fallback: number): number {
   let weighted = 0;
   let weightTotal = 0;
   for (const window of windows) {
+    if (window.agreement < 0.28) continue;
+    const bpm = normalizeLocalBpmNear(window.bpm, fallback);
+    if (Math.abs(bpm - fallback) / fallback > 0.22) continue;
     const duration = Math.max(0.01, window.endSec - window.startSec);
     const weight = duration * Math.max(0.05, window.agreement);
-    weighted += window.bpm * weight;
+    weighted += bpm * weight;
     weightTotal += weight;
   }
   return roundTo(weightTotal > 0 ? weighted / weightTotal : fallback, 0.1);
+}
+
+function normalizeLocalBpmNear(localBpm: number, referenceBpm: number): number {
+  let bpm = localBpm;
+  while (bpm > referenceBpm * 1.5) bpm /= 2;
+  while (bpm < referenceBpm * 0.67) bpm *= 2;
+  return bpm;
 }
 
 /** Spectral flux onset envelope using a Hann-windowed STFT magnitude diff. */
@@ -358,6 +368,7 @@ function estimateTimeSignature(onsets: number[], bpm: number): TempoAnalysisResu
     if (score > best.score) best = { numerator, score };
   }
   const denominator = best.numerator === 6 ? 8 : 4;
+  if (best.score < 0.42) return undefined;
   return { numerator: best.numerator, denominator, confidence: Math.max(0.1, Math.min(0.9, best.score)) };
 }
 
@@ -416,7 +427,7 @@ function scoreWindows(onsets: number[], bpm: number, durationSec: number): Tempo
     const iois: number[] = [];
     for (let i = 1; i < region.length; i++) iois.push(region[i] - region[i - 1]);
     const median = iois.sort((a, b) => a - b)[Math.floor(iois.length / 2)];
-    const localBpm = roundTo(60 / median, 0.1);
+    const localBpm = roundTo(normalizeLocalBpmNear(60 / median, bpm), 0.1);
     const drift = Math.abs(localBpm - bpm) / bpm;
     const agreement = Math.max(0, 1 - drift * 4); // 25% drift -> 0 agreement
     out.push({ startSec: t, endSec: t + windowSec, bpm: localBpm, agreement });

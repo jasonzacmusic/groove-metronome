@@ -37,6 +37,21 @@ export default function App() {
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
 
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target;
+      const editable = target instanceof HTMLInputElement
+        || target instanceof HTMLSelectElement
+        || target instanceof HTMLTextAreaElement
+        || (target instanceof HTMLElement && target.isContentEditable);
+      if (editable || event.code !== "Space" || tab !== "metronome") return;
+      event.preventDefault();
+      metronome.toggle();
+    };
+    window.addEventListener("keydown", handler, { capture: true });
+    return () => window.removeEventListener("keydown", handler, { capture: true });
+  }, [metronome, tab]);
+
   return (
     <div data-theme={theme} className="relative min-h-full bg-background text-foreground overflow-x-hidden">
       {/* Background layers */}
@@ -95,20 +110,21 @@ export default function App() {
       </header>
 
       <main className="relative z-10 max-w-6xl mx-auto px-5 md:px-10 py-6 md:py-10">
-        {tab === "metronome" ? (
-          <MetronomePage metronome={metronome} view={view} onViewChange={setView} />
-        ) : (
+        <div hidden={tab !== "metronome"}>
+          <MetronomePage metronome={metronome} view={view} onViewChange={setView} active={tab === "metronome"} />
+        </div>
+        <div hidden={tab !== "analyzer"}>
           <AnalyzerPage
+            metronome={metronome}
+            active={tab === "analyzer"}
             onUseAsBpm={(bpm) => {
               metronome.setBpm(bpm);
-              setTab("metronome");
             }}
             onUseAsTimeSignature={(numerator, denominator) => {
               metronome.setTimeSignature({ numerator, denominator });
-              setTab("metronome");
             }}
           />
-        )}
+        </div>
       </main>
       <SeoFooter />
     </div>

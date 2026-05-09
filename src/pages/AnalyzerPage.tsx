@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Midi } from "@tonejs/midi";
 import * as Tone from "tone";
-import { FileAudio, FileMusic, Pause, Play, RotateCcw, Tag, X } from "lucide-react";
+import { FileAudio, FileMusic, Mic, Pause, Play, RotateCcw, Square, Tag, X } from "lucide-react";
 
 import { ImportZone, type DetectedKind } from "@/components/analyzer/ImportZone";
 import { Badge } from "@/components/ui/badge";
@@ -10,8 +10,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { analyzeAudioTempo, type TempoAnalysisResult } from "@/lib/audio-tempo";
 import { analyzeMidi, type MidiAnalysis } from "@/lib/midi-analyzer";
 import { cn } from "@/lib/utils";
+import type { UseMetronomeReturn } from "@/hooks/useMetronome";
 
 interface AnalyzerPageProps {
+  metronome: UseMetronomeReturn;
+  active?: boolean;
   onUseAsBpm: (bpm: number) => void;
   onUseAsTimeSignature: (numerator: number, denominator: number) => void;
 }
@@ -48,7 +51,7 @@ interface Marker {
 
 type MidiInstrument = "piano" | "guitar" | "drums";
 
-export function AnalyzerPage({ onUseAsBpm, onUseAsTimeSignature }: AnalyzerPageProps) {
+export function AnalyzerPage({ metronome, active = true, onUseAsBpm, onUseAsTimeSignature }: AnalyzerPageProps) {
   const [items, setItems] = useState<AnalyzerItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -91,10 +94,20 @@ export function AnalyzerPage({ onUseAsBpm, onUseAsTimeSignature }: AnalyzerPageP
         setStatus(item.kind === "audio" ? `Analyzing audio: ${item.name}` : `Reading MIDI: ${item.name}`);
         if (item.kind === "audio") {
           const result = await analyzeAudioTempo(item.file);
-          setItems((prev) => prev.map((entry) => entry.id === item.id && entry.kind === "audio" ? { ...entry, status: "ready", result } : entry));
+          setItems((prev) => prev.map((entry) => entry.id === item.id && entry.kind === "audio" ? {
+            ...entry,
+            status: "ready",
+            result,
+            markers: markersFromAudio(result),
+          } : entry));
         } else {
           const result = await analyzeMidi(item.file);
-          setItems((prev) => prev.map((entry) => entry.id === item.id && entry.kind === "midi" ? { ...entry, status: "ready", result } : entry));
+          setItems((prev) => prev.map((entry) => entry.id === item.id && entry.kind === "midi" ? {
+            ...entry,
+            status: "ready",
+            result,
+            markers: result.markers.map((marker) => ({ id: makeId(), timeSec: marker.timeSec, label: marker.label })),
+          } : entry));
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Could not analyze this file.";
@@ -131,7 +144,10 @@ export function AnalyzerPage({ onUseAsBpm, onUseAsTimeSignature }: AnalyzerPageP
         </p>
       </div>
 
+      <AnalyzerMetronomeDock metronome={metronome} />
+
       <ImportZone onFiles={handleFiles} busy={busy} status={status} />
+      <LiveRecorder onRecorded={(file) => handleFiles([{ file, kind: "audio" }])} busy={busy} />
 
       {items.length > 0 && (
         <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
@@ -168,6 +184,7 @@ export function AnalyzerPage({ onUseAsBpm, onUseAsTimeSignature }: AnalyzerPageP
               item={selected}
               onRemove={() => removeItem(selected.id)}
               onAddMarker={(timeSec) => addMarker(selected.id, timeSec)}
+              active={active}
               onUseAsBpm={onUseAsBpm}
               onUseAsTimeSignature={onUseAsTimeSignature}
             />
@@ -187,16 +204,130 @@ export function AnalyzerPage({ onUseAsBpm, onUseAsTimeSignature }: AnalyzerPageP
   );
 }
 
+function AnalyzerMetronomeDock({ metronome }: { metronome: UseMetronomeReturn }) {
+  const { state, toggle, setBpm, adjustBpm } = metronome;
+  const [draft, setDraft] = useState(String(Math.round(state.bpm)));
+
+  useEffect(() => {
+    setDraft(String(Math.round(state.bpm)));
+  }, [state.bpm]);
+
+  const commitDraft = () => {
+    const value = Number(draft);
+    if (Number.isFinite(value)) setBpm(Math.max(20, Math.min(300, Math.round(value))));
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card/60 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="tiny-caps text-[10px] text-muted-foreground">Metronome while analyzing</div>
+          <div className="mt-1 flex items-center gap-2">
+            <input
+              value={draft}
+              onChange={(event) => setDraft(event.target.value.replace(/[^0-9.]/g, ""))}
+              onBlur={commitDraft}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") commitDraft();
+              }}
+              className="w-24 bg-transparent border-b border-border text-center font-serif text-4xl tabular text-primary outline-none focus:border-primary"
+              inputMode="decimal"
+              aria-label="Analyzer metronome BPM"
+            />
+            <span className="font-mono text-xs text-muted-foreground">BPM</span>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => adjustBpm(-1)}>-1</Button>
+          <Button size="sm" onClick={toggle}>
+            {state.isPlaying ? <Pause className="mr-2 size-4" /> : <Play className="mr-2 size-4" />}
+            {state.isPlaying ? "Stop click" : "Play click"}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => adjustBpm(1)}>+1</Button>
+          <Button size="sm" variant="outline" onClick={() => setBpm(Math.max(20, Math.round(state.bpm / 2)))}>Half</Button>
+          <Button size="sm" variant="outline" onClick={() => setBpm(Math.min(300, Math.round(state.bpm * 2)))}>Double</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LiveRecorder({ onRecorded, busy }: { onRecorded: (file: File) => void; busy: boolean }) {
+  const [recording, setRecording] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const stop = () => {
+    recorderRef.current?.stop();
+  };
+
+  const start = async () => {
+    setError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      chunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      recorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+        setRecording(false);
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        if (blob.size > 0) {
+          const ext = recorder.mimeType.includes("mp4") ? "m4a" : "webm";
+          onRecorded(new File([blob], `live-tempo-${Date.now()}.${ext}`, { type: blob.type }));
+        }
+      };
+      recorder.start();
+      setRecording(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Microphone recording is unavailable.");
+      setRecording(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      recorderRef.current?.stop();
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  return (
+    <div className="rounded-md border border-border bg-card/45 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="tiny-caps text-[10px] text-muted-foreground">Live tempo capture</div>
+          <p className="mt-1 text-xs text-muted-foreground">Record a short sung, clapped, or played idea and analyze it like an imported audio file.</p>
+        </div>
+        <Button size="sm" variant={recording ? "destructive" : "outline"} disabled={busy} onClick={recording ? stop : start}>
+          {recording ? <Square className="mr-2 size-4" /> : <Mic className="mr-2 size-4" />}
+          {recording ? "Stop & analyze" : "Record"}
+        </Button>
+      </div>
+      {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
 function AnalysisWorkspace({
   item,
   onRemove,
   onAddMarker,
+  active,
   onUseAsBpm,
   onUseAsTimeSignature,
 }: {
   item: AnalyzerItem;
   onRemove: () => void;
   onAddMarker: (timeSec: number) => void;
+  active: boolean;
   onUseAsBpm: (bpm: number) => void;
   onUseAsTimeSignature: (numerator: number, denominator: number) => void;
 }) {
@@ -221,9 +352,9 @@ function AnalysisWorkspace({
         )}
 
         {item.kind === "audio" ? (
-          <AudioWorkspace item={item} onAddMarker={onAddMarker} onUseAsBpm={onUseAsBpm} onUseAsTimeSignature={onUseAsTimeSignature} />
+          <AudioWorkspace item={item} active={active} onAddMarker={onAddMarker} onUseAsBpm={onUseAsBpm} onUseAsTimeSignature={onUseAsTimeSignature} />
         ) : (
-          <MidiWorkspace item={item} onUseAsBpm={onUseAsBpm} onUseAsTimeSignature={onUseAsTimeSignature} />
+          <MidiWorkspace item={item} active={active} onUseAsBpm={onUseAsBpm} onUseAsTimeSignature={onUseAsTimeSignature} />
         )}
       </CardContent>
     </Card>
@@ -232,11 +363,13 @@ function AnalysisWorkspace({
 
 function AudioWorkspace({
   item,
+  active,
   onAddMarker,
   onUseAsBpm,
   onUseAsTimeSignature,
 }: {
   item: Extract<AnalyzerItem, { kind: "audio" }>;
+  active: boolean;
   onAddMarker: (timeSec: number) => void;
   onUseAsBpm: (bpm: number) => void;
   onUseAsTimeSignature: (numerator: number, denominator: number) => void;
@@ -246,6 +379,23 @@ function AudioWorkspace({
   const result = item.result;
 
   const duration = result?.durationSec ?? audioRef.current?.duration ?? 0;
+
+  useEffect(() => {
+    if (!active) return;
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target;
+      const editable = target instanceof HTMLInputElement
+        || target instanceof HTMLSelectElement
+        || target instanceof HTMLTextAreaElement
+        || (target instanceof HTMLElement && target.isContentEditable);
+      if (editable || event.code !== "Space" || !audioRef.current) return;
+      event.preventDefault();
+      if (audioRef.current.paused) void audioRef.current.play();
+      else audioRef.current.pause();
+    };
+    window.addEventListener("keydown", handler, { capture: true });
+    return () => window.removeEventListener("keydown", handler, { capture: true });
+  }, [active]);
 
   return (
     <div className="space-y-5">
@@ -274,8 +424,8 @@ function AudioWorkspace({
           <Tag className="mr-2 size-4" /> Add marker
         </Button>
         {result && (
-          <Button size="sm" onClick={() => onUseAsBpm(Math.round(result.weightedBpm || result.bpm))}>
-            Apply {Math.round(result.weightedBpm || result.bpm)} BPM
+          <Button size="sm" onClick={() => onUseAsBpm(Math.round(result.bpm))}>
+            Apply {Math.round(result.bpm)} BPM
           </Button>
         )}
         {result?.timeSignature && (
@@ -296,13 +446,21 @@ function AudioWorkspace({
 
 function AudioReadout({ result, onUseAsBpm }: { result: TempoAnalysisResult; onUseAsBpm: (bpm: number) => void }) {
   const tightness = result.jitterSec < 0.02 ? "tight" : result.jitterSec < 0.05 ? "moderate" : "loose";
+  const [customBpm, setCustomBpm] = useState(String(Math.round(result.bpm)));
+  useEffect(() => {
+    setCustomBpm(String(Math.round(result.bpm)));
+  }, [result.bpm]);
+  const applyCustom = () => {
+    const value = Number(customBpm);
+    if (Number.isFinite(value)) onUseAsBpm(Math.max(20, Math.min(300, Math.round(value))));
+  };
   return (
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-[auto_minmax(0,1fr)]">
         <div>
           <div className="tiny-caps text-xs text-muted-foreground">Tempo</div>
           <div className="font-mono tabular-nums text-5xl font-bold text-primary leading-none">{result.bpm.toFixed(1)}</div>
-          <div className="font-mono text-xs text-muted-foreground">weighted {result.weightedBpm.toFixed(1)} BPM</div>
+          <div className="font-mono text-xs text-muted-foreground">stable avg {result.weightedBpm.toFixed(1)} BPM</div>
         </div>
         <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
           <Stat label="Confidence" value={`${(result.confidence * 100).toFixed(0)}%`} />
@@ -313,6 +471,28 @@ function AudioReadout({ result, onUseAsBpm }: { result: TempoAnalysisResult; onU
       </div>
       <div className="rounded-md border border-border bg-muted/20 p-3 text-xs leading-relaxed text-muted-foreground">
         {result.explanation}
+      </div>
+      <div className="rounded-md border border-border bg-background/45 p-3">
+        <div className="tiny-caps mb-2 text-[10px] text-muted-foreground">Set tempo</div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => onUseAsBpm(Math.round(result.bpm / 2))}>
+            Half {Math.round(result.bpm / 2)}
+          </Button>
+          <Button size="sm" onClick={() => onUseAsBpm(Math.round(result.bpm))}>
+            Use {Math.round(result.bpm)}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => onUseAsBpm(Math.round(result.bpm * 2))}>
+            Double {Math.round(result.bpm * 2)}
+          </Button>
+          <input
+            value={customBpm}
+            onChange={(event) => setCustomBpm(event.target.value.replace(/[^0-9.]/g, ""))}
+            className="h-9 w-24 rounded-md border border-border bg-card px-2 font-mono text-sm text-foreground outline-none focus:border-primary"
+            inputMode="decimal"
+            aria-label="Custom BPM"
+          />
+          <Button size="sm" variant="outline" onClick={applyCustom}>Set</Button>
+        </div>
       </div>
       {result.candidates.length > 1 && (
         <div>
@@ -336,10 +516,12 @@ function AudioReadout({ result, onUseAsBpm }: { result: TempoAnalysisResult; onU
 
 function MidiWorkspace({
   item,
+  active,
   onUseAsBpm,
   onUseAsTimeSignature,
 }: {
   item: Extract<AnalyzerItem, { kind: "midi" }>;
+  active: boolean;
   onUseAsBpm: (bpm: number) => void;
   onUseAsTimeSignature: (numerator: number, denominator: number) => void;
 }) {
@@ -348,7 +530,7 @@ function MidiWorkspace({
 
   return (
     <div className="space-y-5">
-      <MidiPlayer file={item.file} durationSec={analysis?.durationSec ?? 0} />
+      <MidiPlayer file={item.file} durationSec={analysis?.durationSec ?? 0} active={active} />
 
       {analysis ? (
         <>
@@ -371,7 +553,7 @@ function MidiWorkspace({
   );
 }
 
-function MidiPlayer({ file, durationSec }: { file: File; durationSec: number }) {
+function MidiPlayer({ file, durationSec, active }: { file: File; durationSec: number; active: boolean }) {
   const [playing, setPlaying] = useState(false);
   const [instrument, setInstrument] = useState<MidiInstrument>("piano");
   const disposablesRef = useRef<Tone.ToneAudioNode[]>([]);
@@ -386,6 +568,23 @@ function MidiPlayer({ file, durationSec }: { file: File; durationSec: number }) 
   };
 
   useEffect(() => stop, []);
+
+  useEffect(() => {
+    if (!active) return;
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target;
+      const editable = target instanceof HTMLInputElement
+        || target instanceof HTMLSelectElement
+        || target instanceof HTMLTextAreaElement
+        || (target instanceof HTMLElement && target.isContentEditable);
+      if (editable || event.code !== "Space") return;
+      event.preventDefault();
+      void play();
+    };
+    window.addEventListener("keydown", handler, { capture: true });
+    return () => window.removeEventListener("keydown", handler, { capture: true });
+    // play intentionally closes over the latest instrument/playing state.
+  });
 
   const play = async () => {
     if (playing) {
@@ -467,7 +666,7 @@ function MidiReadout({ analysis }: { analysis: MidiAnalysis }) {
             {analysis.sections.map((section) => (
               <div key={section.index} className="rounded-md border border-border bg-muted/20 p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-serif text-lg">Part {section.index}</span>
+                  <span className="font-serif text-lg">{section.label}</span>
                   <span className="font-mono text-xs text-primary">{section.bpm.toFixed(1)} BPM</span>
                 </div>
                 <div className="mt-2 grid grid-cols-3 gap-2 font-mono text-[10px] text-muted-foreground">
@@ -479,6 +678,18 @@ function MidiReadout({ analysis }: { analysis: MidiAnalysis }) {
                   <span>{section.density.toFixed(1)} n/s</span>
                 </div>
               </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {analysis.markers.length > 0 && (
+        <div>
+          <div className="tiny-caps mb-2 text-[10px] text-muted-foreground">Auto markers</div>
+          <div className="flex flex-wrap gap-1.5">
+            {analysis.markers.map((marker, index) => (
+              <span key={`${marker.timeSec}-${marker.label}-${index}`} className="rounded-full border border-border bg-muted/20 px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                {formatClock(marker.timeSec)} · {marker.label}
+              </span>
             ))}
           </div>
         </div>
@@ -649,6 +860,18 @@ function formatClock(sec: number): string {
   const minutes = Math.floor(sec / 60);
   const seconds = Math.floor(sec % 60);
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function markersFromAudio(result: TempoAnalysisResult): Marker[] {
+  const useful = result.windows
+    .filter((window) => window.agreement >= 0.62)
+    .slice(0, 5);
+  if (useful.length === 0) return [];
+  return useful.map((window, index) => ({
+    id: makeId(),
+    timeSec: window.startSec,
+    label: index === 0 ? `${Math.round(result.bpm)} BPM` : `Stable ${index + 1}`,
+  }));
 }
 
 function makeId(): string {

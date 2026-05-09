@@ -24,6 +24,7 @@ export interface MidiTimeSignatureChange {
 
 export interface MidiSection {
   index: number;
+  label: string;
   startSec: number;
   endSec: number;
   estimatedBars: number;
@@ -32,6 +33,13 @@ export interface MidiSection {
   density: number;
   keyEstimate: { tonic: string; mode: "major" | "minor"; correlation: number };
   topChord: string;
+  repeatedFrom?: number;
+}
+
+export interface MidiMarker {
+  timeSec: number;
+  label: string;
+  kind: "section" | "repeat" | "tempo" | "meter";
 }
 
 export interface MidiAnalysis {
@@ -53,6 +61,7 @@ export interface MidiAnalysis {
   globalMaxPolyphony: number;
   tracks: MidiTrackSummary[];
   sections: MidiSection[];
+  markers: MidiMarker[];
   /** Free-form summary string for the UI. */
   explanation: string;
 }
@@ -131,6 +140,7 @@ export async function analyzeMidi(file: File): Promise<MidiAnalysis> {
 
   const keyEstimate = estimateKey(pitchClassDuration);
   const sections = buildSections(allNotes, timeSignatures, tempos, weightedBpm || medianBpm || 120, midi.duration);
+  const markers = buildMidiMarkers(sections, tempos, timeSignatures);
 
   let explanation = `${midi.tracks.length} tracks, ${totalNotes} notes, ` +
     `${(midi.duration).toFixed(1)}s. `;
@@ -140,7 +150,10 @@ export async function analyzeMidi(file: File): Promise<MidiAnalysis> {
   if (timeSignatures.length > 1) explanation += ` (${timeSignatures.length} changes)`;
   explanation += `. Estimated key: ${keyEstimate.tonic} ${keyEstimate.mode} `;
   explanation += `(corr ${keyEstimate.correlation.toFixed(2)}). `;
-  explanation += `${sections.length} musical section${sections.length === 1 ? "" : "s"} estimated.`;
+  explanation += `${sections.length} musical section${sections.length === 1 ? "" : "s"} estimated`;
+  const repeats = sections.filter((section) => section.repeatedFrom !== undefined).length;
+  if (repeats > 0) explanation += `, with ${repeats} likely repeat${repeats === 1 ? "" : "s"}`;
+  explanation += ".";
   if (isPerformance) explanation += " Likely a live performance — tempo varies.";
 
   return {
@@ -158,6 +171,7 @@ export async function analyzeMidi(file: File): Promise<MidiAnalysis> {
     globalMaxPolyphony,
     tracks,
     sections,
+    markers,
     explanation,
   };
 }
@@ -200,8 +214,14 @@ function buildSections(
     }
     const keyEstimate = regionNotes.length > 0 ? estimateKey(pitchClassDuration) : { tonic: "—", mode: "major" as const, correlation: 0 };
     const span = Math.max(0.01, end - start);
+    const fingerprint = sectionFingerprint(regionNotes, start, end);
+    const repeatedFrom = findSimilarSection(sections, fingerprint);
+    const label = repeatedFrom !== undefined
+      ? `Repeat of Part ${repeatedFrom}`
+      : `Part ${index}`;
     sections.push({
       index,
+      label,
       startSec: start,
       endSec: end,
       estimatedBars: Math.max(1, Math.round(span / barSec)),
@@ -210,10 +230,81 @@ function buildSections(
       density: regionNotes.length / span,
       keyEstimate,
       topChord: estimateChord(pitchClassDuration),
+      repeatedFrom,
     });
     if (durationSec === 0) break;
   }
   return sections;
+}
+
+function sectionFingerprint(notes: { time: number; midi: number }[], start: number, end: number): number[] {
+  const bins = new Array(12).fill(0);
+  const span = Math.max(0.01, end - start);
+  for (const note of notes) {
+    const rhythmicBin = Math.floor(((note.time - start) / span) * 4);
+    bins[(note.midi + Math.max(0, Math.min(3, rhythmicBin)) * 3) % 12] += 1;
+  }
+  const max = Math.max(...bins, 1);
+  return bins.map((value) => value / max);
+}
+
+function findSimilarSection(existing: MidiSection[], fingerprint: number[]): number | undefined {
+  for (const section of existing) {
+    const labelScore = section.topChord === "—" ? 0 : 0.15;
+    const score = cosineSimilarity(sectionFingerprintProxy(section), fingerprint) + labelScore;
+    if (score > 0.86) return section.repeatedFrom ?? section.index;
+  }
+  return undefined;
+}
+
+function sectionFingerprintProxy(section: MidiSection): number[] {
+  const rootIndex = PITCH_NAMES.findIndex((name) => section.topChord.startsWith(name));
+  const bins = new Array(12).fill(0);
+  if (rootIndex >= 0) {
+    bins[rootIndex] = 1;
+    bins[(rootIndex + (section.topChord.endsWith("m") ? 3 : 4)) % 12] = 0.7;
+    bins[(rootIndex + 7) % 12] = 0.8;
+  }
+  const tonic = PITCH_NAMES.indexOf(section.keyEstimate.tonic);
+  if (tonic >= 0) bins[tonic] += 0.6;
+  return bins;
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  let dot = 0;
+  let aa = 0;
+  let bb = 0;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
+    dot += x * y;
+    aa += x * x;
+    bb += y * y;
+  }
+  return dot / Math.max(0.0001, Math.sqrt(aa) * Math.sqrt(bb));
+}
+
+function buildMidiMarkers(
+  sections: MidiSection[],
+  tempos: MidiTempoChange[],
+  timeSignatures: MidiTimeSignatureChange[],
+): MidiMarker[] {
+  const markers: MidiMarker[] = sections.map((section) => ({
+    timeSec: section.startSec,
+    label: section.repeatedFrom !== undefined ? `Repeat ${section.repeatedFrom}` : section.label,
+    kind: section.repeatedFrom !== undefined ? "repeat" : "section",
+  }));
+  tempos.slice(1, 5).forEach((tempo) => markers.push({
+    timeSec: tempo.timeSec,
+    label: `${Math.round(tempo.bpm)} BPM`,
+    kind: "tempo",
+  }));
+  timeSignatures.slice(1, 5).forEach((meter) => markers.push({
+    timeSec: meter.timeSec,
+    label: `${meter.numerator}/${meter.denominator}`,
+    kind: "meter",
+  }));
+  return markers.sort((a, b) => a.timeSec - b.timeSec).slice(0, 16);
 }
 
 function tempoAt(tempos: MidiTempoChange[], timeSec: number): number {
