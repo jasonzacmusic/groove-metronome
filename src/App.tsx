@@ -4,9 +4,10 @@ import { Check, Copy, MessageCircle, Share2 } from "lucide-react";
 import { useMetronome } from "@/hooks/useMetronome";
 import { AnalyzerPage } from "@/pages/AnalyzerPage";
 import { MetronomePage } from "@/pages/MetronomePage";
+import { SetlistPage } from "@/pages/SetlistPage";
 import { buildDefaultPattern, type MeterDenominator, type TimeSignature } from "@/lib/metronome-types";
 
-type Tab = "metronome" | "analyzer";
+type Tab = "metronome" | "analyzer" | "setlist";
 export type MetronomeView = "beatmap" | "levels" | "polyrhythm" | "polymeter";
 type ThemeId = "midnight" | "concert" | "aqua" | "graphite" | "contrast";
 
@@ -122,6 +123,14 @@ export default function App() {
               >
                 Analyzer
               </button>
+              <span className="text-border">·</span>
+              <button
+                type="button"
+                onClick={() => setTab("setlist")}
+                className={tab === "setlist" ? "text-primary" : "text-muted-foreground hover:text-foreground transition-colors"}
+              >
+                Setlist Studio
+              </button>
               {metronome.state.isPlaying && (
                 <span className="ml-1 tiny-caps text-[10px] text-primary tabular flex items-center gap-1.5">
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
@@ -158,6 +167,9 @@ export default function App() {
               prepareAnalyzerClick(next);
             }}
           />
+        </div>
+        <div hidden={tab !== "setlist"}>
+          <SetlistPage metronome={metronome} active={tab === "setlist"} />
         </div>
       </main>
       <SeoFooter />
