@@ -115,9 +115,9 @@ export default function App() {
 
 function ThemeSwitch({ theme, onThemeChange }: { theme: ThemeId; onThemeChange: (theme: ThemeId) => void }) {
   return (
-    <div className="flex items-center justify-between gap-2 sm:justify-end" aria-label="Color theme">
+    <div className="flex flex-col gap-1.5 sm:items-end" aria-label="Color theme">
       <span className="tiny-caps text-[9px] text-muted-foreground/75">Theme</span>
-      <div className="flex items-center gap-1.5">
+      <div className="grid grid-cols-5 gap-1.5 sm:flex sm:items-center">
         {THEMES.map((option) => {
           const active = option.id === theme;
           return (
@@ -125,15 +125,20 @@ function ThemeSwitch({ theme, onThemeChange }: { theme: ThemeId; onThemeChange: 
               key={option.id}
               type="button"
               onClick={() => onThemeChange(option.id)}
-              className="theme-dot"
+              className="theme-swatch"
               aria-label={`${option.label} theme`}
               aria-pressed={active}
               title={option.label}
               style={{
-                background: `linear-gradient(135deg, ${option.colors[0]} 0 40%, ${option.colors[1]} 40% 70%, ${option.colors[2]} 70% 100%)`,
                 outlineColor: active ? "hsl(var(--primary))" : "transparent",
               }}
-            />
+            >
+              <span
+                className="theme-swatch-palette"
+                style={{ background: `linear-gradient(135deg, ${option.colors[0]} 0 38%, ${option.colors[1]} 38% 69%, ${option.colors[2]} 69% 100%)` }}
+              />
+              <span className="theme-swatch-label">{option.label}</span>
+            </button>
           );
         })}
       </div>

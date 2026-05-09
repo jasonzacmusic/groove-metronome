@@ -17,7 +17,7 @@ Recording target:
 - Mono WAV, 44.1 kHz, 16-bit PCM.
 - Dry close-mic voice, no reverb or music bed.
 - Short and clear, but not clipped: leave a natural consonant tail.
-- Best length for 80-130 BPM is roughly 140-260 ms for numbers and 100-180 ms
+- Best length for 80-130 BPM is roughly 180-300 ms for numbers and 100-180 ms
   for subdivision syllables.
 - Accent files should be slightly firmer, not shouted.
 

@@ -196,12 +196,40 @@ export const BEAT_PATTERN_TILES: BeatPatternTile[] = [
   { id: "rest",           label: "Silent beat",       glyph: "𝄽",    color: "214 16% 48%", pattern: { pulses: 1, accents: ["mute"] } },
 ];
 
+export type DottedPlaybackMode = "off" | "quarter" | "eighth" | "sixteenth";
+export type TripletAssistMode = "off" | "half" | "quarter" | "eighth" | "sextuplet";
+export type MeterDenominator = 4 | 8 | 16;
+
+export interface PolymeterLane {
+  numerator: number;
+  denominator: MeterDenominator;
+}
+
+export const DOTTED_PLAYBACK_LABELS: Record<DottedPlaybackMode, string> = {
+  off: "Off",
+  quarter: "Dotted quarter",
+  eighth: "Dotted eighth",
+  sixteenth: "Dotted sixteenth",
+};
+
+export const TRIPLET_ASSIST_LABELS: Record<TripletAssistMode, string> = {
+  off: "Off",
+  half: "Half-note triplet",
+  quarter: "Quarter-note triplet",
+  eighth: "Eighth-note triplet",
+  sextuplet: "Sextuplets",
+};
+
 /** Polyrhythm voices fire evenly-spaced pulses across the same cycle. */
 export interface PolyrhythmConfig {
   enabled: boolean;
   main: number; // 2..16
   voices: number[]; // 1..3 secondary voices, each 2..16
   against: number; // legacy single-voice value
+  dottedMode: DottedPlaybackMode;
+  tripletMode: TripletAssistMode;
+  polymeterEnabled: boolean;
+  polymeterLanes: PolymeterLane[];
 }
 
 /**
@@ -402,6 +430,68 @@ export const METRONOME_PRESETS: MetronomePreset[] = [
       [2, ["mute", "normal"]],
       [3, ["normal", "mute", "normal"]],
       [4, ["normal", "normal", "normal", "normal"]],
+    ]),
+  },
+  {
+    name: "Backbeat 2 & 4",
+    bpm: 112,
+    timeSig: [4, 4],
+    swing: 0,
+    pattern: pattern([
+      [1, ["normal"]],
+      [1, ["accent"]],
+      [1, ["normal"]],
+      [1, ["accent"]],
+    ]),
+  },
+  {
+    name: "Dotted Quarter Grid",
+    bpm: 96,
+    timeSig: [4, 4],
+    swing: 0,
+    pattern: pattern([
+      [4, ["accent", "mute", "mute", "normal"]],
+      [2, ["mute", "normal"]],
+      [4, ["normal", "mute", "mute", "normal"]],
+      [2, ["mute", "normal"]],
+    ]),
+  },
+  {
+    name: "3-2 Clave Map",
+    bpm: 104,
+    timeSig: [4, 4],
+    swing: 0,
+    pattern: pattern([
+      [4, ["accent", "mute", "mute", "normal"]],
+      [4, ["mute", "mute", "normal", "mute"]],
+      [4, ["accent", "mute", "mute", "mute"]],
+      [4, ["mute", "mute", "normal", "mute"]],
+    ]),
+  },
+  {
+    name: "5/8 Groups 2+3",
+    bpm: 150,
+    timeSig: [5, 8],
+    swing: 0,
+    pattern: pattern([
+      [1, ["accent"]],
+      [1, ["ghost"]],
+      [1, ["normal"]],
+      [1, ["ghost"]],
+      [1, ["ghost"]],
+    ]),
+  },
+  {
+    name: "5/16 Fast Meter",
+    bpm: 120,
+    timeSig: [5, 16],
+    swing: 0,
+    pattern: pattern([
+      [1, ["accent"]],
+      [1, ["normal"]],
+      [1, ["normal"]],
+      [1, ["ghost"]],
+      [1, ["ghost"]],
     ]),
   },
   {

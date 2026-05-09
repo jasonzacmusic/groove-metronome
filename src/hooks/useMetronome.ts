@@ -3,6 +3,7 @@ import * as Tone from "tone";
 
 import {
   buildDefaultPattern,
+  DOTTED_PLAYBACK_LABELS,
   LEVEL_TO_ACCENT,
   nextSubdivision,
   pitchToMultiplier,
@@ -12,13 +13,17 @@ import {
   SOUND_ENVELOPES,
   SOUND_FREQS,
   SOUND_OSCILLATORS,
+  TRIPLET_ASSIST_LABELS,
   withSubdivision,
   type BeatPattern,
   type BeatSound,
+  type DottedPlaybackMode,
+  type MeterDenominator,
   type PolyrhythmConfig,
   type PulseAccent,
   type SubdivisionCount,
   type TimeSignature,
+  type TripletAssistMode,
 } from "@/lib/metronome-types";
 import { triggerMetronomeHaptic } from "@/lib/haptics";
 import { clamp } from "@/lib/utils";
@@ -70,7 +75,34 @@ const VOICE_ACCENT_VOLUME: Record<PulseAccent, number> = {
 };
 
 function displayBpmToTransportBpm(displayBpm: number, denominator: number): number {
-  return displayBpm * (4 / denominator);
+  void denominator;
+  return displayBpm;
+}
+
+function beatDurationSeconds(displayBpm: number, denominator: number): number {
+  return (60 / displayBpm) * (4 / denominator);
+}
+
+function dottedBeatSpan(mode: DottedPlaybackMode): number | null {
+  if (mode === "quarter") return 1.5;
+  if (mode === "eighth") return 0.75;
+  if (mode === "sixteenth") return 0.375;
+  return null;
+}
+
+function tripletHitsPerBar(mode: TripletAssistMode, numerator: number, denominator: number): number {
+  const quarterNotesPerBar = numerator * (4 / denominator);
+  if (mode === "half") return Math.max(1, Math.round((quarterNotesPerBar / 2) * 3));
+  if (mode === "quarter") return Math.max(1, Math.round(quarterNotesPerBar * 3));
+  if (mode === "eighth") return Math.max(1, Math.round(quarterNotesPerBar * 6));
+  if (mode === "sextuplet") return Math.max(1, Math.round(quarterNotesPerBar * 12));
+  return 0;
+}
+
+function normalizeMeterDenominator(value: number): MeterDenominator {
+  if (value === 16) return 16;
+  if (value === 8) return 8;
+  return 4;
 }
 
 function samplePlaybackRate(pitch: number): number {
@@ -112,7 +144,20 @@ export function useMetronome() {
   const [pattern, setPattern] = useState<BeatPattern[]>(() => buildDefaultPattern(4, 1));
   const [swing, setSwing] = useState(0);
   const [barCount, setBarCount] = useState(0);
-  const [polyrhythm, setPolyrhythmState] = useState<PolyrhythmConfig>({ enabled: false, main: 3, voices: [2], against: 2 });
+  const [polyrhythm, setPolyrhythmState] = useState<PolyrhythmConfig>({
+    enabled: false,
+    main: 3,
+    voices: [2],
+    against: 2,
+    dottedMode: "off",
+    tripletMode: "off",
+    polymeterEnabled: false,
+    polymeterLanes: [
+      { numerator: 4, denominator: 4 },
+      { numerator: 5, denominator: 8 },
+      { numerator: 3, denominator: 16 },
+    ],
+  });
   const [currentPoly, setCurrentPoly] = useState(-1);
 
   const [trainerEnabled, setTrainerEnabled] = useState(false);
@@ -281,7 +326,7 @@ export function useMetronome() {
       };
       const sw = swingRef.current;
       const beatPat = pat[beatIdx] ?? { pulses: 1 as SubdivisionCount, accents: ["normal" as PulseAccent] };
-      const beatDuration = 60 / bpmRef.current;
+      const beatDuration = beatDurationSeconds(bpmRef.current, ts.denominator);
       const poly = polyrhythmRef.current;
       const isPolyrhythmCycle = poly.enabled && beatIdx === 0;
 
@@ -354,6 +399,47 @@ export function useMetronome() {
         });
       }
 
+      if (!muted && beatIdx === 0) {
+        const barDuration = beatDuration * ts.numerator;
+        const dottedSpan = dottedBeatSpan(poly.dottedMode);
+        if (dottedSpan) {
+          const step = beatDuration * dottedSpan;
+          const hitCount = Math.max(1, Math.floor((barDuration + 0.0001) / step));
+          for (let k = 0; k < hitCount; k++) {
+            playPolyClick(time + step * k, k === 0 ? 1320 : 1080, k === 0 ? -8 : -13, 2, k === 0);
+          }
+        }
+
+        const tripletHits = tripletHitsPerBar(poly.tripletMode, ts.numerator, ts.denominator);
+        if (tripletHits > 0) {
+          const step = barDuration / tripletHits;
+          for (let k = 0; k < tripletHits; k++) {
+            const downbeat = k === 0;
+            playPolyClick(time + step * k, downbeat ? 1680 : 1240, downbeat ? -9 : -15, 3, downbeat);
+          }
+        }
+      }
+
+      if (!muted && poly.polymeterEnabled) {
+        const primaryBeatTicks = 16 / ts.denominator;
+        const sixteenthDuration = 15 / bpmRef.current;
+        const windowStartTicks = (barCountRef.current * ts.numerator + beatIdx) * primaryBeatTicks;
+        const windowEndTicks = windowStartTicks + primaryBeatTicks;
+        poly.polymeterLanes.slice(0, 4).forEach((lane, laneIndex) => {
+          const laneBeatTicks = 16 / lane.denominator;
+          const laneBarTicks = lane.numerator * laneBeatTicks;
+          const firstTick = Math.ceil((windowStartTicks - 0.000001) / laneBeatTicks) * laneBeatTicks;
+          for (let tick = firstTick; tick < windowEndTicks - 0.000001; tick += laneBeatTicks) {
+            const downbeat = Math.abs(tick % laneBarTicks) < 0.000001;
+            const offset = (tick - windowStartTicks) * sixteenthDuration;
+            const freq = [1760, 1360, 1040, 820][laneIndex] ?? 900;
+            const denomTrim = lane.denominator === 4 ? 0 : lane.denominator === 8 ? 2 : 4;
+            const vol = downbeat ? -6 - laneIndex * 2 : -13 - laneIndex * 2 - denomTrim;
+            playPolyClick(time + offset, freq, vol, laneIndex, downbeat);
+          }
+        });
+      }
+
       beatRef.current = (beatIdx + 1) % ts.numerator;
       if (beatRef.current === 0) {
         barCountRef.current++;
@@ -369,7 +455,7 @@ export function useMetronome() {
     const cfg = rampConfigRef.current;
     const transport = Tone.getTransport();
     const totalBeats = cfg.durationBars * timeSignatureRef.current.numerator;
-    const beatDuration = 60 / cfg.startBpm;
+    const beatDuration = beatDurationSeconds(cfg.startBpm, timeSignatureRef.current.denominator);
     const totalTime = totalBeats * beatDuration;
     transport.bpm.value = displayBpmToTransportBpm(cfg.startBpm, timeSignatureRef.current.denominator);
     setBpm(cfg.startBpm);
@@ -545,7 +631,7 @@ export function useMetronome() {
         setBpm(tapBpm);
         setTapInfo({ count: taps.length, avgBpm: tapBpm });
         if (isPlaying && !rampEnabled) {
-          Tone.getTransport().bpm.value = tapBpm;
+          Tone.getTransport().bpm.value = displayBpmToTransportBpm(tapBpm, timeSignatureRef.current.denominator);
         }
       }
     } else {
@@ -646,6 +732,17 @@ export function useMetronome() {
         ...next,
         main: clamp(Math.round(next.main || 3), 2, 16),
         voices: (next.voices.length > 0 ? next.voices : [next.against]).slice(0, 3).map((voice) => clamp(Math.round(voice), 2, 16)),
+        dottedMode: DOTTED_PLAYBACK_LABELS[next.dottedMode] ? next.dottedMode : "off",
+        tripletMode: TRIPLET_ASSIST_LABELS[next.tripletMode] ? next.tripletMode : "off",
+        polymeterEnabled: Boolean(next.polymeterEnabled),
+        polymeterLanes: (next.polymeterLanes?.length ? next.polymeterLanes : [
+          { numerator: 4, denominator: 4 },
+          { numerator: 5, denominator: 8 },
+          { numerator: 3, denominator: 16 },
+        ]).slice(0, 4).map((lane) => ({
+          numerator: clamp(Math.round(lane.numerator || 4), 1, 16),
+          denominator: normalizeMeterDenominator(lane.denominator),
+        })),
       };
     });
   }, []);
