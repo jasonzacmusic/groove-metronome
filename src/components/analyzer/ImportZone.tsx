@@ -21,7 +21,7 @@ export function detectKind(file: File): DetectedKind {
 }
 
 interface ImportZoneProps {
-  onFile: (file: File, kind: DetectedKind) => void;
+  onFiles: (files: Array<{ file: File; kind: DetectedKind }>) => void;
   busy?: boolean;
   status?: string;
 }
@@ -31,22 +31,25 @@ interface ImportZoneProps {
  * The same control accepts both kinds; the caller routes to the
  * right analyzer based on the returned kind.
  */
-export function ImportZone({ onFile, busy, status }: ImportZoneProps) {
+export function ImportZone({ onFiles, busy, status }: ImportZoneProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [hover, setHover] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleFile = useCallback(
-    (f: File) => {
-      const kind = detectKind(f);
-      if (kind === "unknown") {
-        setError(`Unrecognized format: "${f.name}". Supported: ${[...AUDIO_EXTS, ...MIDI_EXTS].join(", ")}.`);
+  const handleFiles = useCallback(
+    (incoming: FileList | File[]) => {
+      const parsed = Array.from(incoming).slice(0, 5).map((file) => ({ file, kind: detectKind(file) }));
+      const unknown = parsed.find((item) => item.kind === "unknown");
+      if (unknown) {
+        setError(`Unrecognized format: "${unknown.file.name}". Supported: ${[...AUDIO_EXTS, ...MIDI_EXTS].join(", ")}.`);
         return;
       }
+      const usable = parsed.filter((item): item is { file: File; kind: Exclude<DetectedKind, "unknown"> } => item.kind !== "unknown");
+      if (usable.length === 0) return;
       setError(null);
-      onFile(f, kind);
+      onFiles(usable);
     },
-    [onFile],
+    [onFiles],
   );
 
   return (
@@ -56,8 +59,8 @@ export function ImportZone({ onFile, busy, status }: ImportZoneProps) {
       onDrop={(e) => {
         e.preventDefault();
         setHover(false);
-        const f = e.dataTransfer.files?.[0];
-        if (f) handleFile(f);
+        const files = e.dataTransfer.files;
+        if (files?.length) handleFiles(files);
       }}
       onClick={() => inputRef.current?.click()}
       className={cn(
@@ -77,11 +80,12 @@ export function ImportZone({ onFile, busy, status }: ImportZoneProps) {
       <input
         ref={inputRef}
         type="file"
+        multiple
         accept={[...AUDIO_EXTS.map((e) => `.${e}`), ...MIDI_EXTS.map((e) => `.${e}`)].join(",")}
         className="hidden"
         onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) handleFile(f);
+          const files = e.target.files;
+          if (files?.length) handleFiles(files);
           e.target.value = "";
         }}
       />
@@ -101,8 +105,8 @@ export function ImportZone({ onFile, busy, status }: ImportZoneProps) {
         </div>
       </div>
       <div className="mt-4 text-center">
-        <p className="text-sm font-medium">Drop audio or MIDI here</p>
-        <p className="text-xs text-muted-foreground mt-1">One drop zone, separate musical readouts.</p>
+        <p className="text-sm font-medium">Drop up to five audio or MIDI files here</p>
+        <p className="text-xs text-muted-foreground mt-1">Works with Files/iCloud, phone share imports, WhatsApp downloads, and desktop drag-and-drop.</p>
       </div>
       {busy && status && (
         <div className="text-xs font-mono text-primary mt-2">{status}</div>

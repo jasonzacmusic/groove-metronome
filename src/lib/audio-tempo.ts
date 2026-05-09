@@ -28,6 +28,7 @@ export interface TempoWindow {
 export interface TempoAnalysisResult {
   bpm: number;
   weightedBpm: number;
+  timeSignature?: { numerator: number; denominator: number; confidence: number };
   /** Overall confidence 0..1 from autocorrelation peak prominence. */
   confidence: number;
   /** All BPM candidates in descending score, useful for UI alternatives. */
@@ -38,6 +39,7 @@ export interface TempoAnalysisResult {
   windows: TempoWindow[];
   durationSec: number;
   sampleRate: number;
+  waveformPeaks: number[];
   /** Median absolute deviation of inter-onset interval from the period (sec). */
   jitterSec: number;
   /** A short human-readable explanation. */
@@ -67,18 +69,23 @@ export async function analyzeAudioTempo(file: File): Promise<TempoAnalysisResult
   const onsetEnv = computeOnsetEnvelope(mono, sr);
   const onsetTimes = pickOnsets(onsetEnv, sr);
 
-  const { bpm, confidence, candidates } = estimateBpm(onsetEnv, sr);
-  const refined = refineBpmByIoi(onsetTimes, bpm);
+  const { bpm, confidence, candidates } = estimateBpm(onsetEnv, onsetTimes, sr, audioBuffer.duration);
+  const refined = normalizeMusicalBpm(refineBpmByIoi(onsetTimes, bpm), candidates);
+  const timeSignature = estimateTimeSignature(onsetTimes, refined);
 
   const period = 60 / refined;
   const jitterSec = ioiJitter(onsetTimes, period);
 
   const windows = scoreWindows(onsetTimes, refined, audioBuffer.duration);
   const weightedBpm = weightedWindowBpm(windows, refined);
+  const waveformPeaks = buildWaveformPeaks(mono, 320);
 
   let explanation = `Detected ${refined.toFixed(1)} BPM from ${onsetTimes.length} onsets `;
-  explanation += `via spectral-flux + autocorrelation (peak score ${(confidence * 100).toFixed(0)}%). `;
+  explanation += `via onset grid scoring and autocorrelation (confidence ${(confidence * 100).toFixed(0)}%). `;
   explanation += `Weighted average across stable windows is ${weightedBpm.toFixed(1)} BPM. `;
+  if (timeSignature) {
+    explanation += `Meter guess: ${timeSignature.numerator}/${timeSignature.denominator} (${(timeSignature.confidence * 100).toFixed(0)}%). `;
+  }
   if (jitterSec > 0.04) {
     explanation += `Notable timing variation (jitter ${(jitterSec * 1000).toFixed(0)} ms) — `;
     explanation += `see windows below for inconsistent regions.`;
@@ -89,12 +96,14 @@ export async function analyzeAudioTempo(file: File): Promise<TempoAnalysisResult
   return {
     bpm: refined,
     weightedBpm,
+    timeSignature,
     confidence,
     candidates,
     onsets: onsetTimes,
     windows,
     durationSec: audioBuffer.duration,
     sampleRate: sr,
+    waveformPeaks,
     jitterSec,
     explanation,
   };
@@ -233,34 +242,137 @@ function pickOnsets(env: Float32Array, sr: number): number[] {
   return onsets;
 }
 
-function estimateBpm(env: Float32Array, sr: number): { bpm: number; confidence: number; candidates: { bpm: number; score: number }[] } {
+function estimateBpm(
+  env: Float32Array,
+  onsets: number[],
+  sr: number,
+  durationSec: number,
+): { bpm: number; confidence: number; candidates: { bpm: number; score: number }[] } {
   const framesPerSec = sr / HOP;
   const minLag = Math.floor((framesPerSec * 60) / MAX_BPM);
   const maxLag = Math.floor((framesPerSec * 60) / MIN_BPM);
-  const scores: { bpm: number; score: number }[] = [];
+  const rawScores: { bpm: number; score: number }[] = [];
   let bestScore = 0;
   let bestLag = minLag;
   for (let lag = minLag; lag <= maxLag; lag++) {
     let sum = 0;
     for (let i = 0; i + lag < env.length; i++) sum += env[i] * env[i + lag];
     const bpm = (60 * framesPerSec) / lag;
-    scores.push({ bpm, score: sum });
+    rawScores.push({ bpm, score: sum });
     if (sum > bestScore) {
       bestScore = sum;
       bestLag = lag;
     }
   }
-  scores.sort((a, b) => b.score - a.score);
-  const top = scores.slice(0, 5);
+
+  const gridScores: { bpm: number; score: number }[] = [];
+  for (let bpm = MIN_BPM; bpm <= MAX_BPM; bpm += 0.5) {
+    gridScores.push({ bpm, score: scoreTempoGrid(onsets, bpm, durationSec) });
+  }
+
+  const merged = new Map<number, number>();
+  for (const item of rawScores) {
+    const key = Math.round(item.bpm * 2) / 2;
+    merged.set(key, Math.max(merged.get(key) ?? 0, bestScore > 0 ? item.score / bestScore : 0));
+  }
+  for (const item of gridScores) {
+    const key = Math.round(item.bpm * 2) / 2;
+    const prior = tempoPrior(key);
+    merged.set(key, (merged.get(key) ?? 0) * 0.45 + item.score * 0.55 * prior);
+  }
+
+  const scores = [...merged.entries()].map(([bpm, score]) => ({ bpm, score })).sort((a, b) => b.score - a.score);
+  const top = collapseTempoOctaves(scores).slice(0, 8);
   // Normalize score to confidence (peak vs median)
   const median = scores[Math.floor(scores.length / 2)].score;
-  const confidence = bestScore > 0 ? Math.min(1, (bestScore - median) / bestScore) : 0;
-  const bpm = (60 * framesPerSec) / bestLag;
+  const confidence = top[0]?.score ? Math.max(0, Math.min(1, (top[0].score - median) / top[0].score)) : 0;
+  const bpm = top[0]?.bpm ?? (60 * framesPerSec) / bestLag;
   return {
     bpm,
     confidence,
-    candidates: top.map((c) => ({ bpm: roundTo(c.bpm, 0.1), score: c.score / bestScore })),
+    candidates: top.map((c) => ({ bpm: roundTo(c.bpm, 0.1), score: top[0]?.score ? c.score / top[0].score : 0 })),
   };
+}
+
+function scoreTempoGrid(onsets: number[], bpm: number, durationSec: number): number {
+  if (onsets.length < 4 || durationSec <= 0) return 0;
+  const period = 60 / bpm;
+  const tolerance = Math.min(0.08, period * 0.18);
+  let best = 0;
+  const phaseSteps = 24;
+  for (let phaseIndex = 0; phaseIndex < phaseSteps; phaseIndex++) {
+    const phase = (phaseIndex / phaseSteps) * period;
+    let score = 0;
+    for (const onset of onsets) {
+      const grid = Math.round((onset - phase) / period) * period + phase;
+      const err = Math.abs(onset - grid);
+      if (err <= tolerance) score += 1 - err / tolerance;
+    }
+    best = Math.max(best, score);
+  }
+  return Math.min(1, best / Math.max(4, onsets.length * 0.72));
+}
+
+function tempoPrior(bpm: number): number {
+  if (bpm >= 72 && bpm <= 170) return 1;
+  if (bpm >= 55 && bpm < 72) return 0.9;
+  if (bpm > 170 && bpm <= 210) return 0.86;
+  return 0.72;
+}
+
+function collapseTempoOctaves(scores: { bpm: number; score: number }[]): { bpm: number; score: number }[] {
+  const out: { bpm: number; score: number }[] = [];
+  for (const candidate of scores) {
+    let bpm = candidate.bpm;
+    while (bpm < 72) bpm *= 2;
+    while (bpm > 180) bpm /= 2;
+    const existing = out.find((item) => Math.abs(item.bpm - bpm) < 1.5);
+    if (existing) existing.score = Math.max(existing.score, candidate.score * 0.98);
+    else out.push({ bpm, score: candidate.score });
+  }
+  return out.sort((a, b) => b.score - a.score);
+}
+
+function normalizeMusicalBpm(bpm: number, candidates: { bpm: number; score: number }[]): number {
+  let normalized = bpm;
+  while (normalized < 72) normalized *= 2;
+  while (normalized > 180) normalized /= 2;
+  const closeCandidate = candidates.find((candidate) => Math.abs(candidate.bpm - normalized) <= 1.5);
+  return roundTo(closeCandidate?.bpm ?? normalized, 0.1);
+}
+
+function estimateTimeSignature(onsets: number[], bpm: number): TempoAnalysisResult["timeSignature"] {
+  if (onsets.length < 8) return undefined;
+  const beat = 60 / bpm;
+  const candidates = [3, 4, 5, 6, 7];
+  let best = { numerator: 4, score: 0 };
+  for (const numerator of candidates) {
+    const bar = beat * numerator;
+    let score = 0;
+    for (const onset of onsets) {
+      const pos = onset % bar;
+      const distanceToBar = Math.min(pos, bar - pos);
+      if (distanceToBar < beat * 0.22) score += 1 - distanceToBar / (beat * 0.22);
+    }
+    score /= onsets.length;
+    if (score > best.score) best = { numerator, score };
+  }
+  const denominator = best.numerator === 6 ? 8 : 4;
+  return { numerator: best.numerator, denominator, confidence: Math.max(0.1, Math.min(0.9, best.score)) };
+}
+
+function buildWaveformPeaks(mono: Float32Array, count: number): number[] {
+  const peaks: number[] = [];
+  const samplesPerPeak = Math.max(1, Math.floor(mono.length / count));
+  for (let i = 0; i < count; i++) {
+    const start = i * samplesPerPeak;
+    const end = Math.min(mono.length, start + samplesPerPeak);
+    let max = 0;
+    for (let j = start; j < end; j++) max = Math.max(max, Math.abs(mono[j]));
+    peaks.push(max);
+  }
+  const peakMax = Math.max(...peaks, 0.001);
+  return peaks.map((peak) => roundTo(peak / peakMax, 0.001));
 }
 
 function refineBpmByIoi(onsets: number[], coarseBpm: number): number {

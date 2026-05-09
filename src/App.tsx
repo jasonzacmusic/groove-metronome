@@ -92,12 +92,6 @@ export default function App() {
           <MetronomePage metronome={metronome} view={view} onViewChange={setView} />
         ) : (
           <AnalyzerPage
-            onAnalysisDetected={(analysis) => {
-              metronome.setBpm(analysis.bpm);
-              if (analysis.timeSignature) {
-                metronome.setTimeSignature(analysis.timeSignature);
-              }
-            }}
             onUseAsBpm={(bpm) => {
               metronome.setBpm(bpm);
               setTab("metronome");
