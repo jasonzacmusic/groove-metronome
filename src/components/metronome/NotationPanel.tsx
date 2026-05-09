@@ -51,10 +51,10 @@ function pulsesToNoteSpecs(pat: BeatPattern): NoteSpec[] {
   return notes;
 }
 
-const AMBER = "rgb(244, 178, 90)";
-const SLATE_CYAN = "rgb(140, 184, 200)";
-const FG = "rgb(232, 220, 196)";
-const GHOST = "rgba(180, 168, 144, 0.5)";
+const AMBER = "rgb(242, 190, 74)";
+const FG = "rgb(247, 240, 219)";
+const GHOST = "rgba(168, 186, 204, 0.58)";
+const STAFF = "rgba(190, 205, 220, 0.72)";
 
 function colorFor(accent: PulseAccent, isActive: boolean): string {
   if (isActive) return AMBER;
@@ -75,7 +75,7 @@ export function NotationPanel({ pattern, timeSignature, currentBeat, isPlaying }
     host.innerHTML = "";
 
     const width = Math.max(380, host.clientWidth || 600);
-    const height = 130;
+    const height = 150;
 
     let renderer: Renderer | null = null;
     let ctx: RenderContext | null = null;
@@ -87,10 +87,10 @@ export function NotationPanel({ pattern, timeSignature, currentBeat, isPlaying }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (ctx as any).setBackgroundFillStyle?.("transparent");
 
-      const stave = new Stave(8, 14, width - 16);
+      const stave = new Stave(10, 18, width - 20);
       stave.addClef("percussion");
       stave.addTimeSignature(`${timeSignature.numerator}/${timeSignature.denominator}`);
-      stave.setStyle({ strokeStyle: "rgba(180,168,144,0.55)", fillStyle: "rgba(180,168,144,0.55)" });
+      stave.setStyle({ strokeStyle: STAFF, fillStyle: STAFF });
       stave.setContext(ctx).draw();
 
       const allNotes: StaveNote[] = [];
@@ -118,10 +118,8 @@ export function NotationPanel({ pattern, timeSignature, currentBeat, isPlaying }
 
         // Beaming: only beam non-rest sequences of 8th/16th/32nd within a beat
         const beamable = beatNotes.filter((n, i) => !specs[i].rest && spec(n) !== "q");
-        if (beamable.length >= 2 && beat.pulses >= 2 && (beat.pulses === 2 || beat.pulses >= 4)) {
-          beams.push(new Beam(beatNotes.filter((_, i) => !specs[i].rest)));
-        } else if (beat.pulses === 3) {
-          beams.push(new Beam(beatNotes.filter((_, i) => !specs[i].rest)));
+        if (beamable.length >= 2) {
+          beams.push(new Beam(beamable));
         }
 
         // Tuplets for non-power-of-2 pulse counts
@@ -136,12 +134,11 @@ export function NotationPanel({ pattern, timeSignature, currentBeat, isPlaying }
         }
       });
 
-      const totalBeats = pattern.length;
-      const voice = new Voice({ num_beats: totalBeats, beat_value: 4 });
+      const voice = new Voice({ num_beats: timeSignature.numerator, beat_value: timeSignature.denominator });
       voice.setStrict(false);
       voice.addTickables(allNotes);
 
-      new Formatter().joinVoices([voice]).format([voice], width - 110);
+      new Formatter().joinVoices([voice]).format([voice], width - 130);
       voice.draw(ctx, stave);
       beams.forEach((b) => b.setContext(ctx as RenderContext).draw());
       tuplets.forEach((t) => t.setContext(ctx as RenderContext).draw());

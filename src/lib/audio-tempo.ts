@@ -27,6 +27,7 @@ export interface TempoWindow {
 
 export interface TempoAnalysisResult {
   bpm: number;
+  weightedBpm: number;
   /** Overall confidence 0..1 from autocorrelation peak prominence. */
   confidence: number;
   /** All BPM candidates in descending score, useful for UI alternatives. */
@@ -73,9 +74,11 @@ export async function analyzeAudioTempo(file: File): Promise<TempoAnalysisResult
   const jitterSec = ioiJitter(onsetTimes, period);
 
   const windows = scoreWindows(onsetTimes, refined, audioBuffer.duration);
+  const weightedBpm = weightedWindowBpm(windows, refined);
 
   let explanation = `Detected ${refined.toFixed(1)} BPM from ${onsetTimes.length} onsets `;
   explanation += `via spectral-flux + autocorrelation (peak score ${(confidence * 100).toFixed(0)}%). `;
+  explanation += `Weighted average across stable windows is ${weightedBpm.toFixed(1)} BPM. `;
   if (jitterSec > 0.04) {
     explanation += `Notable timing variation (jitter ${(jitterSec * 1000).toFixed(0)} ms) — `;
     explanation += `see windows below for inconsistent regions.`;
@@ -85,6 +88,7 @@ export async function analyzeAudioTempo(file: File): Promise<TempoAnalysisResult
 
   return {
     bpm: refined,
+    weightedBpm,
     confidence,
     candidates,
     onsets: onsetTimes,
@@ -94,6 +98,18 @@ export async function analyzeAudioTempo(file: File): Promise<TempoAnalysisResult
     jitterSec,
     explanation,
   };
+}
+
+function weightedWindowBpm(windows: TempoWindow[], fallback: number): number {
+  let weighted = 0;
+  let weightTotal = 0;
+  for (const window of windows) {
+    const duration = Math.max(0.01, window.endSec - window.startSec);
+    const weight = duration * Math.max(0.05, window.agreement);
+    weighted += window.bpm * weight;
+    weightTotal += weight;
+  }
+  return roundTo(weightTotal > 0 ? weighted / weightTotal : fallback, 0.1);
 }
 
 /** Spectral flux onset envelope using a Hann-windowed STFT magnitude diff. */

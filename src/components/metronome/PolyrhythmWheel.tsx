@@ -53,11 +53,11 @@ function pulseFill(accent: PulseAccent, active: boolean): { fill: string; stroke
     case "accent":
       return { fill: "hsl(var(--amber) / 0.55)", stroke: "hsl(var(--amber) / 0.85)", opacity: 1 };
     case "normal":
-      return { fill: "hsl(36 30% 70% / 0.32)", stroke: "hsl(36 30% 70% / 0.55)", opacity: 1 };
+      return { fill: "hsl(var(--slate-cyan) / 0.34)", stroke: "hsl(var(--slate-cyan) / 0.65)", opacity: 1 };
     case "ghost":
-      return { fill: "hsl(36 20% 60% / 0.12)", stroke: "hsl(36 20% 60% / 0.35)", opacity: 1 };
+      return { fill: "hsl(210 24% 75% / 0.12)", stroke: "hsl(210 24% 75% / 0.36)", opacity: 1 };
     case "mute":
-      return { fill: "transparent", stroke: "hsl(36 14% 40% / 0.55)", opacity: 1 };
+      return { fill: "transparent", stroke: "hsl(214 16% 48% / 0.55)", opacity: 1 };
   }
 }
 
@@ -97,8 +97,8 @@ export function PolyrhythmWheel({
             <stop offset="100%" stopColor="hsl(var(--graphite))" />
           </radialGradient>
           <radialGradient id="wheel-back" cx="50%" cy="50%" r="55%">
-            <stop offset="0%" stopColor="hsla(36, 84%, 64%, 0.05)" />
-            <stop offset="70%" stopColor="hsla(36, 84%, 64%, 0)" />
+            <stop offset="0%" stopColor="hsla(181, 47%, 61%, 0.06)" />
+            <stop offset="70%" stopColor="hsla(181, 47%, 61%, 0)" />
           </radialGradient>
         </defs>
 
@@ -118,7 +118,7 @@ export function PolyrhythmWheel({
             <path
               key={`bg-${i}`}
               d={arcPath(a1, a2, R_INNER, R_OUTER)}
-              fill={isActiveBeat ? "hsl(var(--slate-cyan) / 0.10)" : "hsl(30 14% 9% / 0.7)"}
+              fill={isActiveBeat ? "hsl(var(--slate-cyan) / 0.10)" : "hsl(220 17% 8% / 0.78)"}
               stroke="hsl(var(--border))"
               strokeWidth="0.5"
             />
@@ -217,7 +217,7 @@ export function PolyrhythmWheel({
             cy={CY}
             r={R_CORE - 8 - i * 8}
             fill="none"
-            stroke="hsl(var(--amber) / 0.06)"
+            stroke="hsl(var(--slate-cyan) / 0.06)"
             strokeWidth="0.6"
           />
         ))}

@@ -94,7 +94,7 @@ export function useMetronome() {
   const [trainerPhase, setTrainerPhase] = useState<"playing" | "muted">("playing");
 
   const [rampEnabled, setRampEnabled] = useState(false);
-  const [rampConfig, setRampConfig] = useState<RampConfig>({ startBpm: 80, endBpm: 160, durationBars: 8, loop: false });
+  const [rampConfig, setRampConfig] = useState<RampConfig>({ startBpm: 80, endBpm: 160, durationBars: 2, loop: false });
   const [rampProgress, setRampProgress] = useState<MetronomeState["rampProgress"]>(null);
 
   const [practiceSeconds, setPracticeSeconds] = useState(0);

@@ -20,7 +20,7 @@ export default function App() {
 
       {/* Slim masthead */}
       <header className="relative z-10 border-b border-border/70">
-        <div className="max-w-6xl mx-auto px-6 md:px-10 py-5 flex items-baseline justify-between gap-4">
+        <div className="max-w-6xl mx-auto px-6 md:px-10 py-5 flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-4">
           <div className="flex items-baseline gap-3">
             <h1 className="font-serif text-2xl md:text-3xl leading-none tracking-tight text-foreground">
               Groove
@@ -32,7 +32,7 @@ export default function App() {
             </span>
           </div>
 
-          <nav className="flex items-center gap-5 tiny-caps text-[10px]">
+          <nav className="flex w-full sm:w-auto items-center justify-between sm:justify-start gap-4 sm:gap-5 tiny-caps text-[9px] sm:text-[10px]">
             <button
               type="button"
               onClick={() => setTab("metronome")}

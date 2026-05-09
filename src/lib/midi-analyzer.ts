@@ -22,6 +22,18 @@ export interface MidiTimeSignatureChange {
   denominator: number;
 }
 
+export interface MidiSection {
+  index: number;
+  startSec: number;
+  endSec: number;
+  estimatedBars: number;
+  bpm: number;
+  noteCount: number;
+  density: number;
+  keyEstimate: { tonic: string; mode: "major" | "minor"; correlation: number };
+  topChord: string;
+}
+
 export interface MidiAnalysis {
   fileName: string;
   durationSec: number;
@@ -29,8 +41,10 @@ export interface MidiAnalysis {
   /** True if this looks like a "performance" rather than a quantized chart. */
   isPerformance: boolean;
   tempos: MidiTempoChange[];
-  /** Stable tempo estimate (median if performance, header value otherwise). */
+  /** Stable tempo estimate. */
   bpm: number;
+  /** Duration-weighted average across tempo regions. */
+  weightedBpm: number;
   bpmVariation: number;
   timeSignatures: MidiTimeSignatureChange[];
   /** Krumhansl–Schmuckler key estimate. */
@@ -38,6 +52,7 @@ export interface MidiAnalysis {
   totalNotes: number;
   globalMaxPolyphony: number;
   tracks: MidiTrackSummary[];
+  sections: MidiSection[];
   /** Free-form summary string for the UI. */
   explanation: string;
 }
@@ -72,6 +87,7 @@ export async function analyzeMidi(file: File): Promise<MidiAnalysis> {
   let totalVelocity = 0;
   let totalDuration = 0;
   let allOnOff: { time: number; delta: number }[] = [];
+  const allNotes: { time: number; duration: number; midi: number; velocity: number }[] = [];
 
   for (const track of midi.tracks) {
     if (track.notes.length === 0) continue;
@@ -87,6 +103,7 @@ export async function analyzeMidi(file: File): Promise<MidiAnalysis> {
       onOff.push({ time: note.time + note.duration, delta: -1 });
       allOnOff.push({ time: note.time, delta: 1 });
       allOnOff.push({ time: note.time + note.duration, delta: -1 });
+      allNotes.push({ time: note.time, duration: note.duration, midi: note.midi, velocity: note.velocity });
     }
     const maxPoly = polyphonyMax(onOff);
     tracks.push({
@@ -106,21 +123,24 @@ export async function analyzeMidi(file: File): Promise<MidiAnalysis> {
 
   const bpms = tempos.map((t) => t.bpm).sort((a, b) => a - b);
   const medianBpm = bpms[Math.floor(bpms.length / 2)];
+  const weightedBpm = weightedTempo(tempos, midi.duration);
   const bpmVariation = bpms.length > 1 ? bpms[bpms.length - 1] - bpms[0] : 0;
 
   // Heuristic: if there are >5 tempo changes or wide BPM variation, it's a performance
   const isPerformance = tempos.length > 5 || bpmVariation > 5;
 
   const keyEstimate = estimateKey(pitchClassDuration);
+  const sections = buildSections(allNotes, timeSignatures, tempos, weightedBpm || medianBpm || 120, midi.duration);
 
   let explanation = `${midi.tracks.length} tracks, ${totalNotes} notes, ` +
     `${(midi.duration).toFixed(1)}s. `;
-  explanation += `Tempo: ${medianBpm.toFixed(1)} BPM`;
+  explanation += `Tempo: ${weightedBpm.toFixed(1)} BPM weighted`;
   if (bpmVariation > 0.5) explanation += ` (varies by ${bpmVariation.toFixed(1)} BPM)`;
   explanation += `. Time signature: ${timeSignatures[0].numerator}/${timeSignatures[0].denominator}`;
   if (timeSignatures.length > 1) explanation += ` (${timeSignatures.length} changes)`;
   explanation += `. Estimated key: ${keyEstimate.tonic} ${keyEstimate.mode} `;
-  explanation += `(corr ${keyEstimate.correlation.toFixed(2)}).`;
+  explanation += `(corr ${keyEstimate.correlation.toFixed(2)}). `;
+  explanation += `${sections.length} musical section${sections.length === 1 ? "" : "s"} estimated.`;
   if (isPerformance) explanation += " Likely a live performance — tempo varies.";
 
   return {
@@ -129,15 +149,99 @@ export async function analyzeMidi(file: File): Promise<MidiAnalysis> {
     ppq,
     isPerformance,
     tempos,
-    bpm: medianBpm,
+    bpm: weightedBpm,
+    weightedBpm,
     bpmVariation,
     timeSignatures,
     keyEstimate,
     totalNotes,
     globalMaxPolyphony,
     tracks,
+    sections,
     explanation,
   };
+}
+
+function weightedTempo(tempos: MidiTempoChange[], durationSec: number): number {
+  if (tempos.length === 0) return 120;
+  let weighted = 0;
+  let total = 0;
+  for (let i = 0; i < tempos.length; i++) {
+    const start = tempos[i].timeSec;
+    const end = tempos[i + 1]?.timeSec ?? durationSec;
+    const span = Math.max(0.01, end - start);
+    weighted += tempos[i].bpm * span;
+    total += span;
+  }
+  return total > 0 ? weighted / total : tempos[0].bpm;
+}
+
+function buildSections(
+  notes: { time: number; duration: number; midi: number; velocity: number }[],
+  timeSignatures: MidiTimeSignatureChange[],
+  tempos: MidiTempoChange[],
+  bpm: number,
+  durationSec: number,
+): MidiSection[] {
+  const ts = timeSignatures[0] ?? { timeSec: 0, numerator: 4, denominator: 4 };
+  const beatSec = (60 / Math.max(1, bpm)) * (4 / ts.denominator);
+  const barSec = Math.max(0.25, beatSec * ts.numerator);
+  const sectionBars = 8;
+  const sectionSec = Math.max(barSec * sectionBars, Math.min(12, durationSec || 12));
+  const sections: MidiSection[] = [];
+
+  for (let start = 0, index = 1; start < durationSec || (durationSec === 0 && index === 1); start += sectionSec, index++) {
+    const end = Math.min(durationSec, start + sectionSec);
+    const regionNotes = notes.filter((note) => note.time >= start && note.time < end);
+    const pitchClassDuration = new Array(12).fill(0);
+    for (const note of regionNotes) {
+      const overlap = Math.max(0, Math.min(note.time + note.duration, end) - Math.max(note.time, start));
+      pitchClassDuration[note.midi % 12] += overlap * Math.max(0.1, note.velocity);
+    }
+    const keyEstimate = regionNotes.length > 0 ? estimateKey(pitchClassDuration) : { tonic: "—", mode: "major" as const, correlation: 0 };
+    const span = Math.max(0.01, end - start);
+    sections.push({
+      index,
+      startSec: start,
+      endSec: end,
+      estimatedBars: Math.max(1, Math.round(span / barSec)),
+      bpm: tempoAt(tempos, start + span / 2),
+      noteCount: regionNotes.length,
+      density: regionNotes.length / span,
+      keyEstimate,
+      topChord: estimateChord(pitchClassDuration),
+    });
+    if (durationSec === 0) break;
+  }
+  return sections;
+}
+
+function tempoAt(tempos: MidiTempoChange[], timeSec: number): number {
+  let current = tempos[0]?.bpm ?? 120;
+  for (const tempo of tempos) {
+    if (tempo.timeSec <= timeSec) current = tempo.bpm;
+    else break;
+  }
+  return current;
+}
+
+function estimateChord(pitchClassDuration: number[]): string {
+  const sum = pitchClassDuration.reduce((a, b) => a + b, 0);
+  if (sum <= 0) return "—";
+  let best = { root: 0, quality: "major", score: -Infinity };
+  const qualities = [
+    { name: "major", intervals: [0, 4, 7] },
+    { name: "minor", intervals: [0, 3, 7] },
+    { name: "sus4", intervals: [0, 5, 7] },
+  ];
+  for (let root = 0; root < 12; root++) {
+    for (const quality of qualities) {
+      const score = quality.intervals.reduce((total, interval) => total + pitchClassDuration[(root + interval) % 12], 0);
+      if (score > best.score) best = { root, quality: quality.name, score };
+    }
+  }
+  const suffix = best.quality === "major" ? "" : best.quality === "minor" ? "m" : "sus4";
+  return `${PITCH_NAMES[best.root]}${suffix}`;
 }
 
 function polyphonyMax(events: { time: number; delta: number }[]): number {

@@ -47,10 +47,10 @@ export function AnalyzerPage({ onUseAsBpm, onUseAsTimeSignature }: AnalyzerPageP
 
   return (
     <div className="space-y-5 pb-12">
-      <div>
-        <h2 className="font-serif text-2xl">Import & analyze</h2>
-        <p className="text-sm text-muted-foreground">
-          Drop an audio loop or a MIDI file. We'll detect the format, extract the tempo, and tell you how confident we are.
+      <div className="rounded-lg border border-border bg-card/55 p-5">
+        <h2 className="font-serif text-3xl">Tempo & MIDI Lab</h2>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+          Audio gets tempo, confidence, stability, and weighted BPM. MIDI gets tempo map, sections, chords, key, and track behavior.
         </p>
       </div>
 

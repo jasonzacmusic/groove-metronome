@@ -24,7 +24,7 @@ export function AudioAnalysisCard({ fileName, result, onUseAsBpm }: AudioAnalysi
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-end gap-4">
+        <div className="flex items-end gap-4 flex-wrap">
           <div>
             <div className="text-xs uppercase tracking-widest text-muted-foreground font-mono">Tempo</div>
             <div className="font-mono tabular-nums text-5xl font-bold text-primary leading-none">
@@ -34,11 +34,11 @@ export function AudioAnalysisCard({ fileName, result, onUseAsBpm }: AudioAnalysi
           </div>
           <div className="flex-1">
             <div className="grid grid-cols-3 gap-2 text-xs">
+              <Stat label="Weighted" value={`${result.weightedBpm.toFixed(1)}`} />
               <Stat label="Confidence" value={`${(result.confidence * 100).toFixed(0)}%`} />
               <Stat label="Onsets" value={String(result.onsets.length)} />
               <Stat label="Jitter" value={`${(result.jitterSec * 1000).toFixed(0)} ms`} />
               <Stat label="Length" value={`${result.durationSec.toFixed(1)} s`} />
-              <Stat label="Sample rate" value={`${(result.sampleRate / 1000).toFixed(1)} kHz`} />
               <Stat label="Tightness" value={tightness} />
             </div>
           </div>
@@ -68,7 +68,7 @@ export function AudioAnalysisCard({ fileName, result, onUseAsBpm }: AudioAnalysi
           </div>
           <div className="flex h-7 w-full overflow-hidden rounded-md border border-border">
             {result.windows.map((w, i) => {
-              const hue = w.agreement >= 0.7 ? "bg-sage" : w.agreement >= 0.4 ? "bg-primary/70" : "bg-coral";
+              const hue = w.agreement >= 0.7 ? "bg-accent/80" : w.agreement >= 0.4 ? "bg-primary/70" : "bg-destructive/80";
               return (
                 <div
                   key={i}

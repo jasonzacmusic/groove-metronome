@@ -61,8 +61,8 @@ export function ImportZone({ onFile, busy, status }: ImportZoneProps) {
       }}
       onClick={() => inputRef.current?.click()}
       className={cn(
-        "relative flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-8 cursor-pointer transition-colors",
-        hover ? "border-primary bg-primary/5" : "border-border bg-card/40 hover:bg-muted/30",
+        "relative rounded-lg border-2 border-dashed p-4 cursor-pointer transition-colors",
+        hover ? "border-primary bg-primary/5" : "border-border bg-card/55 hover:bg-muted/30",
         busy && "pointer-events-none opacity-70",
       )}
       role="button"
@@ -85,19 +85,24 @@ export function ImportZone({ onFile, busy, status }: ImportZoneProps) {
           e.target.value = "";
         }}
       />
-      <div className="flex items-center gap-3">
-        <UploadCloud className="w-8 h-8 text-muted-foreground" />
-        <div className="flex items-center gap-1 text-muted-foreground">
-          <FileAudio className="w-5 h-5" />
-          <span className="text-xs">/</span>
-          <FileMusic className="w-5 h-5" />
+      <div className="grid gap-3 md:grid-cols-[1fr_auto_1fr] items-stretch">
+        <div className="rounded-md border border-border/70 bg-background/35 p-5">
+          <FileAudio className="mb-3 size-6 text-primary" />
+          <p className="font-serif text-xl">Audio</p>
+          <p className="mt-1 text-xs text-muted-foreground">WAV, MP3, FLAC, M4A, OGG, AAC, WEBM</p>
+        </div>
+        <div className="hidden md:grid place-items-center">
+          <UploadCloud className="size-7 text-muted-foreground" />
+        </div>
+        <div className="rounded-md border border-border/70 bg-background/35 p-5">
+          <FileMusic className="mb-3 size-6 text-accent" />
+          <p className="font-serif text-xl">MIDI</p>
+          <p className="mt-1 text-xs text-muted-foreground">Tempo map, sections, key, chords, tracks</p>
         </div>
       </div>
-      <div className="text-center">
+      <div className="mt-4 text-center">
         <p className="text-sm font-medium">Drop audio or MIDI here</p>
-        <p className="text-xs text-muted-foreground mt-1">
-          We&rsquo;ll auto-detect the format and explain how we got the tempo.
-        </p>
+        <p className="text-xs text-muted-foreground mt-1">One drop zone, separate musical readouts.</p>
       </div>
       {busy && status && (
         <div className="text-xs font-mono text-primary mt-2">{status}</div>

@@ -34,11 +34,11 @@ export function MidiAnalysisCard({ analysis, onUseAsBpm, onUseAsTimeSignature }:
           <div className="flex-1 min-w-[280px]">
             <div className="grid grid-cols-3 gap-2 text-xs">
               <Stat label="Time sig" value={`${ts.numerator}/${ts.denominator}`} />
+              <Stat label="Weighted" value={analysis.weightedBpm.toFixed(1)} />
               <Stat label="Key" value={`${analysis.keyEstimate.tonic} ${analysis.keyEstimate.mode}`} />
               <Stat label="Length" value={`${analysis.durationSec.toFixed(1)} s`} />
               <Stat label="Notes" value={analysis.totalNotes.toLocaleString()} />
-              <Stat label="Polyphony" value={String(analysis.globalMaxPolyphony)} />
-              <Stat label="Tempo events" value={String(analysis.tempos.length)} />
+              <Stat label="Sections" value={String(analysis.sections.length)} />
             </div>
           </div>
           <div className="flex flex-col gap-1.5">
@@ -59,6 +59,32 @@ export function MidiAnalysisCard({ analysis, onUseAsBpm, onUseAsTimeSignature }:
           <div className="font-medium text-foreground mb-1">Summary</div>
           <p className="text-muted-foreground">{analysis.explanation}</p>
         </div>
+
+        {analysis.sections.length > 0 && (
+          <div>
+            <div className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-2">
+              Sections
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {analysis.sections.map((section) => (
+                <div key={section.index} className="rounded-md border border-border bg-muted/20 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-serif text-lg">Section {section.index}</span>
+                    <span className="font-mono text-xs text-primary">{section.bpm.toFixed(1)} BPM</span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-[10px] font-mono text-muted-foreground">
+                    <span>{formatClock(section.startSec)}–{formatClock(section.endSec)}</span>
+                    <span>{section.estimatedBars} bars</span>
+                    <span>{section.noteCount} notes</span>
+                    <span>{section.topChord}</span>
+                    <span>{section.keyEstimate.tonic} {section.keyEstimate.mode}</span>
+                    <span>{section.density.toFixed(1)} n/s</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Tempo timeline (if performance) */}
         {analysis.isPerformance && analysis.tempos.length > 1 && (
@@ -133,4 +159,10 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="font-mono tabular-nums text-sm">{value}</div>
     </div>
   );
+}
+
+function formatClock(sec: number): string {
+  const minutes = Math.floor(sec / 60);
+  const seconds = Math.floor(sec % 60);
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }

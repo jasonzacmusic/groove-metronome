@@ -121,6 +121,17 @@ export const LEVEL_TO_ACCENT: PulseAccent[] = ["mute", "ghost", "normal", "accen
 
 export const SUBDIVISION_OPTIONS: SubdivisionCount[] = [1, 2, 3, 4, 5, 6, 7, 8];
 
+export const SUBDIVISION_NOTATION: Record<SubdivisionCount, { glyph: string; label: string }> = {
+  1: { glyph: "♩", label: "Crotchet" },
+  2: { glyph: "♫", label: "2 quavers" },
+  3: { glyph: "♬³", label: "Triplet" },
+  4: { glyph: "♬♬", label: "4 semiquavers" },
+  5: { glyph: "♬⁵", label: "Quintuplet" },
+  6: { glyph: "♬⁶", label: "Sextuplet" },
+  7: { glyph: "♬⁷", label: "Septuplet" },
+  8: { glyph: "♬⁸", label: "8 demisemiquavers" },
+};
+
 /** A picker tile that applies a preset rhythmic pattern to a beat. */
 export interface BeatPatternTile {
   id: string;
@@ -332,6 +343,18 @@ export const METRONOME_PRESETS: MetronomePreset[] = [
       [3, ["normal", "ghost", "normal"]],
       [3, ["normal", "ghost", "normal"]],
       [3, ["normal", "ghost", "normal"]],
+    ]),
+  },
+  {
+    name: "Mixed Beat Study",
+    bpm: 92,
+    timeSig: [4, 4],
+    swing: 0,
+    pattern: pattern([
+      [1, ["accent"]],
+      [2, ["mute", "normal"]],
+      [3, ["normal", "mute", "normal"]],
+      [4, ["normal", "normal", "normal", "normal"]],
     ]),
   },
   {

@@ -14,15 +14,34 @@ import type { UseMetronomeReturn } from "@/hooks/useMetronome";
 import {
   BEAT_SOUND_LABELS,
   BEAT_SOUND_OPTIONS,
+  buildDefaultPattern,
   METRONOME_PRESETS,
   pitchLabel,
+  SUBDIVISION_NOTATION,
   SUBDIVISION_OPTIONS,
   TEMPO_PRESETS,
   type BeatPattern,
   type PulseAccent,
   type SubdivisionCount,
+  type TimeSignature,
 } from "@/lib/metronome-types";
 import { clamp, formatTime } from "@/lib/utils";
+
+const SETLIST_STORAGE_KEY = "groove-metronome.setlists.v1";
+
+interface SavedSong {
+  id: string;
+  name: string;
+  bpm: number;
+  timeSignature: TimeSignature;
+  pattern: BeatPattern[];
+  swing: number;
+}
+
+interface SetlistState {
+  name: string;
+  songs: SavedSong[];
+}
 
 interface MetronomePageProps {
   metronome: UseMetronomeReturn;
@@ -58,6 +77,20 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
 
   const [targetMinutes, setTargetMinutes] = useState(5);
   const [selectedBeat, setSelectedBeat] = useState<number | null>(null);
+  const [songName, setSongName] = useState("New song");
+  const [setlist, setSetlist] = useState<SetlistState>(() => {
+    try {
+      const saved = window.localStorage.getItem(SETLIST_STORAGE_KEY);
+      if (saved) return JSON.parse(saved) as SetlistState;
+    } catch {
+      // Ignore corrupted local storage and start with a clean concert list.
+    }
+    return { name: "My Band / Concert", songs: [] };
+  });
+
+  useEffect(() => {
+    window.localStorage.setItem(SETLIST_STORAGE_KEY, JSON.stringify(setlist));
+  }, [setlist]);
 
   // Keep selectedBeat in range if numerator changes
   useEffect(() => {
@@ -90,6 +123,35 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
     setPattern(p.pattern);
   };
 
+  const resetDefault = () => {
+    setBpm(120);
+    setTimeSignature({ numerator: 4, denominator: 4 });
+    setSwing(0);
+    setPattern(buildDefaultPattern(4, 1));
+    setPolyrhythm({ enabled: false, against: 3 });
+  };
+
+  const saveCurrentSong = () => {
+    const trimmed = songName.trim() || `Song ${setlist.songs.length + 1}`;
+    const nextSong: SavedSong = {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      name: trimmed,
+      bpm: Math.round(state.bpm),
+      timeSignature: state.timeSignature,
+      pattern: state.pattern.map((beat) => ({ pulses: beat.pulses, accents: [...beat.accents] })),
+      swing: state.swing,
+    };
+    setSetlist((prev) => ({ ...prev, songs: [...prev.songs, nextSong] }));
+    setSongName(`Song ${setlist.songs.length + 2}`);
+  };
+
+  const loadSong = (song: SavedSong) => {
+    setBpm(song.bpm);
+    setTimeSignature(song.timeSignature);
+    setSwing(song.swing);
+    setPattern(song.pattern.map((beat) => ({ pulses: beat.pulses, accents: [...beat.accents] })));
+  };
+
   const dominantSubdivision: SubdivisionCount | null = (() => {
     if (state.pattern.length === 0) return null;
     const first = state.pattern[0].pulses;
@@ -102,6 +164,39 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
       <section className="space-y-6">
         {/* Top digital readout strip */}
         <TempoHeaderStrip bpm={state.bpm} timeSignature={state.timeSignature} pattern={state.pattern} />
+
+        <TempoLearningStrip bpm={state.bpm} onSelect={setBpm} />
+
+        <div className="grid grid-cols-1 xl:grid-cols-[190px_minmax(0,1fr)] gap-4">
+          <SubdivisionPalette
+            dominantSubdivision={dominantSubdivision}
+            onApply={setGlobalSubdivision}
+            onReset={resetAccents}
+          />
+          <BeatSubdivisionEditor
+            pattern={state.pattern}
+            isPlaying={state.isPlaying}
+            currentBeat={state.currentBeat}
+            currentPulse={state.currentPulse}
+            onSetSubdivision={(beatIndex, pulses) => applyPatternToBeat(beatIndex, {
+              pulses,
+              accents: Array.from({ length: pulses }, (_, pulseIndex) => {
+                const existing = state.pattern[beatIndex]?.accents[pulseIndex];
+                if (existing) return existing;
+                return pulseIndex === 0 ? "normal" : "mute";
+              }),
+            })}
+            onCyclePulse={cyclePulse}
+          />
+        </div>
+
+        <PolyrhythmIntro
+          numerator={state.timeSignature.numerator}
+          against={state.polyrhythm.against}
+          enabled={state.polyrhythm.enabled}
+          onToggle={(enabled) => setPolyrhythm({ enabled })}
+          onAgainst={(against) => setPolyrhythm({ against })}
+        />
 
         {/* View toggle */}
         <div className="flex items-center justify-between">
@@ -154,7 +249,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
         {/* Notation */}
         <div className="space-y-2">
           <span className="tiny-caps text-[10px] text-foreground">Notation</span>
-          <div className="border border-border rounded-sm bg-[hsl(var(--ink))]/40 px-1 py-1 overflow-x-auto">
+          <div className="notation-surface border border-border rounded-md px-2 py-2 overflow-x-auto shadow-[0_0_0_1px_hsl(var(--accent)/0.08)]">
             <NotationPanel
               pattern={state.pattern}
               timeSignature={state.timeSignature}
@@ -207,78 +302,18 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
         </div>
 
         <div className="px-2">
-          <Slider value={[state.bpm]} min={20} max={300} step={1} onValueChange={([v]) => setBpm(v)} />
-        </div>
-
-        <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 tiny-caps text-[10px]">
-          {TEMPO_PRESETS.map((p) => (
-            <button
-              key={p.label}
-              type="button"
-              onPointerDown={(e) => { e.preventDefault(); setBpm(p.bpm); }}
-              className={
-                Math.abs(state.bpm - p.bpm) < 5
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground transition-colors"
-              }
-            >
-              {p.label} <span className="opacity-50">{p.bpm}</span>
-            </button>
-          ))}
+          <Slider
+            value={[state.bpm]}
+            min={20}
+            max={300}
+            step={1}
+            onValueChange={([v]) => setBpm(v)}
+            onDoubleClick={() => setBpm(120)}
+            title="Double-click to reset to 120 BPM"
+          />
         </div>
 
         <hr className="rule" />
-
-        {/* Subdivision row — applies globally */}
-        <div className="space-y-3">
-          <SectionLabel
-            title="Subdivision"
-            hint={dominantSubdivision !== null ? `Uniform · ${dominantSubdivision} pulse${dominantSubdivision > 1 ? "s" : ""}` : "Mixed per beat"}
-          />
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex flex-wrap gap-1.5">
-              {SUBDIVISION_OPTIONS.map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onPointerDown={(e) => { e.preventDefault(); setGlobalSubdivision(n); }}
-                  className={`px-3 py-1.5 text-xs font-mono border transition-colors ${
-                    dominantSubdivision === n
-                      ? "border-primary text-primary"
-                      : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"
-                  }`}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onPointerDown={(e) => { e.preventDefault(); resetAccents(); }}
-              className="tiny-caps text-[10px] text-muted-foreground hover:text-primary transition-colors"
-            >
-              Reset accents
-            </button>
-          </div>
-          <p className="tiny-caps text-[9px] text-muted-foreground/60">
-            Click a beat numeral to cycle 1→8 · Click a pulse to set its level
-          </p>
-        </div>
-
-        <div className="space-y-3">
-          <SectionLabel title="Per Beat" hint="Subdivision map" />
-          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-6 gap-2">
-            {state.pattern.map((beat, index) => (
-              <SubdivisionOrb
-                key={index}
-                beat={beat}
-                beatIndex={index}
-                active={state.isPlaying && state.currentBeat === index}
-                onCycle={() => cycleBeatSubdivision(index)}
-              />
-            ))}
-          </div>
-        </div>
       </section>
 
       {/* SIDEBAR column */}
@@ -302,6 +337,67 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
               </option>
             ))}
           </select>
+        </Field>
+
+        <Field label="Playlist / Setlist">
+          <div className="space-y-3">
+            <input
+              value={setlist.name}
+              onChange={(e) => setSetlist((prev) => ({ ...prev, name: e.target.value }))}
+              className="w-full bg-transparent border-b border-border py-1 font-serif text-base focus:outline-none focus:border-primary"
+              aria-label="Band or concert name"
+            />
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+              <input
+                value={songName}
+                onChange={(e) => setSongName(e.target.value)}
+                className="min-w-0 bg-transparent border-b border-border py-1 font-mono text-xs focus:outline-none focus:border-primary"
+                aria-label="Song name"
+              />
+              <button
+                type="button"
+                onPointerDown={(e) => { e.preventDefault(); saveCurrentSong(); }}
+                className="tiny-caps text-[9px] px-2 py-1 border border-primary/60 text-primary rounded-sm hover:bg-primary/10"
+              >
+                Save
+              </button>
+            </div>
+            {setlist.songs.length > 0 && (
+              <div className="space-y-1.5 max-h-48 overflow-auto pr-1">
+                {setlist.songs.map((song, index) => (
+                  <div key={song.id} className="grid grid-cols-[1.5rem_minmax(0,1fr)_auto] gap-2 items-center rounded-sm border border-border/60 px-2 py-1.5">
+                    <span className="font-mono text-[10px] text-muted-foreground tabular">{index + 1}</span>
+                    <button
+                      type="button"
+                      onPointerDown={(e) => { e.preventDefault(); loadSong(song); }}
+                      className="min-w-0 text-left"
+                    >
+                      <span className="block truncate text-xs text-foreground">{song.name}</span>
+                      <span className="block tiny-caps text-[8px] text-muted-foreground">{song.bpm} BPM · {song.timeSignature.numerator}/{song.timeSignature.denominator}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        setSetlist((prev) => ({ ...prev, songs: prev.songs.filter((s) => s.id !== song.id) }));
+                      }}
+                      className="text-muted-foreground hover:text-destructive text-xs"
+                      aria-label={`Remove ${song.name}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              onPointerDown={(e) => { e.preventDefault(); resetDefault(); }}
+              className="tiny-caps text-[9px] text-muted-foreground hover:text-primary"
+            >
+              Reset to 4/4 default
+            </button>
+          </div>
         </Field>
 
         {/* Sound */}
@@ -341,38 +437,24 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
                 max={100}
                 step={1}
                 onValueChange={(v) => setPitch(v[0] ?? 50)}
+                onDoubleClick={() => setPitch(50)}
+                title="Double-click to reset pitch"
               />
             </div>
           </div>
         </Field>
 
-        {/* Polyrhythm */}
-        <Field
-          label="Polyrhythm"
-          trailing={
-            <Switch
-              checked={state.polyrhythm.enabled}
-              onCheckedChange={(c) => setPolyrhythm({ enabled: c })}
-            />
-          }
-        >
-          <div className="flex items-center justify-between gap-3">
-            <span className="font-serif text-2xl tabular text-foreground">
-              {state.timeSignature.numerator}<span className="text-muted-foreground/60 mx-1">:</span>{state.polyrhythm.against}
-            </span>
-            <div className="flex items-center gap-1">
-              <Stepper label="−" onTap={() => setPolyrhythm({ against: Math.max(2, state.polyrhythm.against - 1) })} />
-              <Stepper label="+" onTap={() => setPolyrhythm({ against: Math.min(16, state.polyrhythm.against + 1) })} />
-            </div>
-          </div>
-          <p className="tiny-caps text-[9px] text-muted-foreground/70 mt-1">
-            Cross-voice plays {state.polyrhythm.against} evenly per bar
-          </p>
-        </Field>
-
         {/* Swing */}
         <Field label="Swing" trailing={<span className="tiny-caps text-[10px] text-muted-foreground tabular">{state.swing > 0 ? "+" : ""}{state.swing}%</span>}>
-          <Slider value={[state.swing]} min={-100} max={100} step={1} onValueChange={([v]) => setSwing(v)} />
+          <Slider
+            value={[state.swing]}
+            min={-100}
+            max={100}
+            step={1}
+            onValueChange={([v]) => setSwing(v)}
+            onDoubleClick={() => setSwing(0)}
+            title="Double-click to reset swing"
+          />
         </Field>
 
         <hr className="rule" />
@@ -464,12 +546,247 @@ function SectionLabel({ title, hint }: { title: string; hint?: string }) {
   );
 }
 
+function TempoLearningStrip({ bpm, onSelect }: { bpm: number; onSelect: (bpm: number) => void }) {
+  const descriptions: Record<string, string> = {
+    Largo: "broad",
+    Adagio: "restful",
+    Andante: "walking",
+    Moderato: "measured",
+    Allegro: "lively",
+    Vivace: "brilliant",
+    Presto: "swift",
+  };
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+      {TEMPO_PRESETS.map((preset) => {
+        const active = Math.abs(bpm - preset.bpm) < 5;
+        return (
+          <button
+            key={preset.label}
+            type="button"
+            onPointerDown={(e) => { e.preventDefault(); onSelect(preset.bpm); }}
+            className={
+              "rounded-md border px-3 py-2 text-left transition-colors " +
+              (active
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border/70 bg-card/55 hover:border-accent/70 hover:bg-accent/5")
+            }
+          >
+            <span className="font-serif text-base leading-none">{preset.label}</span>
+            <span className="mt-1 block font-mono text-[11px] tabular text-foreground/80">{preset.bpm}</span>
+            <span className="tiny-caps mt-1 block text-[7px] text-muted-foreground">{descriptions[preset.label]}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SubdivisionPalette({
+  dominantSubdivision,
+  onApply,
+  onReset,
+}: {
+  dominantSubdivision: SubdivisionCount | null;
+  onApply: (subdivision: SubdivisionCount) => void;
+  onReset: () => void;
+}) {
+  return (
+    <div className="rounded-md border border-border/70 bg-card/60 p-3">
+      <SectionLabel
+        title="Subdivision"
+        hint={dominantSubdivision ? `${dominantSubdivision}` : "mixed"}
+      />
+      <div className="mt-3 grid grid-cols-2 xl:grid-cols-1 gap-1.5">
+        {SUBDIVISION_OPTIONS.map((n) => {
+          const notation = SUBDIVISION_NOTATION[n];
+          const active = dominantSubdivision === n;
+          return (
+            <button
+              key={n}
+              type="button"
+              onPointerDown={(e) => { e.preventDefault(); onApply(n); }}
+              className={
+                "flex items-center gap-2 rounded-sm border px-2 py-1.5 text-left transition-colors " +
+                (active
+                  ? "border-primary text-primary bg-primary/10"
+                  : "border-border/60 text-muted-foreground hover:text-foreground hover:border-accent/60")
+              }
+            >
+              <span className="w-10 text-center text-lg leading-none text-foreground">{notation.glyph}</span>
+              <span className="min-w-0">
+                <span className="block font-mono text-[11px] tabular">{n}</span>
+                <span className="tiny-caps block text-[7px] truncate">{notation.label}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <button
+        type="button"
+        onPointerDown={(e) => { e.preventDefault(); onReset(); }}
+        className="tiny-caps mt-3 text-[9px] text-muted-foreground hover:text-primary"
+      >
+        Reset accents
+      </button>
+    </div>
+  );
+}
+
+function BeatSubdivisionEditor({
+  pattern,
+  isPlaying,
+  currentBeat,
+  currentPulse,
+  onSetSubdivision,
+  onCyclePulse,
+}: {
+  pattern: BeatPattern[];
+  isPlaying: boolean;
+  currentBeat: number;
+  currentPulse: number;
+  onSetSubdivision: (beatIndex: number, pulses: SubdivisionCount) => void;
+  onCyclePulse: (beatIndex: number, pulseIndex: number) => void;
+}) {
+  return (
+    <div className="rounded-md border border-border/70 bg-card/60 p-3">
+      <SectionLabel title="Beat Map" hint="subdivision + played pulses" />
+      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        {pattern.map((beat, beatIndex) => {
+          const activeBeat = isPlaying && currentBeat === beatIndex;
+          return (
+            <div
+              key={beatIndex}
+              className={
+                "rounded-md border p-3 transition-colors " +
+                (activeBeat ? "border-accent bg-accent/6" : "border-border/60 bg-background/35")
+              }
+            >
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="relative grid size-10 place-items-center rounded-full border"
+                    style={{
+                      background: subdivisionBackground(beat, activeBeat),
+                      borderColor: activeBeat ? "hsl(var(--accent))" : "hsl(var(--border))",
+                    }}
+                  >
+                    <span className="absolute inset-[30%] rounded-full bg-background/90" />
+                    <span className="relative font-serif text-base">{beatIndex + 1}</span>
+                  </span>
+                  <div>
+                    <span className="tiny-caps block text-[8px] text-muted-foreground">Beat</span>
+                    <span className="font-mono text-xs tabular">{beat.pulses} pulse{beat.pulses > 1 ? "s" : ""}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3">
+                <select
+                  value={beat.pulses}
+                  onChange={(e) => onSetSubdivision(beatIndex, Number(e.target.value) as SubdivisionCount)}
+                  className="w-full bg-transparent border-b border-border py-1 font-mono text-xs focus:outline-none focus:border-primary"
+                  aria-label={`Subdivision for beat ${beatIndex + 1}`}
+                >
+                  {SUBDIVISION_OPTIONS.map((n) => (
+                    <option key={n} value={n} className="bg-background">
+                      {SUBDIVISION_NOTATION[n].glyph} {n}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="mt-3 grid gap-1" style={{ gridTemplateColumns: `repeat(${beat.pulses}, minmax(0, 1fr))` }}>
+                {beat.accents.map((accent, pulseIndex) => {
+                  const activePulse = activeBeat && currentPulse === pulseIndex;
+                  return (
+                    <button
+                      key={pulseIndex}
+                      type="button"
+                      onPointerDown={(e) => { e.preventDefault(); onCyclePulse(beatIndex, pulseIndex); }}
+                      className="min-h-10 rounded-sm border text-center font-mono text-[11px] transition-colors"
+                      style={{
+                        borderColor: activePulse ? "hsl(var(--primary))" : "hsl(var(--border))",
+                        background: accentColor(accent, activePulse),
+                        color: accent === "mute" ? "hsl(var(--muted-foreground))" : "hsl(var(--background))",
+                      }}
+                      aria-label={`Beat ${beatIndex + 1} pulse ${pulseIndex + 1}: ${accent}`}
+                    >
+                      {pulseSymbol(accent)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PolyrhythmIntro({
+  numerator,
+  against,
+  enabled,
+  onToggle,
+  onAgainst,
+}: {
+  numerator: number;
+  against: number;
+  enabled: boolean;
+  onToggle: (enabled: boolean) => void;
+  onAgainst: (against: number) => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-4 rounded-md border border-border/70 bg-card/55 p-4">
+      <div>
+        <div className="flex items-center gap-3">
+          <span className="tiny-caps text-[10px] text-foreground">Polyrhythm</span>
+          <Switch checked={enabled} onCheckedChange={onToggle} />
+        </div>
+        <div className="mt-2 flex items-baseline gap-3">
+          <span className="font-serif text-4xl tabular text-primary">
+            {numerator}<span className="mx-1 text-muted-foreground">:</span>{against}
+          </span>
+          <span className="tiny-caps text-[9px] text-muted-foreground">main bar vs cross voice</span>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 md:justify-end">
+        {[2, 3, 4, 5, 7].map((value) => (
+          <button
+            key={value}
+            type="button"
+            onPointerDown={(e) => { e.preventDefault(); onAgainst(value); onToggle(true); }}
+            className={
+              "px-3 py-2 rounded-sm border font-mono text-xs transition-colors " +
+              (against === value && enabled
+                ? "border-primary text-primary bg-primary/10"
+                : "border-border text-muted-foreground hover:text-foreground hover:border-accent/70")
+            }
+          >
+            {numerator}:{value}
+          </button>
+        ))}
+        <Stepper label="−" onTap={() => onAgainst(Math.max(2, against - 1))} />
+        <Stepper label="+" onTap={() => onAgainst(Math.min(16, against + 1))} />
+      </div>
+    </div>
+  );
+}
+
 function accentColor(accent: PulseAccent, active: boolean): string {
   if (active) return "hsl(var(--amber))";
   if (accent === "accent") return "hsl(var(--amber) / 0.72)";
   if (accent === "normal") return "hsl(var(--slate-cyan) / 0.62)";
-  if (accent === "ghost") return "hsl(36 22% 72% / 0.24)";
+  if (accent === "ghost") return "hsl(210 30% 78% / 0.28)";
   return "hsl(var(--ink))";
+}
+
+function pulseSymbol(accent: PulseAccent): string {
+  if (accent === "accent") return "●";
+  if (accent === "normal") return "•";
+  if (accent === "ghost") return "○";
+  return "–";
 }
 
 function subdivisionBackground(beat: BeatPattern, active: boolean): string {
@@ -481,51 +798,6 @@ function subdivisionBackground(beat: BeatPattern, active: boolean): string {
       return `${accentColor(accent, active)} ${start}% ${end}%`;
     })
     .join(", ")})`;
-}
-
-function SubdivisionOrb({
-  beat,
-  beatIndex,
-  active,
-  onCycle,
-}: {
-  beat: BeatPattern;
-  beatIndex: number;
-  active: boolean;
-  onCycle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onPointerDown={(e) => {
-        e.preventDefault();
-        onCycle();
-      }}
-      className={
-        "flex items-center gap-3 rounded-md border px-3 py-2 text-left transition-colors touch-manipulation " +
-        (active
-          ? "border-accent/70 bg-accent/5"
-          : "border-border/60 hover:border-primary/50 hover:bg-primary/5")
-      }
-      aria-label={`Beat ${beatIndex + 1}: ${beat.pulses} subdivisions. Tap to cycle.`}
-    >
-      <span
-        className="relative grid size-11 shrink-0 place-items-center rounded-full border"
-        style={{
-          background: subdivisionBackground(beat, active),
-          borderColor: active ? "hsl(var(--accent))" : "hsl(var(--border))",
-          boxShadow: active ? "0 0 12px hsl(var(--accent) / 0.22)" : undefined,
-        }}
-      >
-        <span className="absolute inset-[28%] rounded-full bg-background/90" />
-        <span className="relative font-serif text-lg leading-none text-foreground">{beatIndex + 1}</span>
-      </span>
-      <span className="min-w-0">
-        <span className="tiny-caps block text-[8px] text-muted-foreground">Beat</span>
-        <span className="font-mono text-sm tabular text-foreground">{beat.pulses} pulse{beat.pulses > 1 ? "s" : ""}</span>
-      </span>
-    </button>
-  );
 }
 
 function Field({ label, trailing, children }: { label: string; trailing?: React.ReactNode; children: React.ReactNode }) {
@@ -555,13 +827,29 @@ function Stepper({ label, onTap, primary }: { label: string; onTap: () => void; 
 }
 
 function NumberField({ label, value, onChange, compact = false }: { label: string; value: number; onChange: (v: number) => void; compact?: boolean }) {
+  const [draft, setDraft] = useState(String(value));
+
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  const commit = (next: string) => {
+    setDraft(next);
+    if (next.trim() === "") return;
+    const parsed = Number(next);
+    if (Number.isFinite(parsed)) onChange(parsed);
+  };
+
   return (
     <div className={compact ? "text-right" : ""}>
       <label className="tiny-caps text-[9px] text-muted-foreground block">{label}</label>
       <input
         type="number"
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
+        value={draft}
+        onChange={(e) => commit(e.target.value)}
+        onBlur={() => {
+          if (draft.trim() === "") setDraft(String(value));
+        }}
         className={`w-full bg-transparent border-b border-border py-1 ${compact ? "text-right" : "text-left"} font-mono text-sm focus:outline-none focus:border-primary`}
       />
     </div>
