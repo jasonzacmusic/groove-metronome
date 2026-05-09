@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   BarChart3,
+  ChevronLeft,
+  ChevronRight,
   CircleHelp,
   Copy,
   Download,
@@ -125,6 +127,8 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
   const [selectedBeat, setSelectedBeat] = useState<number | null>(null);
   const [songName, setSongName] = useState("New song");
   const [showHaptics, setShowHaptics] = useState(false);
+  const [concertMode, setConcertMode] = useState(false);
+  const [concertIndex, setConcertIndex] = useState(0);
   const setlistImportRef = useRef<HTMLInputElement | null>(null);
   const [setlist, setSetlist] = useState<SetlistState>(() => {
     try {
@@ -162,13 +166,14 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
       if (e.code === "Space") { e.preventDefault(); }
       else if (e.code === "ArrowUp") { e.preventDefault(); adjustBpm(1); }
       else if (e.code === "ArrowDown") { e.preventDefault(); adjustBpm(-1); }
+      else if (concertMode && (e.key === "t" || e.key === "T")) { e.preventDefault(); }
       else if (e.key === "t" || e.key === "T") tap();
       else if (e.key === "[") { e.preventDefault(); adjustBpm(-5); }
       else if (e.key === "]") { e.preventDefault(); adjustBpm(5); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [active, adjustBpm, tap]);
+  }, [active, adjustBpm, concertMode, tap]);
 
   const loadPreset = (idx: number) => {
     const p = METRONOME_PRESETS[idx];
@@ -229,6 +234,13 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
     setPattern(song.pattern.map((beat) => ({ pulses: beat.pulses, accents: [...beat.accents] })));
   };
 
+  const openConcertMode = () => {
+    const nextIndex = Math.min(concertIndex, Math.max(0, setlist.songs.length - 1));
+    setConcertIndex(nextIndex);
+    if (setlist.songs[nextIndex]) loadSong(setlist.songs[nextIndex]);
+    setConcertMode(true);
+  };
+
   const setAllPulseAccents = (accent: PulseAccent) => {
     setPattern((prev) => prev.map((beat) => ({
       ...beat,
@@ -283,6 +295,26 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
     return state.pattern.every((b) => b.pulses === first) ? first : null;
   })();
 
+  if (concertMode) {
+    return (
+      <ConcertMode
+        setlist={setlist}
+        index={concertIndex}
+        state={state}
+        onClose={() => setConcertMode(false)}
+        onSelectSong={(nextIndex) => {
+          const safeIndex = clamp(nextIndex, 0, Math.max(0, setlist.songs.length - 1));
+          setConcertIndex(safeIndex);
+          const song = setlist.songs[safeIndex];
+          if (song) loadSong(song);
+        }}
+        onToggle={toggle}
+        onAdjustBpm={adjustBpm}
+        onSetBpm={setBpm}
+      />
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-8 lg:gap-12 pb-16">
       {/* HERO column */}
@@ -314,6 +346,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
           currentPoly={state.currentPoly}
           onCycleBeatSubdivision={cycleBeatSubdivision}
           onCyclePulseAccent={cyclePulse}
+          onTap={tap}
         />
 
         <TransportDeck
@@ -523,6 +556,17 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
               <SetlistAction label="Backup" icon={<Download className="size-3.5" />} onClick={exportSetlist} />
               <SetlistAction label="Restore" icon={<Upload className="size-3.5" />} onClick={() => setlistImportRef.current?.click()} />
             </div>
+            <button
+              type="button"
+              disabled={setlist.songs.length === 0}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                if (setlist.songs.length > 0) openConcertMode();
+              }}
+              className="w-full rounded-md border border-primary bg-primary px-3 py-3 tiny-caps text-[10px] text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:border-border disabled:bg-muted/30 disabled:text-muted-foreground"
+            >
+              Concert Mode
+            </button>
             {setlist.songs.length > 0 && (
               <div className="space-y-1.5 max-h-48 overflow-auto pr-1">
                 {setlist.songs.map((song, index) => (
@@ -647,6 +691,7 @@ function WheelStage({
   currentPoly,
   onCycleBeatSubdivision,
   onCyclePulseAccent,
+  onTap,
 }: {
   view: MetronomeView;
   pattern: BeatPattern[];
@@ -658,6 +703,7 @@ function WheelStage({
   currentPoly: number;
   onCycleBeatSubdivision: (beatIndex: number) => void;
   onCyclePulseAccent: (beatIndex: number, pulseIndex: number) => void;
+  onTap: () => void;
 }) {
   const wheelPattern: BeatPattern[] = view === "polyrhythm" && polyrhythm.enabled
     ? Array.from({ length: polyrhythm.main }, (_, index) => ({
@@ -677,6 +723,7 @@ function WheelStage({
           currentPulse={currentPulse}
           onCycleBeatSubdivision={onCycleBeatSubdivision}
           onCyclePulseAccent={onCyclePulseAccent}
+          onTapTempo={onTap}
         />
       </div>
       {view === "polymeter" && polyrhythm.polymeterEnabled && (
@@ -814,6 +861,222 @@ function NotationStage({
       </div>
       <AssistNotationStrip dottedMode={polyrhythm.dottedMode} tripletMode={polyrhythm.tripletMode} />
     </section>
+  );
+}
+
+function ConcertMode({
+  setlist,
+  index,
+  state,
+  onClose,
+  onSelectSong,
+  onToggle,
+  onAdjustBpm,
+  onSetBpm,
+}: {
+  setlist: SetlistState;
+  index: number;
+  state: UseMetronomeReturn["state"];
+  onClose: () => void;
+  onSelectSong: (index: number) => void;
+  onToggle: () => void;
+  onAdjustBpm: (delta: number) => void;
+  onSetBpm: (bpm: number) => void;
+}) {
+  const song = setlist.songs[index] ?? null;
+  const nextSong = setlist.songs[index + 1] ?? null;
+
+  return (
+    <section className="min-h-[calc(100vh-9rem)] space-y-4 pb-8">
+      <div className="rounded-lg border border-primary/35 bg-card/80 p-4 md:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <span className="tiny-caps text-[10px] text-muted-foreground">Concert Mode</span>
+            <h2 className="mt-1 truncate font-serif text-3xl md:text-4xl">{setlist.name}</h2>
+          </div>
+          <button
+            type="button"
+            onPointerDown={(e) => { e.preventDefault(); onClose(); }}
+            className="rounded-md border border-border bg-background/45 px-4 py-3 tiny-caps text-[10px] text-muted-foreground hover:border-primary hover:text-primary"
+          >
+            Exit
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="rounded-lg border border-border bg-card/70 p-4 md:p-6">
+          <div className="grid min-h-[18rem] gap-5">
+            <div>
+              <span className="tiny-caps text-[10px] text-muted-foreground">Current song</span>
+              <h3 className="mt-2 break-words font-serif text-5xl leading-none md:text-7xl">
+                {song?.name ?? "No song saved"}
+              </h3>
+              <div className="mt-3 flex flex-wrap items-center gap-2 font-mono text-sm text-muted-foreground">
+                <span>{index + 1}/{Math.max(1, setlist.songs.length)}</span>
+                <span>·</span>
+                <span>{state.timeSignature.numerator}/{state.timeSignature.denominator}</span>
+                {nextSong && (
+                  <>
+                    <span>·</span>
+                    <span className="truncate">Next: {nextSong.name}</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
+              <StageButton
+                label="Previous"
+                icon={<ChevronLeft className="size-6" />}
+                disabled={index <= 0}
+                onClick={() => onSelectSong(index - 1)}
+              />
+              <button
+                type="button"
+                onPointerDown={(e) => { e.preventDefault(); onToggle(); }}
+                className={
+                  "min-h-28 rounded-lg border px-8 py-5 font-serif text-4xl transition-colors " +
+                  (state.isPlaying
+                    ? "border-destructive bg-destructive/15 text-destructive hover:bg-destructive/20"
+                    : "border-primary bg-primary text-primary-foreground hover:bg-primary/90")
+                }
+              >
+                {state.isPlaying ? "Stop" : "Start"}
+              </button>
+              <StageButton
+                label="Next"
+                icon={<ChevronRight className="size-6" />}
+                disabled={index >= setlist.songs.length - 1}
+                onClick={() => onSelectSong(index + 1)}
+              />
+            </div>
+          </div>
+        </div>
+
+        <aside className="space-y-4">
+          <div className="rounded-lg border border-border bg-card/70 p-4">
+            <span className="tiny-caps text-[10px] text-muted-foreground">Live tempo</span>
+            <div className="mt-2 font-serif text-6xl leading-none text-primary">{Math.round(state.bpm)}</div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <StageButton label="-1" onClick={() => onAdjustBpm(-1)} compact />
+              <StageButton label="+1" onClick={() => onAdjustBpm(1)} compact />
+              <StageButton label="-5" onClick={() => onAdjustBpm(-5)} compact />
+              <StageButton label="+5" onClick={() => onAdjustBpm(5)} compact />
+            </div>
+          </div>
+
+          <ConcertTapPreview onSetBpm={onSetBpm} />
+
+          <div className="rounded-lg border border-border bg-card/70 p-4">
+            <span className="tiny-caps text-[10px] text-muted-foreground">Practice time</span>
+            <div className="mt-2 font-mono text-3xl tabular text-foreground">{formatTime(state.practiceSeconds)}</div>
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              Setlist is saved locally and can be shared or backed up from Setlist Studio.
+            </p>
+          </div>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function ConcertTapPreview({ onSetBpm }: { onSetBpm: (bpm: number) => void }) {
+  const tapsRef = useRef<number[]>([]);
+  const [preview, setPreview] = useState<{ count: number; bpm: number | null }>({ count: 0, bpm: null });
+
+  const tapPreview = () => {
+    const now = performance.now();
+    const taps = tapsRef.current;
+    if (taps.length > 0 && now - taps[taps.length - 1] > 2500) taps.length = 0;
+    taps.push(now);
+    if (taps.length > 8) taps.shift();
+    if (taps.length < 2) {
+      setPreview({ count: taps.length, bpm: null });
+      return;
+    }
+    const intervals: number[] = [];
+    for (let i = 1; i < taps.length; i++) intervals.push(taps[i] - taps[i - 1]);
+    const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+    const bpm = clamp(Math.round(60000 / avg), 20, 300);
+    setPreview({ count: taps.length, bpm });
+  };
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target;
+      const editable = target instanceof HTMLInputElement
+        || target instanceof HTMLSelectElement
+        || target instanceof HTMLTextAreaElement
+        || (target instanceof HTMLElement && target.isContentEditable);
+      if (editable || (event.key !== "t" && event.key !== "T")) return;
+      event.preventDefault();
+      tapPreview();
+    };
+    window.addEventListener("keydown", handler, { capture: true });
+    return () => window.removeEventListener("keydown", handler, { capture: true });
+  });
+
+  return (
+    <div className="rounded-lg border border-border bg-card/70 p-4">
+      <span className="tiny-caps text-[10px] text-muted-foreground">Tap preview</span>
+      <button
+        type="button"
+        onPointerDown={(e) => { e.preventDefault(); tapPreview(); }}
+        className="mt-2 min-h-24 w-full rounded-lg border border-primary/60 bg-primary/10 font-serif text-3xl text-primary transition-colors hover:bg-primary/15"
+      >
+        Tap
+      </button>
+      <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+        <div>
+          <span className="block font-mono text-3xl tabular text-foreground">{preview.bpm ? `${preview.bpm}` : "—"}</span>
+          <span className="tiny-caps text-[10px] text-muted-foreground">{preview.count} taps · preview only</span>
+        </div>
+        <button
+          type="button"
+          disabled={!preview.bpm}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            if (preview.bpm) onSetBpm(preview.bpm);
+          }}
+          className="min-h-14 rounded-md border border-primary bg-primary px-4 tiny-caps text-[10px] text-primary-foreground disabled:cursor-not-allowed disabled:border-border disabled:bg-muted/30 disabled:text-muted-foreground"
+        >
+          Use BPM
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function StageButton({
+  label,
+  icon,
+  disabled,
+  compact = false,
+  onClick,
+}: {
+  label: string;
+  icon?: ReactNode;
+  disabled?: boolean;
+  compact?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        if (!disabled) onClick();
+      }}
+      className={
+        "inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background/45 font-mono text-foreground transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-35 " +
+        (compact ? "min-h-14 px-4 text-xl" : "min-h-20 px-5 text-lg")
+      }
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 

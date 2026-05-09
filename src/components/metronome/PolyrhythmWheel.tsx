@@ -15,6 +15,7 @@ interface PolyrhythmWheelProps {
   currentPulse: number;
   onCycleBeatSubdivision: (beatIndex: number) => void;
   onCyclePulseAccent: (beatIndex: number, pulseIndex: number) => void;
+  onTapTempo: () => void;
 }
 
 const VIEW = 440;
@@ -69,11 +70,13 @@ export function PolyrhythmWheel({
   currentPulse,
   onCycleBeatSubdivision,
   onCyclePulseAccent,
+  onTapTempo,
 }: PolyrhythmWheelProps) {
   const numerator = pattern.length;
   const beatSpan = (2 * Math.PI) / Math.max(1, numerator);
 
   const handAngle = useMemo(() => {
+    if (!isPlaying) return null;
     if (currentBeat < 0 || currentPulse < 0 || numerator === 0) return null;
     const beat = pattern[currentBeat];
     if (!beat) return null;
@@ -81,7 +84,7 @@ export function PolyrhythmWheel({
     const pulseSpan = beatSpan / pulses;
     const beatStart = -Math.PI / 2 + beatSpan * currentBeat;
     return beatStart + pulseSpan * (currentPulse + 0.5);
-  }, [currentBeat, currentPulse, pattern, beatSpan, numerator]);
+  }, [currentBeat, currentPulse, isPlaying, pattern, beatSpan, numerator]);
 
   return (
     <div className="relative w-full max-w-[560px] mx-auto select-none">
@@ -221,7 +224,7 @@ export function PolyrhythmWheel({
             strokeWidth="0.6"
           />
         ))}
-        <circle cx={CX} cy={CY} r={3} fill="hsl(var(--amber))" />
+        {isPlaying && <circle cx={CX} cy={CY} r={2.2} fill="hsl(var(--amber) / 0.65)" />}
 
         {/* Sweep hand */}
         {handAngle !== null && (
@@ -234,7 +237,7 @@ export function PolyrhythmWheel({
           >
             <line
               x1={CX}
-              y1={CY}
+              y1={CY - R_CORE - 8}
               x2={CX}
               y2={CY - R_HAND}
               stroke="hsl(var(--amber))"
@@ -249,14 +252,24 @@ export function PolyrhythmWheel({
 
       {/* Center BPM readout — overlay so DM Serif Display renders crisply */}
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <span className="tiny-caps text-xs text-muted-foreground/80">{getTempoMarking(bpm)}</span>
-        <span
-          className="font-serif tabular leading-none text-foreground"
-          style={{ fontSize: "clamp(4rem, 16vw, 6.5rem)" }}
+        <button
+          type="button"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            onTapTempo();
+          }}
+          className="pointer-events-auto rounded-full px-8 py-7 text-center transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+          aria-label="Tap tempo from wheel center"
         >
-          {Math.round(bpm)}
-        </span>
-        <span className="tiny-caps text-[10px] text-muted-foreground/70 mt-1">BPM</span>
+          <span className="tiny-caps block text-xs text-muted-foreground/80">{getTempoMarking(bpm)}</span>
+          <span
+            className="block font-serif tabular leading-none text-foreground"
+            style={{ fontSize: "clamp(4rem, 16vw, 6.5rem)" }}
+          >
+            {Math.round(bpm)}
+          </span>
+          <span className="tiny-caps mt-1 block text-[10px] text-muted-foreground/70">Tap tempo</span>
+        </button>
       </div>
     </div>
   );
