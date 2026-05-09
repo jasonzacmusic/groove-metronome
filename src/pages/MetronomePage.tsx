@@ -623,14 +623,14 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
           defaultOpen
         >
           <PremiumToolNote label="Practice builder" body="Ramp gradually across a phrase so speed increases feel musical, not sudden." />
-          <div className="grid grid-cols-3 gap-3">
+          <div className="mt-3 grid grid-cols-3 gap-2.5">
             <NumberField label="Start" value={state.rampConfig.startBpm} onChange={(v) => setRampConfig({ ...state.rampConfig, startBpm: clamp(v, 20, 300) })} />
             <NumberField label="End" value={state.rampConfig.endBpm} onChange={(v) => setRampConfig({ ...state.rampConfig, endBpm: clamp(v, 20, 300) })} />
             <NumberField label="Bars" value={state.rampConfig.durationBars} onChange={(v) => setRampConfig({ ...state.rampConfig, durationBars: Math.max(1, v) })} />
           </div>
-          <label className="flex items-center gap-2 mt-3">
+          <label className="mt-3 flex min-h-11 items-center justify-between gap-3 rounded-md border border-border/70 bg-background/55 px-3">
+            <span className="tiny-caps text-[10px] text-foreground/90">Loop ramp</span>
             <Switch checked={state.rampConfig.loop} onCheckedChange={(c) => setRampConfig({ ...state.rampConfig, loop: c })} />
-            <span className="tiny-caps text-[10px] text-muted-foreground">Loop</span>
           </label>
           {state.rampProgress && (
             <div className="mt-3">
@@ -656,7 +656,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
           defaultOpen
         >
           <PremiumToolNote label="Inner clock" body="Alternate playing and silent bars to test whether your pulse survives without the click." />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="mt-3 grid grid-cols-2 gap-2.5">
             <NumberField label="Play" value={state.trainerConfig.playBars} onChange={(v) => setTrainerConfig({ ...state.trainerConfig, playBars: Math.max(1, v) })} />
             <NumberField label="Mute" value={state.trainerConfig.muteBars} onChange={(v) => setTrainerConfig({ ...state.trainerConfig, muteBars: Math.max(1, v) })} />
           </div>
@@ -2034,9 +2034,9 @@ function subdivisionOptionsForBpm(bpm: number): SubdivisionCount[] {
 
 function PremiumToolNote({ label, body }: { label: string; body: string }) {
   return (
-    <div className="rounded-md border border-primary/25 bg-primary/10 p-3">
+    <div className="rounded-md border border-primary/45 bg-[linear-gradient(135deg,hsl(var(--primary)/0.16),hsl(var(--background)/0.72))] p-3 shadow-[0_0_0_1px_hsl(var(--background)/0.32)_inset]">
       <span className="tiny-caps text-[9px] text-primary">{label}</span>
-      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{body}</p>
+      <p className="mt-1 text-sm leading-relaxed text-foreground/88">{body}</p>
     </div>
   );
 }
@@ -2428,7 +2428,7 @@ function NumberField({ label, value, onChange, compact = false }: { label: strin
 
   return (
     <div className={compact ? "text-right" : ""}>
-      <label className="tiny-caps text-[10px] text-muted-foreground block">{label}</label>
+      <label className="tiny-caps block text-[10px] text-foreground/85">{label}</label>
       <input
         type="number"
         value={draft}
@@ -2436,7 +2436,7 @@ function NumberField({ label, value, onChange, compact = false }: { label: strin
         onBlur={() => {
           if (draft.trim() === "") setDraft(String(value));
         }}
-        className={`w-full bg-transparent border-b border-border py-1 ${compact ? "text-right" : "text-left"} font-mono text-sm focus:outline-none focus:border-primary`}
+        className={`mt-1 min-h-10 w-full rounded-md border border-border/75 bg-background/58 px-2.5 py-1 ${compact ? "text-right" : "text-left"} font-mono text-base text-foreground shadow-[0_1px_0_hsl(var(--foreground)/0.04)_inset] focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/45`}
       />
     </div>
   );
