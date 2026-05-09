@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Download, Plus, Share2, Shield, Trash2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { PolyrhythmWheel } from "@/components/metronome/PolyrhythmWheel";
 import type { UseMetronomeReturn } from "@/hooks/useMetronome";
-import { buildDefaultPattern, type BeatPattern, type TimeSignature } from "@/lib/metronome-types";
+import { buildDefaultPattern, type BeatPattern, type MeterDenominator, type TimeSignature } from "@/lib/metronome-types";
 import { clamp, formatTime } from "@/lib/utils";
 
 const SETLIST_STORAGE_KEY = "groove-metronome.setlists.v1";
@@ -32,7 +33,7 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
   const [setlist, setSetlist] = useState<SetlistState>(() => readSetlist());
   const [songName, setSongName] = useState("New song");
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [stageLock, setStageLock] = useState(true);
+  const [stageLock, setStageLock] = useState(false);
   const importRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -127,7 +128,7 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
       <section className="rounded-lg border border-primary/35 bg-card/80 p-4 md:p-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="min-w-0">
-            <span className="tiny-caps text-[10px] text-muted-foreground">Setlist Studio</span>
+            <span className="tiny-caps text-[10px] text-primary">Setlist Studio</span>
             <input
               value={setlist.name}
               onChange={(event) => setSetlist((prev) => ({ ...prev, name: event.target.value }))}
@@ -137,7 +138,7 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
           </div>
           <div className="flex flex-wrap gap-2">
             <StageAction label="Share" icon={<Share2 className="size-4" />} onClick={() => void shareSetlist()} />
-            <StageAction label="Backup" icon={<Download className="size-4" />} onClick={exportSetlist} />
+            <StageAction label="Back up" icon={<Download className="size-4" />} onClick={exportSetlist} />
             <StageAction label="Restore" icon={<Upload className="size-4" />} onClick={() => importRef.current?.click()} />
           </div>
         </div>
@@ -157,11 +158,12 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
       <div className="grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
         <aside className="space-y-4">
           <div className="rounded-lg border border-border bg-card/60 p-4">
-            <span className="tiny-caps text-[10px] text-muted-foreground">Add song from current click</span>
+            <span className="tiny-caps text-[10px] text-muted-foreground">Add current setup</span>
             <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
               <input
                 value={songName}
                 onChange={(event) => setSongName(event.target.value)}
+                placeholder="Song name"
                 className="min-h-11 min-w-0 rounded-md border border-border bg-background/35 px-3 font-mono text-sm outline-none focus:border-primary"
                 aria-label="Song name"
               />
@@ -203,7 +205,7 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
             ))}
             {setlist.songs.length === 0 && (
               <div className="rounded-md border border-border bg-card/40 p-4 text-sm text-muted-foreground">
-                Add the first song from the current metronome settings. This space is built to become the stage view.
+                Add a song from the current metronome, then run the show from the stage deck.
               </div>
             )}
           </div>
@@ -223,6 +225,11 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
           onToggle={toggle}
           onAdjustBpm={adjustBpm}
           onSetBpm={setBpm}
+          onSetTimeSignature={(timeSignature) => {
+            setTimeSignature(timeSignature);
+            setPattern(buildDefaultPattern(timeSignature.numerator, 1));
+          }}
+          onSetSwing={setSwing}
         />
       </div>
     </div>
@@ -243,6 +250,8 @@ function ConcertDeck({
   onToggle,
   onAdjustBpm,
   onSetBpm,
+  onSetTimeSignature,
+  onSetSwing,
 }: {
   active: boolean;
   song: SavedSong | null;
@@ -257,85 +266,19 @@ function ConcertDeck({
   onToggle: () => void;
   onAdjustBpm: (delta: number) => void;
   onSetBpm: (bpm: number) => void;
+  onSetTimeSignature: (timeSignature: TimeSignature) => void;
+  onSetSwing: (swing: number) => void;
 }) {
-  return (
-    <section className="rounded-lg border border-border bg-card/70 p-4 md:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="tiny-caps text-[10px] text-muted-foreground">Concert deck</span>
-        <button
-          type="button"
-          onClick={() => onStageLock(!stageLock)}
-          className={
-            "inline-flex min-h-10 items-center gap-2 rounded-md border px-3 tiny-caps text-[10px] transition-colors " +
-            (stageLock ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground")
-          }
-        >
-          <Shield className="size-4" />
-          {stageLock ? "Stage lock on" : "Stage lock off"}
-        </button>
-      </div>
-
-      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="space-y-5">
-          <div>
-            <span className="tiny-caps text-[10px] text-muted-foreground">Current song</span>
-            <h2 className="mt-2 break-words font-serif text-5xl leading-none md:text-7xl">
-              {song?.name ?? "No song loaded"}
-            </h2>
-            <div className="mt-3 flex flex-wrap gap-2 font-mono text-sm text-muted-foreground">
-              <span>{songCount ? `${songIndex + 1}/${songCount}` : "0/0"}</span>
-              <span>·</span>
-              <span>{state.timeSignature.numerator}/{state.timeSignature.denominator}</span>
-              {nextSong && <span className="truncate">· Next: {nextSong.name}</span>}
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-[1fr_1.4fr_1fr]">
-            <StageButton label="Previous" icon={<ChevronLeft className="size-6" />} disabled={stageLock || songIndex <= 0} onClick={onPrev} />
-            <button
-              type="button"
-              onPointerDown={(event) => { event.preventDefault(); onToggle(); }}
-              className={
-                "min-h-32 rounded-lg border px-6 py-5 font-serif text-5xl transition-colors " +
-                (state.isPlaying
-                  ? "border-destructive bg-destructive/15 text-destructive hover:bg-destructive/20"
-                  : "border-primary bg-primary text-primary-foreground hover:bg-primary/90")
-              }
-            >
-              {state.isPlaying ? "Stop" : "Start"}
-            </button>
-            <StageButton label="Next" icon={<ChevronRight className="size-6" />} disabled={stageLock || songIndex >= songCount - 1} onClick={onNext} />
-          </div>
-        </div>
-
-        <aside className="space-y-4">
-          <div className="rounded-lg border border-border bg-background/35 p-4">
-            <span className="tiny-caps text-[10px] text-muted-foreground">Live BPM</span>
-            <div className="mt-2 font-serif text-6xl leading-none text-primary">{Math.round(state.bpm)}</div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <StageButton label="-1" onClick={() => onAdjustBpm(-1)} compact />
-              <StageButton label="+1" onClick={() => onAdjustBpm(1)} compact />
-              <StageButton label="-5" onClick={() => onAdjustBpm(-5)} compact />
-              <StageButton label="+5" onClick={() => onAdjustBpm(5)} compact />
-            </div>
-          </div>
-          <TapPreview active={active} onSetBpm={onSetBpm} />
-          <div className="rounded-lg border border-border bg-background/35 p-4">
-            <span className="tiny-caps text-[10px] text-muted-foreground">Gig timer</span>
-            <div className="mt-2 font-mono text-3xl tabular">{formatTime(state.practiceSeconds)}</div>
-            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              Tap preview never changes the live tempo until you press Use BPM.
-            </p>
-          </div>
-        </aside>
-      </div>
-    </section>
-  );
-}
-
-function TapPreview({ active, onSetBpm }: { active: boolean; onSetBpm: (bpm: number) => void }) {
   const tapsRef = useRef<number[]>([]);
-  const [preview, setPreview] = useState<{ count: number; bpm: number | null }>({ count: 0, bpm: null });
+  const bpmInputRef = useRef<HTMLInputElement | null>(null);
+  const [tapPreview, setTapPreview] = useState<{ count: number; bpm: number | null }>({ count: 0, bpm: null });
+  const [bpmDraft, setBpmDraft] = useState(String(Math.round(state.bpm)));
+
+  useEffect(() => {
+    if (document.activeElement !== bpmInputRef.current) {
+      setBpmDraft(String(Math.round(state.bpm)));
+    }
+  }, [state.bpm]);
 
   const tap = () => {
     const now = performance.now();
@@ -344,12 +287,12 @@ function TapPreview({ active, onSetBpm }: { active: boolean; onSetBpm: (bpm: num
     taps.push(now);
     if (taps.length > 8) taps.shift();
     if (taps.length < 2) {
-      setPreview({ count: taps.length, bpm: null });
+      setTapPreview({ count: taps.length, bpm: null });
       return;
     }
     const intervals = taps.slice(1).map((time, index) => time - taps[index]);
     const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-    setPreview({ count: taps.length, bpm: clamp(Math.round(60000 / avg), 20, 300) });
+    setTapPreview({ count: taps.length, bpm: clamp(Math.round(60000 / avg), 20, 300) });
   };
 
   useEffect(() => {
@@ -368,12 +311,137 @@ function TapPreview({ active, onSetBpm }: { active: boolean; onSetBpm: (bpm: num
     return () => window.removeEventListener("keydown", handler, { capture: true });
   });
 
+  const setMeter = (numerator: number, denominator: MeterDenominator) => {
+    onSetTimeSignature({ numerator, denominator });
+  };
+
+  const commitBpmDraft = (rawValue = bpmDraft) => {
+    const next = clamp(Number(rawValue) || state.bpm, 20, 300);
+    onSetBpm(next);
+    setBpmDraft(String(Math.round(next)));
+  };
+
+  return (
+    <section className="rounded-lg border border-border bg-card/70 p-4 md:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="tiny-caps text-[10px] text-primary">Stage metronome</span>
+        <button
+          type="button"
+          onClick={() => onStageLock(!stageLock)}
+          className={
+            "inline-flex min-h-10 items-center gap-2 rounded-md border px-3 tiny-caps text-[10px] transition-colors " +
+            (stageLock ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground")
+          }
+        >
+          <Shield className="size-4" />
+          {stageLock ? "Songs locked" : "Lock songs"}
+        </button>
+      </div>
+
+      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_320px]">
+        <div className="space-y-4">
+          <div className="rounded-lg border border-border bg-background/35 p-4">
+            <span className="tiny-caps text-[10px] text-muted-foreground">Song</span>
+            <h2 className="mt-2 break-words font-serif text-4xl leading-none md:text-6xl">
+              {song?.name ?? "No song loaded"}
+            </h2>
+            <div className="mt-3 flex flex-wrap gap-2 font-mono text-sm text-muted-foreground">
+              <span>{songCount ? `${songIndex + 1}/${songCount}` : "0/0"}</span>
+              <span>·</span>
+              <span>{state.timeSignature.numerator}/{state.timeSignature.denominator}</span>
+              {nextSong && <span className="truncate">· Next: {nextSong.name}</span>}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-primary/30 bg-[linear-gradient(145deg,hsl(var(--primary)/0.10),hsl(var(--background)/0.50))] p-3">
+            <PolyrhythmWheel
+              pattern={state.pattern}
+              bpm={state.bpm}
+              isPlaying={state.isPlaying}
+              currentBeat={state.currentBeat}
+              currentPulse={state.currentPulse}
+              onCycleBeatSubdivision={() => {}}
+              onCyclePulseAccent={() => {}}
+              onTapTempo={tap}
+            />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-[1fr_1.45fr_1fr]">
+            <StageButton label="Previous" icon={<ChevronLeft className="size-6" />} disabled={stageLock || songIndex <= 0} onClick={onPrev} />
+            <StagePlayButton playing={state.isPlaying} onToggle={onToggle} />
+            <StageButton label="Next" icon={<ChevronRight className="size-6" />} disabled={stageLock || songIndex >= songCount - 1} onClick={onNext} />
+          </div>
+        </div>
+
+        <aside className="space-y-4">
+          <div className="rounded-lg border border-border bg-background/35 p-4">
+            <span className="tiny-caps text-[10px] text-muted-foreground">Tempo</span>
+            <div className="mt-2 grid grid-cols-[minmax(0,1fr)_5.5rem] items-end gap-3">
+              <div className="font-serif text-6xl leading-none text-primary">{Math.round(state.bpm)}</div>
+              <input
+                ref={bpmInputRef}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={bpmDraft}
+                onChange={(event) => setBpmDraft(event.target.value)}
+                onBlur={(event) => commitBpmDraft(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    commitBpmDraft(event.currentTarget.value);
+                    event.currentTarget.blur();
+                  }
+                }}
+                className="min-h-12 rounded-md border border-border bg-background/55 px-2 text-center font-mono text-lg outline-none focus:border-primary"
+                aria-label="Stage tempo"
+              />
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <StageButton label="-1" onClick={() => onAdjustBpm(-1)} compact />
+              <StageButton label="+1" onClick={() => onAdjustBpm(1)} compact />
+              <StageButton label="-5" onClick={() => onAdjustBpm(-5)} compact />
+              <StageButton label="+5" onClick={() => onAdjustBpm(5)} compact />
+            </div>
+          </div>
+          <div className="rounded-lg border border-border bg-background/35 p-4">
+            <span className="tiny-caps text-[10px] text-muted-foreground">Meter</span>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <StageButton label="4/4" compact onClick={() => setMeter(4, 4)} />
+              <StageButton label="3/4" compact onClick={() => setMeter(3, 4)} />
+              <StageButton label="6/8" compact onClick={() => setMeter(6, 8)} />
+            </div>
+            <label className="mt-3 block">
+              <span className="tiny-caps text-[10px] text-muted-foreground">Swing</span>
+              <input
+                type="range"
+                min={0}
+                max={70}
+                step={5}
+                value={clamp(state.swing, 0, 70)}
+                onChange={(event) => onSetSwing(Number(event.target.value))}
+                className="mt-2 w-full accent-primary"
+                aria-label="Stage swing"
+              />
+            </label>
+          </div>
+          <TapPreview preview={tapPreview} onTap={tap} onSetBpm={onSetBpm} />
+          <div className="rounded-lg border border-border bg-background/35 p-4">
+            <span className="tiny-caps text-[10px] text-muted-foreground">Timer</span>
+            <div className="mt-2 font-mono text-3xl tabular">{formatTime(state.practiceSeconds)}</div>
+          </div>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function TapPreview({ preview, onTap, onSetBpm }: { preview: { count: number; bpm: number | null }; onTap: () => void; onSetBpm: (bpm: number) => void }) {
   return (
     <div className="rounded-lg border border-border bg-background/35 p-4">
       <span className="tiny-caps text-[10px] text-muted-foreground">Tap preview</span>
       <button
         type="button"
-        onPointerDown={(event) => { event.preventDefault(); tap(); }}
+        onPointerDown={(event) => { event.preventDefault(); onTap(); }}
         className="mt-2 min-h-24 w-full rounded-lg border border-primary/60 bg-primary/10 font-serif text-3xl text-primary transition-colors hover:bg-primary/15"
       >
         Tap
@@ -388,6 +456,23 @@ function TapPreview({ active, onSetBpm }: { active: boolean; onSetBpm: (bpm: num
         </Button>
       </div>
     </div>
+  );
+}
+
+function StagePlayButton({ playing, onToggle }: { playing: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onPointerDown={(event) => { event.preventDefault(); onToggle(); }}
+      className={
+        "min-h-24 rounded-lg border px-6 py-5 font-serif text-5xl transition-colors " +
+        (playing
+          ? "border-destructive bg-destructive/15 text-destructive hover:bg-destructive/20"
+          : "border-primary bg-primary text-primary-foreground hover:bg-primary/90")
+      }
+    >
+      {playing ? "Stop" : "Start"}
+    </button>
   );
 }
 

@@ -151,7 +151,7 @@ export function AnalyzerPage({
       <div className="rounded-lg border border-border bg-card/55 p-5">
         <h2 className="font-serif text-3xl">Media & MIDI Lab</h2>
         <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-          Import up to five files, listen in place, inspect tempo guesses, add markers, then explicitly apply a tempo or meter only when you choose.
+          Import up to five files, hear them in place, mark sections, then apply tempo or meter only when you choose.
         </p>
       </div>
 
@@ -206,9 +206,9 @@ export function AnalyzerPage({
 
       {items.length === 0 && !busy && (
         <div className="rounded-md border border-border bg-card/40 p-6 text-sm text-muted-foreground">
-          <p className="font-medium text-foreground mb-1">What this does</p>
+          <p className="font-medium text-foreground mb-1">Drop audio or MIDI</p>
           <p className="text-xs leading-relaxed">
-            Audio files get a playable waveform, marker lane, tempo candidates, and an optional meter guess. MIDI files get playback, tempo map, sections, key/chord clues, and track summaries.
+            Audio shows waveform, markers, and tempo candidates. MIDI shows playback, tempo map, sections, harmony clues, and track summaries.
           </p>
         </div>
       )}
