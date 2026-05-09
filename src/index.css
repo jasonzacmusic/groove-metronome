@@ -153,6 +153,25 @@
   color: hsl(220 19% 8%);
 }
 
+.metronome-select {
+  width: 100%;
+  min-height: 2.75rem;
+  border-radius: 0.375rem;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--ink));
+  color: hsl(var(--foreground));
+  padding: 0.55rem 2rem 0.55rem 0.7rem;
+  font-family: var(--app-font-mono);
+  font-size: 0.86rem;
+  line-height: 1.35;
+  outline: none;
+}
+
+.metronome-select:focus {
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.25);
+}
+
 /* Hairline editorial divider with center diamond */
 .editorial-divider {
   display: flex;
