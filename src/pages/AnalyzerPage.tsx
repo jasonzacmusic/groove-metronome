@@ -49,7 +49,7 @@ interface Marker {
   label: string;
 }
 
-type MidiInstrument = "piano" | "guitar" | "drums";
+type MidiInstrument = "keys" | "samplePiano" | "guitar" | "drums";
 
 export function AnalyzerPage({ metronome, active = true, onUseAsBpm, onUseAsTimeSignature }: AnalyzerPageProps) {
   const [items, setItems] = useState<AnalyzerItem[]>([]);
@@ -640,7 +640,7 @@ function MidiPlayer({
   selectedSectionIds: number[];
 }) {
   const [playing, setPlaying] = useState(false);
-  const [instrument, setInstrument] = useState<MidiInstrument>("piano");
+  const [instrument, setInstrument] = useState<MidiInstrument>("keys");
   const disposablesRef = useRef<Tone.ToneAudioNode[]>([]);
   const stopTimerRef = useRef<number | null>(null);
   const loopTimerRef = useRef<number | null>(null);
@@ -734,7 +734,8 @@ function MidiPlayer({
           className="metronome-select max-w-44"
           aria-label="MIDI instrument"
         >
-          <option value="piano" className="bg-background">Sample Piano</option>
+          <option value="keys" className="bg-background">Practice Keys</option>
+          <option value="samplePiano" className="bg-background">Sample Piano</option>
           <option value="guitar" className="bg-background">Clean Guitar</option>
           <option value="drums" className="bg-background">Drums</option>
         </select>
@@ -1042,7 +1043,17 @@ function createMidiInstrument(instrument: MidiInstrument): {
   snare?: Tone.NoiseSynth;
   hat?: Tone.MetalSynth;
 } {
-  if (instrument === "piano") {
+  if (instrument === "keys") {
+    const keys = new Tone.PolySynth(Tone.Synth, {
+      oscillator: { type: "triangle8" },
+      envelope: { attack: 0.004, decay: 0.2, sustain: 0.22, release: 0.26 },
+      volume: -8,
+    });
+    const tone = new Tone.Filter(4200, "lowpass").toDestination();
+    keys.connect(tone);
+    return { nodes: [keys, tone], poly: keys };
+  }
+  if (instrument === "samplePiano") {
     const sampler = new Tone.Sampler({
       urls: {
         A0: "A0.mp3",
