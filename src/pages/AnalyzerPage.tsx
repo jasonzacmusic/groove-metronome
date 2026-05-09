@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { analyzeAudioTempo, type TempoAnalysisResult } from "@/lib/audio-tempo";
-import { analyzeMidi, type MidiAnalysis } from "@/lib/midi-analyzer";
+import { analyzeMidi, type MidiAnalysis, type MidiPreviewNote } from "@/lib/midi-analyzer";
 import { cn } from "@/lib/utils";
 import type { UseMetronomeReturn } from "@/hooks/useMetronome";
 
@@ -375,7 +375,11 @@ function AudioWorkspace({
   onUseAsTimeSignature: (numerator: number, denominator: number) => void;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const clickSynthRef = useRef<Tone.Synth | null>(null);
+  const clickTimerRef = useRef<number | null>(null);
+  const lastClickTimeRef = useRef(-Infinity);
   const [currentTime, setCurrentTime] = useState(0);
+  const [trackClick, setTrackClick] = useState(false);
   const result = item.result;
 
   const duration = result?.durationSec ?? audioRef.current?.duration ?? 0;
@@ -388,7 +392,7 @@ function AudioWorkspace({
         || target instanceof HTMLSelectElement
         || target instanceof HTMLTextAreaElement
         || (target instanceof HTMLElement && target.isContentEditable);
-      if (editable || event.code !== "Space" || !audioRef.current) return;
+      if (editable || event.key.toLowerCase() !== "p" || !audioRef.current) return;
       event.preventDefault();
       if (audioRef.current.paused) void audioRef.current.play();
       else audioRef.current.pause();
@@ -396,6 +400,50 @@ function AudioWorkspace({
     window.addEventListener("keydown", handler, { capture: true });
     return () => window.removeEventListener("keydown", handler, { capture: true });
   }, [active]);
+
+  useEffect(() => {
+    if (!trackClick || !result || !audioRef.current) {
+      if (clickTimerRef.current) window.clearInterval(clickTimerRef.current);
+      clickTimerRef.current = null;
+      return;
+    }
+
+    const anchor = result.onsets.find((onset) => onset > 0.025) ?? 0;
+    const period = 60 / result.bpm;
+
+    clickSynthRef.current ??= new Tone.Synth({
+      oscillator: { type: "triangle" },
+      envelope: { attack: 0.001, decay: 0.035, sustain: 0, release: 0.02 },
+    }).toDestination();
+
+    clickTimerRef.current = window.setInterval(() => {
+      const audio = audioRef.current;
+      const synth = clickSynthRef.current;
+      if (!audio || !synth || audio.paused || audio.ended) return;
+      const t = audio.currentTime;
+      const nextIndex = Math.max(0, Math.ceil((t - anchor - 0.015) / period));
+      let clickAt = anchor + nextIndex * period;
+      const nearbyOnset = nearestOnsetTime(result.onsets, clickAt, Math.min(0.04, period * 0.14));
+      if (nearbyOnset !== undefined) clickAt = nearbyOnset;
+      if (clickAt < t - 0.035 || clickAt > t + 0.055) return;
+      if (Math.abs(clickAt - lastClickTimeRef.current) < period * 0.45) return;
+      const downbeat = nextIndex % 4 === 0;
+      lastClickTimeRef.current = clickAt;
+      synth.triggerAttackRelease(downbeat ? 1320 : 940, downbeat ? "32n" : "64n", Tone.now() + Math.max(0.005, clickAt - t), downbeat ? 0.62 : 0.36);
+    }, 18);
+
+    return () => {
+      if (clickTimerRef.current) window.clearInterval(clickTimerRef.current);
+      clickTimerRef.current = null;
+    };
+  }, [trackClick, result]);
+
+  useEffect(() => {
+    return () => {
+      if (clickTimerRef.current) window.clearInterval(clickTimerRef.current);
+      clickSynthRef.current?.dispose();
+    };
+  }, []);
 
   return (
     <div className="space-y-5">
@@ -406,6 +454,7 @@ function AudioWorkspace({
         className="w-full"
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
         onLoadedMetadata={(e) => setCurrentTime(e.currentTarget.currentTime)}
+        onSeeked={() => { lastClickTimeRef.current = -Infinity; }}
       />
 
       <WaveformLane
@@ -423,6 +472,18 @@ function AudioWorkspace({
         <Button size="sm" variant="outline" onClick={() => onAddMarker(audioRef.current?.currentTime ?? currentTime)}>
           <Tag className="mr-2 size-4" /> Add marker
         </Button>
+        {result && (
+          <Button
+            size="sm"
+            variant={trackClick ? "default" : "outline"}
+            onClick={() => {
+              void Tone.start();
+              setTrackClick((value) => !value);
+            }}
+          >
+            {trackClick ? "Locked click on" : "Locked click off"}
+          </Button>
+        )}
         {result && (
           <Button size="sm" onClick={() => onUseAsBpm(Math.round(result.bpm))}>
             Apply {Math.round(result.bpm)} BPM
@@ -473,16 +534,10 @@ function AudioReadout({ result, onUseAsBpm }: { result: TempoAnalysisResult; onU
         {result.explanation}
       </div>
       <div className="rounded-md border border-border bg-background/45 p-3">
-        <div className="tiny-caps mb-2 text-[10px] text-muted-foreground">Set tempo</div>
+        <div className="tiny-caps mb-2 text-[10px] text-muted-foreground">Fine tune tempo</div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => onUseAsBpm(Math.round(result.bpm / 2))}>
-            Half {Math.round(result.bpm / 2)}
-          </Button>
           <Button size="sm" onClick={() => onUseAsBpm(Math.round(result.bpm))}>
             Use {Math.round(result.bpm)}
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => onUseAsBpm(Math.round(result.bpm * 2))}>
-            Double {Math.round(result.bpm * 2)}
           </Button>
           <input
             value={customBpm}
@@ -527,10 +582,22 @@ function MidiWorkspace({
 }) {
   const analysis = item.result;
   const ts = analysis?.timeSignatures[0];
+  const [selectedSectionIds, setSelectedSectionIds] = useState<number[]>([]);
+  const [splitMidi, setSplitMidi] = useState(60);
+
+  useEffect(() => {
+    setSelectedSectionIds([]);
+  }, [item.id]);
 
   return (
     <div className="space-y-5">
-      <MidiPlayer file={item.file} durationSec={analysis?.durationSec ?? 0} active={active} />
+      <MidiPlayer
+        file={item.file}
+        durationSec={analysis?.durationSec ?? 0}
+        active={active}
+        analysis={analysis}
+        selectedSectionIds={selectedSectionIds}
+      />
 
       {analysis ? (
         <>
@@ -544,7 +611,13 @@ function MidiWorkspace({
               </Button>
             )}
           </div>
-          <MidiReadout analysis={analysis} />
+          <MidiReadout
+            analysis={analysis}
+            selectedSectionIds={selectedSectionIds}
+            onSectionSelect={setSelectedSectionIds}
+            splitMidi={splitMidi}
+            onSplitMidiChange={setSplitMidi}
+          />
         </>
       ) : (
         <LoadingAnalysis label="Reading MIDI…" />
@@ -553,17 +626,34 @@ function MidiWorkspace({
   );
 }
 
-function MidiPlayer({ file, durationSec, active }: { file: File; durationSec: number; active: boolean }) {
+function MidiPlayer({
+  file,
+  durationSec,
+  active,
+  analysis,
+  selectedSectionIds,
+}: {
+  file: File;
+  durationSec: number;
+  active: boolean;
+  analysis?: MidiAnalysis;
+  selectedSectionIds: number[];
+}) {
   const [playing, setPlaying] = useState(false);
   const [instrument, setInstrument] = useState<MidiInstrument>("piano");
   const disposablesRef = useRef<Tone.ToneAudioNode[]>([]);
   const stopTimerRef = useRef<number | null>(null);
+  const loopTimerRef = useRef<number | null>(null);
+  const playingRef = useRef(false);
 
   const stop = () => {
     disposablesRef.current.forEach((node) => node.dispose());
     disposablesRef.current = [];
     if (stopTimerRef.current) window.clearTimeout(stopTimerRef.current);
     stopTimerRef.current = null;
+    if (loopTimerRef.current) window.clearTimeout(loopTimerRef.current);
+    loopTimerRef.current = null;
+    playingRef.current = false;
     setPlaying(false);
   };
 
@@ -577,7 +667,7 @@ function MidiPlayer({ file, durationSec, active }: { file: File; durationSec: nu
         || target instanceof HTMLSelectElement
         || target instanceof HTMLTextAreaElement
         || (target instanceof HTMLElement && target.isContentEditable);
-      if (editable || event.code !== "Space") return;
+      if (editable || event.key.toLowerCase() !== "p") return;
       event.preventDefault();
       void play();
     };
@@ -593,27 +683,42 @@ function MidiPlayer({ file, durationSec, active }: { file: File; durationSec: nu
     }
     await Tone.start();
     const midi = new Midi(await file.arrayBuffer());
-    const now = Tone.now() + 0.08;
     const synths = createMidiInstrument(instrument);
+    await Tone.loaded();
     disposablesRef.current = synths.nodes;
-    const notes = midi.tracks.flatMap((track) => track.notes.map((note) => ({
+    const sourceNotes = midi.tracks.flatMap((track) => track.notes.map((note) => ({
       time: note.time,
       duration: note.duration,
       name: note.name,
       midi: note.midi,
       velocity: note.velocity,
       channel: track.channel,
-    }))).slice(0, 3500);
-    for (const note of notes) {
-      const velocity = Math.max(0.08, note.velocity);
-      if (instrument === "drums") {
-        triggerDrum(synths, note.midi, now + note.time, velocity);
-      } else {
-        synths.poly?.triggerAttackRelease(note.name, Math.max(0.03, note.duration), now + note.time, velocity);
+    }))).slice(0, 5000);
+    const loopNotes = selectedSectionIds.length > 0 && analysis
+      ? notesForSelectedSections(sourceNotes, analysis.sections.filter((section) => selectedSectionIds.includes(section.index)))
+      : { notes: sourceNotes, duration: midi.duration };
+
+    const schedule = () => {
+      const now = Tone.now() + 0.08;
+      for (const note of loopNotes.notes) {
+        const velocity = Math.max(0.08, note.velocity);
+        if (instrument === "drums") {
+          triggerDrum(synths, note.midi, now + note.time, velocity);
+        } else {
+          synths.poly?.triggerAttackRelease(note.name, Math.max(0.03, note.duration), now + note.time, velocity);
+        }
       }
-    }
+      if (selectedSectionIds.length > 0 && playingRef.current) {
+        loopTimerRef.current = window.setTimeout(schedule, Math.max(700, (loopNotes.duration + 0.12) * 1000));
+      }
+    };
+
+    playingRef.current = true;
+    schedule();
     setPlaying(true);
-    stopTimerRef.current = window.setTimeout(stop, Math.max(800, (midi.duration + 0.5) * 1000));
+    if (selectedSectionIds.length === 0) {
+      stopTimerRef.current = window.setTimeout(stop, Math.max(800, (midi.duration + 0.5) * 1000));
+    }
   };
 
   return (
@@ -629,17 +734,34 @@ function MidiPlayer({ file, durationSec, active }: { file: File; durationSec: nu
           className="metronome-select max-w-44"
           aria-label="MIDI instrument"
         >
-          <option value="piano" className="bg-background">Salamander Piano</option>
+          <option value="piano" className="bg-background">Sample Piano</option>
           <option value="guitar" className="bg-background">Clean Guitar</option>
           <option value="drums" className="bg-background">Drums</option>
         </select>
         <span className="font-mono text-xs text-muted-foreground">{formatClock(durationSec)}</span>
+        {selectedSectionIds.length > 0 && (
+          <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-1 font-mono text-[10px] text-primary">
+            looping {selectedSectionIds.length} section{selectedSectionIds.length === 1 ? "" : "s"}
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-function MidiReadout({ analysis }: { analysis: MidiAnalysis }) {
+function MidiReadout({
+  analysis,
+  selectedSectionIds,
+  onSectionSelect,
+  splitMidi,
+  onSplitMidiChange,
+}: {
+  analysis: MidiAnalysis;
+  selectedSectionIds: number[];
+  onSectionSelect: (ids: number[]) => void;
+  splitMidi: number;
+  onSplitMidiChange: (midi: number) => void;
+}) {
   const ts = analysis.timeSignatures[0];
   return (
     <div className="space-y-4">
@@ -659,14 +781,43 @@ function MidiReadout({ analysis }: { analysis: MidiAnalysis }) {
       <div className="rounded-md border border-border bg-muted/20 p-3 text-xs leading-relaxed text-muted-foreground">
         {analysis.explanation}
       </div>
+      <MidiPianoPreview notes={analysis.previewNotes} splitMidi={splitMidi} onSplitMidiChange={onSplitMidiChange} />
       {analysis.sections.length > 0 && (
         <div>
-          <div className="tiny-caps mb-2 text-[10px] text-muted-foreground">Musical sections</div>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="tiny-caps text-[10px] text-muted-foreground">Musical sections</div>
+            <div className="font-mono text-[10px] text-muted-foreground">Command-click sections to build a loop</div>
+          </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {analysis.sections.map((section) => (
-              <div key={section.index} className="rounded-md border border-border bg-muted/20 p-3">
+              <button
+                key={section.index}
+                type="button"
+                onClick={(event) => {
+                  if (event.metaKey || event.ctrlKey) {
+                    const exists = selectedSectionIds.includes(section.index);
+                    onSectionSelect(exists
+                      ? selectedSectionIds.filter((id) => id !== section.index)
+                      : [...selectedSectionIds, section.index]);
+                  } else {
+                    onSectionSelect(selectedSectionIds.length === 1 && selectedSectionIds[0] === section.index ? [] : [section.index]);
+                  }
+                }}
+                className={cn(
+                  "rounded-md border p-3 text-left transition-colors",
+                  selectedSectionIds.includes(section.index) ? "border-primary bg-primary/10 ring-1 ring-primary/30" : "border-border bg-muted/20 hover:border-primary/40",
+                )}
+                style={{ borderLeftColor: midiSectionColor(section.colorIndex), borderLeftWidth: 5 }}
+              >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-serif text-lg">{section.label}</span>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      className="size-3 rounded-full"
+                      style={{ backgroundColor: midiSectionColor(section.colorIndex) }}
+                      aria-hidden="true"
+                    />
+                    <span className="truncate font-serif text-lg">{section.label}</span>
+                  </span>
                   <span className="font-mono text-xs text-primary">{section.bpm.toFixed(1)} BPM</span>
                 </div>
                 <div className="mt-2 grid grid-cols-3 gap-2 font-mono text-[10px] text-muted-foreground">
@@ -677,7 +828,7 @@ function MidiReadout({ analysis }: { analysis: MidiAnalysis }) {
                   <span>{section.keyEstimate.tonic} {section.keyEstimate.mode}</span>
                   <span>{section.density.toFixed(1)} n/s</span>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -710,6 +861,80 @@ function MidiReadout({ analysis }: { analysis: MidiAnalysis }) {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MidiPianoPreview({
+  notes,
+  splitMidi,
+  onSplitMidiChange,
+}: {
+  notes: MidiPreviewNote[];
+  splitMidi: number;
+  onSplitMidiChange: (midi: number) => void;
+}) {
+  const firstKey = 48;
+  const lastKey = 84;
+  const keys = Array.from({ length: lastKey - firstKey + 1 }, (_, index) => firstKey + index);
+  const activity = new Map<number, number>();
+  notes.forEach((note) => {
+    const current = activity.get(note.midi) ?? 0;
+    activity.set(note.midi, current + note.durationSec * Math.max(0.08, note.velocity));
+  });
+  const maxActivity = Math.max(...Array.from(activity.values()), 0.01);
+  const leftCount = notes.filter((note) => note.midi <= splitMidi).length;
+  const rightCount = Math.max(0, notes.length - leftCount);
+
+  return (
+    <div className="rounded-md border border-border bg-background/45 p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="tiny-caps text-[10px] text-muted-foreground">Piano map</div>
+          <div className="font-mono text-[10px] text-muted-foreground">
+            Split at {midiName(splitMidi)} · Shift-click or Command-click a key to move it
+          </div>
+        </div>
+        <div className="flex gap-2 font-mono text-[10px] text-muted-foreground">
+          <span className="rounded-full bg-primary/15 px-2 py-1 text-primary">LH {leftCount}</span>
+          <span className="rounded-full bg-accent/15 px-2 py-1 text-accent">RH {rightCount}</span>
+        </div>
+      </div>
+      <div className="relative h-24 overflow-hidden rounded-md border border-border bg-muted/20 p-1">
+        <div className="flex h-full gap-px">
+          {keys.map((midi) => {
+            const black = [1, 3, 6, 8, 10].includes(midi % 12);
+            const level = Math.min(1, (activity.get(midi) ?? 0) / maxActivity);
+            const handClass = midi <= splitMidi ? "bg-primary" : "bg-accent";
+            return (
+              <button
+                key={midi}
+                type="button"
+                title={`${midiName(midi)} ${midi <= splitMidi ? "left hand" : "right hand"}`}
+                onClick={(event) => {
+                  if (event.shiftKey || event.metaKey || event.ctrlKey) onSplitMidiChange(midi);
+                }}
+                className={cn(
+                  "relative h-full flex-1 rounded-sm border transition-transform hover:-translate-y-0.5",
+                  black ? "border-background bg-foreground/85" : "border-border bg-card",
+                  midi === splitMidi && "ring-2 ring-primary",
+                )}
+                aria-label={`Set split to ${midiName(midi)}`}
+              >
+                <span
+                  className={cn("absolute inset-x-0 bottom-0 rounded-sm opacity-70", handClass)}
+                  style={{ height: `${Math.max(5, level * 78)}%` }}
+                />
+                {midi % 12 === 0 && (
+                  <span className="absolute bottom-1 left-1/2 -translate-x-1/2 font-mono text-[8px] text-muted-foreground">
+                    {midiName(midi)}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -770,6 +995,44 @@ function WaveformLane({
       </div>
     </div>
   );
+}
+
+type MidiScheduledNote = {
+  time: number;
+  duration: number;
+  name: string;
+  midi: number;
+  velocity: number;
+  channel: number;
+};
+
+function notesForSelectedSections(
+  notes: MidiScheduledNote[],
+  sections: MidiAnalysis["sections"],
+): { notes: MidiScheduledNote[]; duration: number } {
+  if (sections.length === 0) {
+    const duration = notes.reduce((max, note) => Math.max(max, note.time + note.duration), 0);
+    return { notes, duration };
+  }
+  const ordered = [...sections].sort((a, b) => a.startSec - b.startSec);
+  let offset = 0;
+  const looped: MidiScheduledNote[] = [];
+  for (const section of ordered) {
+    const sectionDuration = Math.max(0.15, section.endSec - section.startSec);
+    for (const note of notes) {
+      if (note.time + note.duration < section.startSec || note.time > section.endSec) continue;
+      const clippedStart = Math.max(note.time, section.startSec);
+      const clippedEnd = Math.min(note.time + note.duration, section.endSec);
+      if (clippedEnd <= clippedStart) continue;
+      looped.push({
+        ...note,
+        time: offset + clippedStart - section.startSec,
+        duration: Math.max(0.03, clippedEnd - clippedStart),
+      });
+    }
+    offset += sectionDuration;
+  }
+  return { notes: looped.slice(0, 3500), duration: Math.max(0.15, offset) };
 }
 
 function createMidiInstrument(instrument: MidiInstrument): {
@@ -860,6 +1123,39 @@ function formatClock(sec: number): string {
   const minutes = Math.floor(sec / 60);
   const seconds = Math.floor(sec % 60);
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function midiName(midi: number): string {
+  const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  return `${names[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
+}
+
+function midiSectionColor(index: number): string {
+  const colors = [
+    "hsl(var(--primary))",
+    "hsl(var(--accent))",
+    "hsl(var(--amber))",
+    "hsl(338 82% 66%)",
+    "hsl(210 92% 70%)",
+    "hsl(var(--secondary))",
+    "hsl(var(--ring))",
+    "hsl(var(--foreground))",
+  ];
+  return colors[((index % colors.length) + colors.length) % colors.length];
+}
+
+function nearestOnsetTime(onsets: number[], target: number, tolerance: number): number | undefined {
+  let best: number | undefined;
+  let bestDistance = tolerance;
+  for (const onset of onsets) {
+    const distance = Math.abs(onset - target);
+    if (distance < bestDistance) {
+      best = onset;
+      bestDistance = distance;
+    }
+    if (onset > target + tolerance) break;
+  }
+  return best;
 }
 
 function markersFromAudio(result: TempoAnalysisResult): Marker[] {

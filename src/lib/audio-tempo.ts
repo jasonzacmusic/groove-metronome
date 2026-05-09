@@ -67,7 +67,7 @@ export async function analyzeAudioTempo(file: File): Promise<TempoAnalysisResult
   }
 
   const onsetEnv = computeOnsetEnvelope(mono, sr);
-  const onsetTimes = pickOnsets(onsetEnv, sr);
+  const onsetTimes = snapOnsetsToZeroCrossings(mono, sr, pickOnsets(onsetEnv, sr));
 
   const { bpm, confidence, candidates } = estimateBpm(onsetEnv, onsetTimes, sr, audioBuffer.duration);
   const refined = normalizeMusicalBpm(refineBpmByIoi(onsetTimes, bpm), candidates);
@@ -250,6 +250,29 @@ function pickOnsets(env: Float32Array, sr: number): number[] {
     }
   }
   return onsets;
+}
+
+function snapOnsetsToZeroCrossings(mono: Float32Array, sr: number, onsets: number[]): number[] {
+  const search = Math.max(4, Math.round(sr * 0.008));
+  const snapped: number[] = [];
+  for (const onset of onsets) {
+    const center = Math.max(1, Math.min(mono.length - 2, Math.round(onset * sr)));
+    let bestIndex = center;
+    let bestScore = Infinity;
+    for (let i = Math.max(1, center - search); i <= Math.min(mono.length - 2, center + search); i++) {
+      const crosses = (mono[i - 1] <= 0 && mono[i] >= 0) || (mono[i - 1] >= 0 && mono[i] <= 0);
+      if (!crosses) continue;
+      const localEnergy = Math.abs(mono[i - 2] ?? 0) + Math.abs(mono[i - 1]) + Math.abs(mono[i]) + Math.abs(mono[i + 1]) + Math.abs(mono[i + 2] ?? 0);
+      const distance = Math.abs(i - center) / search;
+      const score = distance - localEnergy * 0.08;
+      if (score < bestScore) {
+        bestScore = score;
+        bestIndex = i;
+      }
+    }
+    snapped.push(bestIndex / sr);
+  }
+  return snapped;
 }
 
 function estimateBpm(

@@ -25,6 +25,8 @@ export interface MidiTimeSignatureChange {
 export interface MidiSection {
   index: number;
   label: string;
+  family: string;
+  colorIndex: number;
   startSec: number;
   endSec: number;
   estimatedBars: number;
@@ -40,6 +42,13 @@ export interface MidiMarker {
   timeSec: number;
   label: string;
   kind: "section" | "repeat" | "tempo" | "meter";
+}
+
+export interface MidiPreviewNote {
+  timeSec: number;
+  durationSec: number;
+  midi: number;
+  velocity: number;
 }
 
 export interface MidiAnalysis {
@@ -62,6 +71,7 @@ export interface MidiAnalysis {
   tracks: MidiTrackSummary[];
   sections: MidiSection[];
   markers: MidiMarker[];
+  previewNotes: MidiPreviewNote[];
   /** Free-form summary string for the UI. */
   explanation: string;
 }
@@ -141,6 +151,10 @@ export async function analyzeMidi(file: File): Promise<MidiAnalysis> {
   const keyEstimate = estimateKey(pitchClassDuration);
   const sections = buildSections(allNotes, timeSignatures, tempos, weightedBpm || medianBpm || 120, midi.duration);
   const markers = buildMidiMarkers(sections, tempos, timeSignatures);
+  const previewNotes = allNotes
+    .sort((a, b) => a.time - b.time || a.midi - b.midi)
+    .slice(0, 1800)
+    .map((note) => ({ timeSec: note.time, durationSec: note.duration, midi: note.midi, velocity: note.velocity }));
 
   let explanation = `${midi.tracks.length} tracks, ${totalNotes} notes, ` +
     `${(midi.duration).toFixed(1)}s. `;
@@ -172,6 +186,7 @@ export async function analyzeMidi(file: File): Promise<MidiAnalysis> {
     tracks,
     sections,
     markers,
+    previewNotes,
     explanation,
   };
 }
@@ -203,6 +218,8 @@ function buildSections(
   const sectionBars = 8;
   const sectionSec = Math.max(barSec * sectionBars, Math.min(12, durationSec || 12));
   const sections: MidiSection[] = [];
+  const familyFingerprints: number[][] = [];
+  const familyLabels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
   for (let start = 0, index = 1; start < durationSec || (durationSec === 0 && index === 1); start += sectionSec, index++) {
     const end = Math.min(durationSec, start + sectionSec);
@@ -215,13 +232,19 @@ function buildSections(
     const keyEstimate = regionNotes.length > 0 ? estimateKey(pitchClassDuration) : { tonic: "—", mode: "major" as const, correlation: 0 };
     const span = Math.max(0.01, end - start);
     const fingerprint = sectionFingerprint(regionNotes, start, end);
-    const repeatedFrom = findSimilarSection(sections, fingerprint);
+    const familyIndex = findSimilarFamily(familyFingerprints, fingerprint);
+    const resolvedFamily = familyIndex >= 0 ? familyIndex : familyFingerprints.push(fingerprint) - 1;
+    const family = familyLabels[resolvedFamily] ?? `X${resolvedFamily + 1}`;
+    const repeatedFrom = sections.find((section) => section.family === family)?.index;
+    const role = sectionRole(index, start, durationSec, regionNotes.length / span, repeatedFrom !== undefined);
     const label = repeatedFrom !== undefined
-      ? `Repeat of Part ${repeatedFrom}`
-      : `Part ${index}`;
+      ? `${role} ${family} returns`
+      : `${role} ${family}`;
     sections.push({
       index,
       label,
+      family,
+      colorIndex: resolvedFamily % 8,
       startSec: start,
       endSec: end,
       estimatedBars: Math.max(1, Math.round(span / barSec)),
@@ -248,26 +271,21 @@ function sectionFingerprint(notes: { time: number; midi: number }[], start: numb
   return bins.map((value) => value / max);
 }
 
-function findSimilarSection(existing: MidiSection[], fingerprint: number[]): number | undefined {
-  for (const section of existing) {
-    const labelScore = section.topChord === "—" ? 0 : 0.15;
-    const score = cosineSimilarity(sectionFingerprintProxy(section), fingerprint) + labelScore;
-    if (score > 0.86) return section.repeatedFrom ?? section.index;
+function findSimilarFamily(existing: number[][], fingerprint: number[]): number {
+  for (let index = 0; index < existing.length; index++) {
+    const score = cosineSimilarity(existing[index], fingerprint);
+    if (score > 0.82) return index;
   }
-  return undefined;
+  return -1;
 }
 
-function sectionFingerprintProxy(section: MidiSection): number[] {
-  const rootIndex = PITCH_NAMES.findIndex((name) => section.topChord.startsWith(name));
-  const bins = new Array(12).fill(0);
-  if (rootIndex >= 0) {
-    bins[rootIndex] = 1;
-    bins[(rootIndex + (section.topChord.endsWith("m") ? 3 : 4)) % 12] = 0.7;
-    bins[(rootIndex + 7) % 12] = 0.8;
-  }
-  const tonic = PITCH_NAMES.indexOf(section.keyEstimate.tonic);
-  if (tonic >= 0) bins[tonic] += 0.6;
-  return bins;
+function sectionRole(index: number, start: number, durationSec: number, density: number, repeat: boolean): string {
+  if (repeat) return "Return";
+  if (index === 1 && start < 1) return density < 1 ? "Intro" : "Opening";
+  if (durationSec - start < Math.max(8, durationSec * 0.18)) return "Ending";
+  if (density < 0.7) return "Break";
+  if (density > 8) return "Busy theme";
+  return "Section";
 }
 
 function cosineSimilarity(a: number[], b: number[]): number {

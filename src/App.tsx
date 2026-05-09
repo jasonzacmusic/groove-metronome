@@ -44,13 +44,13 @@ export default function App() {
         || target instanceof HTMLSelectElement
         || target instanceof HTMLTextAreaElement
         || (target instanceof HTMLElement && target.isContentEditable);
-      if (editable || event.code !== "Space" || tab !== "metronome") return;
+      if (editable || event.code !== "Space") return;
       event.preventDefault();
       metronome.toggle();
     };
     window.addEventListener("keydown", handler, { capture: true });
     return () => window.removeEventListener("keydown", handler, { capture: true });
-  }, [metronome, tab]);
+  }, [metronome]);
 
   return (
     <div data-theme={theme} className="relative min-h-full bg-background text-foreground overflow-x-hidden">
