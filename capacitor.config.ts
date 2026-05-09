@@ -2,7 +2,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
   appId: "com.groovelab.metronome",
-  appName: "Groove Metronome",
+  appName: "NSM Groove Metronome",
   webDir: "dist/public",
   server: {
     androidScheme: "https",

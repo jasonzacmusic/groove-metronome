@@ -47,27 +47,27 @@
 }
 
 :root, .dark {
-  /* Concert black — high-contrast ivory, teal, and restrained gold. */
-  --graphite: 220 19% 6%;
-  --ink: 220 17% 10%;
-  --amber: 43 88% 62%;
-  --slate-cyan: 181 47% 61%;
+  /* Stage midnight — clear ivory, electric mint, and bright cue-gold. */
+  --graphite: 230 26% 5%;
+  --ink: 228 22% 9%;
+  --amber: 48 96% 60%;
+  --slate-cyan: 172 78% 58%;
 
-  --background: 220 19% 6%;
-  --foreground: 48 32% 93%;
-  --border: 214 18% 23%;
-  --card: 220 17% 10%;
-  --card-foreground: 48 32% 93%;
-  --popover: 220 18% 8%;
-  --popover-foreground: 48 32% 93%;
-  --primary: 43 88% 62%;
-  --primary-foreground: 220 22% 8%;
-  --secondary: 205 23% 18%;
-  --secondary-foreground: 48 32% 93%;
-  --muted: 218 16% 15%;
-  --muted-foreground: 210 16% 72%;
-  --accent: 181 47% 61%;
-  --accent-foreground: 220 22% 8%;
+  --background: 230 26% 5%;
+  --foreground: 48 34% 94%;
+  --border: 226 18% 27%;
+  --card: 228 22% 9%;
+  --card-foreground: 48 34% 94%;
+  --popover: 228 24% 7%;
+  --popover-foreground: 48 34% 94%;
+  --primary: 48 96% 60%;
+  --primary-foreground: 230 28% 7%;
+  --secondary: 217 26% 18%;
+  --secondary-foreground: 48 34% 94%;
+  --muted: 225 19% 14%;
+  --muted-foreground: 209 18% 74%;
+  --accent: 172 78% 58%;
+  --accent-foreground: 230 28% 7%;
   --destructive: 355 72% 62%;
   --destructive-foreground: 48 32% 96%;
   --input: 218 16% 16%;
@@ -140,9 +140,10 @@
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(180deg, hsla(181, 47%, 61%, 0.10), transparent 34%),
-    linear-gradient(135deg, hsla(214, 55%, 30%, 0.16), transparent 45%),
-    repeating-linear-gradient(90deg, hsla(214, 18%, 35%, 0.045) 0 1px, transparent 1px 96px);
+    linear-gradient(180deg, hsla(172, 78%, 58%, 0.10), transparent 34%),
+    linear-gradient(135deg, hsla(252, 68%, 48%, 0.13), transparent 42%),
+    linear-gradient(225deg, hsla(48, 96%, 60%, 0.07), transparent 38%),
+    repeating-linear-gradient(90deg, hsla(224, 28%, 42%, 0.045) 0 1px, transparent 1px 96px);
   z-index: 0;
 }
 

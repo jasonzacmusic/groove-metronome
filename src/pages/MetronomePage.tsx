@@ -31,8 +31,8 @@ import { clamp, formatTime } from "@/lib/utils";
 const SETLIST_STORAGE_KEY = "groove-metronome.setlists.v1";
 
 const MODE_OPTIONS: Array<{ id: MetronomeView; label: string; detail: string }> = [
-  { id: "beatmap", label: "Beat Map", detail: "per-beat subdivisions" },
   { id: "wheel", label: "Wheel", detail: "circular pulse view" },
+  { id: "beatmap", label: "Beat Map", detail: "per-beat subdivisions" },
   { id: "levels", label: "Levels", detail: "accent strength" },
   { id: "polyrhythm", label: "Polyrhythm", detail: "LCM grid" },
 ];
@@ -85,6 +85,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
 
   const [targetMinutes, setTargetMinutes] = useState(5);
   const [selectedBeat, setSelectedBeat] = useState<number | null>(null);
+  const [visualAssist, setVisualAssist] = useState(false);
   const [songName, setSongName] = useState("New song");
   const [setlist, setSetlist] = useState<SetlistState>(() => {
     try {
@@ -137,7 +138,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
     setSwing(0);
     setPattern(buildDefaultPattern(4, 1));
     setPolyrhythm({ enabled: false, against: 3 });
-    onViewChange("beatmap");
+    onViewChange("wheel");
   };
 
   const handleViewChange = (next: MetronomeView) => {
@@ -179,12 +180,31 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
         {/* Top digital readout strip */}
         <TempoHeaderStrip bpm={state.bpm} timeSignature={state.timeSignature} pattern={state.pattern} />
 
+        <WheelStage
+          pattern={state.pattern}
+          bpm={state.bpm}
+          isPlaying={state.isPlaying}
+          currentBeat={state.currentBeat}
+          currentPulse={state.currentPulse}
+          visualAssist={visualAssist}
+          onVisualAssistChange={setVisualAssist}
+          onCycleBeatSubdivision={cycleBeatSubdivision}
+          onCyclePulseAccent={cyclePulse}
+        />
+
         <TransportDeck
           state={state}
           onTap={tap}
           onToggle={toggle}
           onAdjustBpm={adjustBpm}
           onSetBpm={setBpm}
+        />
+
+        <NotationStage
+          pattern={state.pattern}
+          timeSignature={state.timeSignature}
+          currentBeat={state.currentBeat}
+          isPlaying={state.isPlaying}
         />
 
         <QuickSetup
@@ -221,10 +241,10 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
           />
         </CollapsiblePanel>
 
-        {/* Hero view */}
+        {/* Mode detail */}
         <div className="relative">
           {view === "beatmap" ? (
-            <BeatSubdivisionEditor
+            <BeatMapRow
               pattern={state.pattern}
               isPlaying={state.isPlaying}
               currentBeat={state.currentBeat}
@@ -239,16 +259,6 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
               })}
               onCyclePulse={cyclePulse}
             />
-          ) : view === "wheel" ? (
-            <PolyrhythmWheel
-              pattern={state.pattern}
-              bpm={state.bpm}
-              isPlaying={state.isPlaying}
-              currentBeat={state.currentBeat}
-              currentPulse={state.currentPulse}
-              onCycleBeatSubdivision={cycleBeatSubdivision}
-              onCyclePulseAccent={cyclePulse}
-            />
           ) : view === "levels" ? (
             <LevelMeters
               pattern={state.pattern}
@@ -258,7 +268,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
               onCycleBeatSubdivision={cycleBeatSubdivision}
               onSetPulseLevel={setPulseLevel}
             />
-          ) : (
+          ) : view === "polyrhythm" ? (
             <PolyrhythmMode
               numerator={state.timeSignature.numerator}
               against={state.polyrhythm.against}
@@ -269,20 +279,24 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
               onToggle={(enabled) => setPolyrhythm({ enabled })}
               onAgainst={(against) => setPolyrhythm({ against, enabled: true })}
             />
+          ) : (
+            <BeatMapRow
+              pattern={state.pattern}
+              isPlaying={state.isPlaying}
+              currentBeat={state.currentBeat}
+              currentPulse={state.currentPulse}
+              onSetSubdivision={(beatIndex, pulses) => applyPatternToBeat(beatIndex, {
+                pulses,
+                accents: Array.from({ length: pulses }, (_, pulseIndex) => {
+                  const existing = state.pattern[beatIndex]?.accents[pulseIndex];
+                  if (existing) return existing;
+                  return "normal";
+                }),
+              })}
+              onCyclePulse={cyclePulse}
+            />
           )}
         </div>
-
-        {/* Notation */}
-        <CollapsiblePanel title="Notation Preview" summary={`${state.timeSignature.numerator}/${state.timeSignature.denominator}`} defaultOpen={false}>
-          <div className="notation-surface border border-border rounded-md px-3 py-3 overflow-x-auto shadow-[0_0_0_1px_hsl(var(--accent)/0.08)]">
-            <NotationPanel
-              pattern={state.pattern}
-              timeSignature={state.timeSignature}
-              currentBeat={state.currentBeat}
-              isPlaying={state.isPlaying}
-            />
-          </div>
-        </CollapsiblePanel>
 
         {/* Pattern tiles (Pro-Metronome style) */}
         <CollapsiblePanel title="Pattern Tiles" summary="Apply rhythm presets" defaultOpen={false}>
@@ -482,6 +496,122 @@ function SectionLabel({ title, hint }: { title: string; hint?: string }) {
       <span className="tiny-caps text-xs text-foreground">{title}</span>
       {hint && <span className="tiny-caps text-[11px] text-muted-foreground/70">{hint}</span>}
     </div>
+  );
+}
+
+function WheelStage({
+  pattern,
+  bpm,
+  isPlaying,
+  currentBeat,
+  currentPulse,
+  visualAssist,
+  onVisualAssistChange,
+  onCycleBeatSubdivision,
+  onCyclePulseAccent,
+}: {
+  pattern: BeatPattern[];
+  bpm: number;
+  isPlaying: boolean;
+  currentBeat: number;
+  currentPulse: number;
+  visualAssist: boolean;
+  onVisualAssistChange: (enabled: boolean) => void;
+  onCycleBeatSubdivision: (beatIndex: number) => void;
+  onCyclePulseAccent: (beatIndex: number, pulseIndex: number) => void;
+}) {
+  const activeBeat = currentBeat >= 0 ? pattern[currentBeat] : null;
+  const activeAccent = activeBeat && currentPulse >= 0 ? activeBeat.accents[currentPulse] ?? "normal" : "normal";
+  const flashColor = accentColor(activeAccent, true);
+
+  return (
+    <div className="relative overflow-hidden rounded-lg border border-border/70 bg-card/55 p-4 md:p-5">
+      {visualAssist && isPlaying && (
+        <div
+          className="pointer-events-none absolute inset-0 transition-colors duration-100"
+          style={{
+            background: `radial-gradient(circle at 50% 38%, ${flashColor}, transparent 48%)`,
+            opacity: 0.26,
+          }}
+        />
+      )}
+      <div className="relative grid grid-cols-1 lg:grid-cols-[minmax(280px,440px)_minmax(0,1fr)] gap-5 items-center">
+        <PolyrhythmWheel
+          pattern={pattern}
+          bpm={bpm}
+          isPlaying={isPlaying}
+          currentBeat={currentBeat}
+          currentPulse={currentPulse}
+          onCycleBeatSubdivision={onCycleBeatSubdivision}
+          onCyclePulseAccent={onCyclePulseAccent}
+        />
+        <div className="space-y-4">
+          <div>
+            <span className="tiny-caps text-xs text-muted-foreground">Always-on wheel</span>
+            <h2 className="mt-2 font-serif text-3xl md:text-4xl leading-none text-foreground">
+              Count in color.
+            </h2>
+            <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
+              The wheel stays visible while you edit beat maps, accents, levels, and polyrhythms.
+            </p>
+          </div>
+          <label className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-background/35 px-3 py-3">
+            <span>
+              <span className="tiny-caps block text-xs text-foreground">Visual Flash Assist</span>
+              <span className="mt-1 block text-xs text-muted-foreground">Full-stage pulse for silent or noisy practice rooms.</span>
+            </span>
+            <Switch checked={visualAssist} onCheckedChange={onVisualAssistChange} />
+          </label>
+          <div className="grid grid-cols-4 gap-2">
+            {pattern.map((beat, index) => {
+              const active = isPlaying && currentBeat === index;
+              return (
+                <div
+                  key={index}
+                  className="rounded-sm border px-2 py-2 text-center"
+                  style={{
+                    borderColor: active ? "hsl(var(--primary))" : subdivisionColor(beat.pulses, 0.34),
+                    background: active ? `${subdivisionColor(beat.pulses, 0.22)}` : "hsl(var(--background) / 0.3)",
+                  }}
+                >
+                  <span className="font-serif text-xl leading-none">{index + 1}</span>
+                  <span className="tiny-caps block text-[9px] text-muted-foreground">{beat.pulses}p</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NotationStage({
+  pattern,
+  timeSignature,
+  currentBeat,
+  isPlaying,
+}: {
+  pattern: BeatPattern[];
+  timeSignature: TimeSignature;
+  currentBeat: number;
+  isPlaying: boolean;
+}) {
+  return (
+    <section className="rounded-lg border border-border/70 bg-card/55 p-4">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <SectionLabel title="Notation Preview" hint={`${timeSignature.numerator}/${timeSignature.denominator}`} />
+        <span className="tiny-caps text-[10px] text-primary/85">live VexFlow</span>
+      </div>
+      <div className="notation-surface border border-border rounded-md px-3 py-3 overflow-x-auto shadow-[0_0_0_1px_hsl(var(--accent)/0.08)]">
+        <NotationPanel
+          pattern={pattern}
+          timeSignature={timeSignature}
+          currentBeat={currentBeat}
+          isPlaying={isPlaying}
+        />
+      </div>
+    </section>
   );
 }
 
@@ -829,7 +959,7 @@ function SubdivisionPalette({
   );
 }
 
-function BeatSubdivisionEditor({
+function BeatMapRow({
   pattern,
   isPlaying,
   currentBeat,
@@ -845,42 +975,43 @@ function BeatSubdivisionEditor({
   onCyclePulse: (beatIndex: number, pulseIndex: number) => void;
 }) {
   return (
-    <div className="rounded-md border border-border/70 bg-card/60 p-4">
-      <SectionLabel title="Beat Map" hint="subdivision + played pulses" />
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 gap-4">
+    <div className="rounded-lg border border-border/70 bg-card/60 p-4">
+      <SectionLabel title="Beat Map" hint="beats in one row" />
+      <div className="mt-4 overflow-x-auto pb-2">
+        <div className="grid min-w-max auto-cols-[minmax(150px,1fr)] grid-flow-col gap-3">
         {pattern.map((beat, beatIndex) => {
           const activeBeat = isPlaying && currentBeat === beatIndex;
+          const color = subdivisionColor(beat.pulses, activeBeat ? 0.74 : 0.48);
           return (
             <div
               key={beatIndex}
               className={
-                "rounded-md border p-5 transition-colors " +
-                (activeBeat ? "border-accent bg-accent/6" : "border-border/60 bg-background/35")
+                "rounded-md border p-3 transition-colors " +
+                (activeBeat ? "bg-background/65" : "bg-background/35")
               }
+              style={{ borderColor: color }}
             >
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col items-center gap-3">
                   <span
-                    className="relative grid size-16 place-items-center rounded-full border"
+                    className="relative grid size-14 place-items-center rounded-full border"
                     style={{
                       background: subdivisionBackground(beat, activeBeat),
-                      borderColor: activeBeat ? "hsl(var(--accent))" : "hsl(var(--border))",
+                      borderColor: color,
                     }}
                   >
                     <span className="absolute inset-[30%] rounded-full bg-background/90" />
-                    <span className="relative font-serif text-2xl">{beatIndex + 1}</span>
+                    <span className="relative font-serif text-2xl leading-none">{beatIndex + 1}</span>
                   </span>
-                  <div>
-                    <span className="tiny-caps block text-[11px] text-muted-foreground">Beat</span>
-                    <span className="font-mono text-lg tabular">{beat.pulses} pulse{beat.pulses > 1 ? "s" : ""}</span>
-                  </div>
+                <div className="text-center">
+                  <span className="tiny-caps block text-[9px] text-muted-foreground">Beat {beatIndex + 1}</span>
+                  <span className="font-mono text-sm tabular">{beat.pulses} pulse{beat.pulses > 1 ? "s" : ""}</span>
                 </div>
               </div>
               <div className="mt-3">
                 <select
                   value={beat.pulses}
                   onChange={(e) => onSetSubdivision(beatIndex, Number(e.target.value) as SubdivisionCount)}
-                  className="w-full bg-transparent border-b border-border py-2 font-mono text-base focus:outline-none focus:border-primary"
+                  className="metronome-select min-h-10 text-xs"
                   aria-label={`Subdivision for beat ${beatIndex + 1}`}
                 >
                   {SUBDIVISION_OPTIONS.map((n) => (
@@ -898,7 +1029,7 @@ function BeatSubdivisionEditor({
                       key={pulseIndex}
                       type="button"
                       onPointerDown={(e) => { e.preventDefault(); onCyclePulse(beatIndex, pulseIndex); }}
-                      className="min-h-16 rounded-sm border text-center font-mono text-lg transition-colors"
+                      className="min-h-10 rounded-sm border text-center font-mono text-sm transition-colors"
                       style={{
                         borderColor: activePulse ? "hsl(var(--primary))" : "hsl(var(--border))",
                         background: accentColor(accent, activePulse),
@@ -914,6 +1045,7 @@ function BeatSubdivisionEditor({
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );
@@ -1141,6 +1273,20 @@ function lcm(a: number, b: number): number {
   return Math.max(1, Math.abs(Math.round((a * b) / gcd(a, b))));
 }
 
+function subdivisionColor(pulses: number, alpha = 1): string {
+  const palette: Record<number, string> = {
+    1: `hsl(var(--amber) / ${alpha})`,
+    2: `hsl(var(--slate-cyan) / ${alpha})`,
+    3: `hsl(262 83% 70% / ${alpha})`,
+    4: `hsl(146 70% 55% / ${alpha})`,
+    5: `hsl(338 82% 66% / ${alpha})`,
+    6: `hsl(210 88% 64% / ${alpha})`,
+    7: `hsl(24 92% 64% / ${alpha})`,
+    8: `hsl(82 78% 58% / ${alpha})`,
+  };
+  return palette[pulses] ?? `hsl(var(--border) / ${alpha})`;
+}
+
 function accentColor(accent: PulseAccent, active: boolean): string {
   if (active) return "hsl(var(--amber))";
   if (accent === "accent") return "hsl(var(--amber) / 0.72)";
@@ -1162,7 +1308,10 @@ function subdivisionBackground(beat: BeatPattern, active: boolean): string {
     .map((accent, index) => {
       const start = index * slice;
       const end = (index + 1) * slice;
-      return `${accentColor(accent, active)} ${start}% ${end}%`;
+      const color = accent === "normal" || accent === "accent"
+        ? subdivisionColor(beat.pulses, active ? 0.9 : accent === "accent" ? 0.78 : 0.58)
+        : accentColor(accent, active);
+      return `${color} ${start}% ${end}%`;
     })
     .join(", ")})`;
 }

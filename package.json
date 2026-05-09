@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "serve": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "mobile:sync": "pnpm build && npx cap sync",
+    "mobile:ios": "pnpm build && npx cap sync ios && npx cap open ios"
   },
   "dependencies": {
     "@tonejs/midi": "^2.0.28",

@@ -84,7 +84,7 @@ export function PolyrhythmWheel({
   }, [currentBeat, currentPulse, pattern, beatSpan, numerator]);
 
   return (
-    <div className="relative w-full max-w-[440px] mx-auto select-none">
+    <div className="relative w-full max-w-[380px] mx-auto select-none">
       <svg
         viewBox={`0 0 ${VIEW} ${VIEW}`}
         className="block w-full h-auto touch-none"

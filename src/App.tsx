@@ -10,7 +10,7 @@ export type MetronomeView = "beatmap" | "wheel" | "levels" | "polyrhythm";
 export default function App() {
   const metronome = useMetronome();
   const [tab, setTab] = useState<Tab>("metronome");
-  const [view, setView] = useState<MetronomeView>("beatmap");
+  const [view, setView] = useState<MetronomeView>("wheel");
 
   return (
     <div className="relative min-h-full bg-background text-foreground overflow-x-hidden">
@@ -20,16 +20,21 @@ export default function App() {
 
       {/* Slim masthead */}
       <header className="relative z-10 border-b border-border/70">
-        <div className="max-w-6xl mx-auto px-6 md:px-10 py-5 flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-4">
-          <div className="flex items-baseline gap-3">
-            <h1 className="font-serif text-2xl md:text-3xl leading-none tracking-tight text-foreground">
-              Groove
-              <span className="text-primary">·</span>
-              Metronome
-            </h1>
-            <span className="hidden md:inline tiny-caps text-[10px] text-muted-foreground/70">
-              Atelier Edition
-            </span>
+        <div className="max-w-6xl mx-auto px-5 md:px-10 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <img
+              src="/brand/nsm-white.png"
+              alt="Nathaniel School of Music"
+              className="h-9 w-auto shrink-0 object-contain md:h-11"
+            />
+            <div className="min-w-0 border-l border-border/70 pl-3">
+              <h1 className="font-serif text-xl md:text-2xl leading-none tracking-tight text-foreground">
+                Groove Metronome
+              </h1>
+              <p className="mt-1 tiny-caps text-[9px] text-muted-foreground/75 truncate">
+                See it. Count it. Lock it in.
+              </p>
+            </div>
           </div>
 
           <nav className="flex w-full sm:w-auto items-center justify-between sm:justify-start gap-4 sm:gap-5 tiny-caps text-[11px] sm:text-xs">
@@ -58,7 +63,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="relative z-10 max-w-6xl mx-auto px-6 md:px-10 py-8 md:py-12">
+      <main className="relative z-10 max-w-6xl mx-auto px-5 md:px-10 py-6 md:py-10">
         {tab === "metronome" ? (
           <MetronomePage metronome={metronome} view={view} onViewChange={setView} />
         ) : (
