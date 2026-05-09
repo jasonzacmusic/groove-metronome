@@ -110,6 +110,39 @@ function polymeterBeatNumber(tick: number, laneBeatTicks: number, laneNumerator:
   return beat + 1;
 }
 
+function polymeterCycleTicks(lanes: Array<{ numerator: number; denominator: MeterDenominator }>): number {
+  return lanes.reduce((total, lane) => total + Math.max(1, lane.numerator) * (16 / lane.denominator), 0);
+}
+
+function polymeterStepAtTick(
+  absoluteTick: number,
+  lanes: Array<{ numerator: number; denominator: MeterDenominator }>,
+): { laneIndex: number; beatIndex: number; downbeat: boolean } | null {
+  const cycleTicks = polymeterCycleTicks(lanes);
+  if (cycleTicks <= 0) return null;
+
+  const cycleTick = ((absoluteTick % cycleTicks) + cycleTicks) % cycleTicks;
+  let cursor = 0;
+
+  for (let laneIndex = 0; laneIndex < lanes.length; laneIndex++) {
+    const lane = lanes[laneIndex];
+    const beatTicks = 16 / lane.denominator;
+    const span = Math.max(1, lane.numerator) * beatTicks;
+    if (cycleTick >= cursor && cycleTick < cursor + span) {
+      const localTick = cycleTick - cursor;
+      if (Math.abs(localTick % beatTicks) > 0.000001) return null;
+      return {
+        laneIndex,
+        beatIndex: polymeterBeatNumber(localTick, beatTicks, lane.numerator) - 1,
+        downbeat: Math.abs(localTick) < 0.000001,
+      };
+    }
+    cursor += span;
+  }
+
+  return null;
+}
+
 function samplePlaybackRate(pitch: number): number {
   const clamped = Math.max(0, Math.min(100, pitch));
   return 0.82 + (clamped / 100) * 0.36;
@@ -159,8 +192,6 @@ export function useMetronome() {
     polymeterEnabled: false,
     polymeterLanes: [
       { numerator: 4, denominator: 4 },
-      { numerator: 4, denominator: 8 },
-      { numerator: 4, denominator: 16 },
     ],
   });
   const [currentPoly, setCurrentPoly] = useState(-1);
@@ -431,34 +462,28 @@ export function useMetronome() {
         const sixteenthDuration = 15 / bpmRef.current;
         const windowStartTicks = (barCountRef.current * ts.numerator + beatIdx) * primaryBeatTicks;
         const windowEndTicks = windowStartTicks + primaryBeatTicks;
-        poly.polymeterLanes.slice(0, 4).forEach((lane, laneIndex) => {
-          const laneBeatTicks = 16 / lane.denominator;
-          const laneBarTicks = lane.numerator * laneBeatTicks;
-          const firstTick = Math.ceil((windowStartTicks - 0.000001) / laneBeatTicks) * laneBeatTicks;
-          for (let tick = firstTick; tick < windowEndTicks - 0.000001; tick += laneBeatTicks) {
-            const downbeat = Math.abs(tick % laneBarTicks) < 0.000001;
-            const offset = (tick - windowStartTicks) * sixteenthDuration;
-            const laneBeat = polymeterBeatNumber(tick, laneBeatTicks, lane.numerator);
-            if (laneIndex === 0) {
-              const role: ClickRole = downbeat ? "accent" : "normal";
-              const freq = downbeat ? freqs.accent : freqs.normal;
-              const vol = downbeat ? PULSE_ACCENT_VOLUME.accent : PULSE_ACCENT_VOLUME.normal;
-              playClick(time + offset, freq, vol, role, laneBeat);
-              if (hapticsEnabledRef.current) {
-                Tone.Draw.schedule(() => {
-                  void triggerMetronomeHaptic(downbeat ? "accent" : "normal");
-                }, time + offset);
-              }
-              Tone.Draw.schedule(() => setCurrentBeat(laneBeat - 1), time + offset);
-            } else {
-              const freq = [1760, 1360, 1040, 820][laneIndex] ?? 900;
-              const denomTrim = lane.denominator === 4 ? 0 : lane.denominator === 8 ? 2 : 4;
-              const vol = downbeat ? -6 - laneIndex * 2 : -13 - laneIndex * 2 - denomTrim;
-              playPolyClick(time + offset, freq, vol, laneIndex, downbeat);
-              if (laneIndex === 1) Tone.Draw.schedule(() => setCurrentPoly(laneBeat - 1), time + offset);
-            }
+        const polymeterSteps = poly.polymeterLanes.slice(0, 4);
+        const firstTick = Math.ceil(windowStartTicks - 0.000001);
+        for (let tick = firstTick; tick < windowEndTicks - 0.000001; tick++) {
+          const step = polymeterStepAtTick(tick, polymeterSteps);
+          if (!step) continue;
+
+          const offset = (tick - windowStartTicks) * sixteenthDuration;
+          const role: ClickRole = step.downbeat ? "accent" : "normal";
+          const freq = step.downbeat ? freqs.accent : freqs.normal;
+          const vol = step.downbeat ? PULSE_ACCENT_VOLUME.accent : PULSE_ACCENT_VOLUME.normal;
+          playClick(time + offset, freq, vol, role, step.beatIndex + 1);
+          if (hapticsEnabledRef.current) {
+            Tone.Draw.schedule(() => {
+              void triggerMetronomeHaptic(step.downbeat ? "accent" : "normal");
+            }, time + offset);
           }
-        });
+          Tone.Draw.schedule(() => {
+            setCurrentPoly(step.laneIndex);
+            setCurrentBeat(step.beatIndex);
+            setCurrentPulse(0);
+          }, time + offset);
+        }
       }
 
       beatRef.current = (beatIdx + 1) % ts.numerator;
@@ -758,8 +783,6 @@ export function useMetronome() {
         polymeterEnabled: Boolean(next.polymeterEnabled),
         polymeterLanes: (next.polymeterLanes?.length ? next.polymeterLanes : [
           { numerator: 4, denominator: 4 },
-          { numerator: 4, denominator: 8 },
-          { numerator: 4, denominator: 16 },
         ]).slice(0, 4).map((lane) => ({
           numerator: clamp(Math.round(lane.numerator || 4), 1, 16),
           denominator: normalizeMeterDenominator(lane.denominator),

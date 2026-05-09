@@ -185,8 +185,6 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
       polymeterEnabled: false,
       polymeterLanes: [
         { numerator: 4, denominator: 4 },
-        { numerator: 4, denominator: 8 },
-        { numerator: 4, denominator: 16 },
       ],
     });
     onViewChange("beatmap");
@@ -637,39 +635,56 @@ function PolymeterStackVisual({
   const palette = ["hsl(var(--amber))", "hsl(var(--slate-cyan))", "hsl(338 82% 66%)", "hsl(var(--primary))"];
   return (
     <div className="mt-4 overflow-x-auto rounded-md border border-border/60 bg-background/35 p-3">
-      <div className="min-w-max space-y-2">
+      <div className="flex min-w-max items-stretch gap-3">
         {lanes.slice(0, 4).map((lane, laneIndex) => {
-          const cellWidth = lane.denominator === 4 ? "2.75rem" : lane.denominator === 8 ? "1.75rem" : "1rem";
-          const activeIndex = laneIndex === 0 ? currentBeat : laneIndex === 1 ? currentPoly : -1;
+          const cellWidth = lane.denominator === 4 ? "2.65rem" : lane.denominator === 8 ? "1.75rem" : "1rem";
+          const activeStep = isPlaying && currentPoly === laneIndex;
           return (
-            <div key={`${lane.numerator}-${lane.denominator}-${laneIndex}`} className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-3">
-              <span className="font-serif text-xl leading-none text-foreground">
-                {lane.numerator} <span className="text-muted-foreground">|</span> {lane.denominator}
-              </span>
+            <div key={`${lane.numerator}-${lane.denominator}-${laneIndex}`} className="flex items-stretch gap-3">
               <div
-                className="grid items-center gap-1.5 border-l border-border/60 pl-3"
-                style={{ gridTemplateColumns: `repeat(${lane.numerator}, ${cellWidth})` }}
+                className="rounded-md border p-3 transition-colors"
+                style={{
+                  borderColor: activeStep ? palette[laneIndex] : "hsl(var(--border) / 0.65)",
+                  background: activeStep ? `${palette[laneIndex]}22` : "hsl(var(--card) / 0.42)",
+                }}
               >
-                {Array.from({ length: lane.numerator }, (_, beatIndex) => {
-                  const active = isPlaying && activeIndex === beatIndex;
-                  return (
-                    <span
-                      key={beatIndex}
-                      className="grid place-items-center rounded-full border text-[10px] font-mono transition-all"
-                      style={{
-                        width: cellWidth,
-                        height: lane.denominator === 4 ? "2.35rem" : lane.denominator === 8 ? "1.65rem" : "1rem",
-                        borderColor: active ? palette[laneIndex] : "hsl(var(--border) / 0.65)",
-                        background: active ? palette[laneIndex] : "hsl(var(--card) / 0.45)",
-                        color: active ? "hsl(var(--background))" : "hsl(var(--muted-foreground))",
-                        boxShadow: active ? `0 0 18px ${palette[laneIndex]}` : "none",
-                      }}
-                    >
-                      {lane.denominator === 16 ? "" : beatIndex + 1}
-                    </span>
-                  );
-                })}
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <span className="tiny-caps text-[9px] text-muted-foreground">Step {laneIndex + 1}</span>
+                  <span className="font-serif text-2xl leading-none text-foreground">
+                    {lane.numerator} <span className="text-muted-foreground">|</span> {lane.denominator}
+                  </span>
+                </div>
+                <div
+                  className="grid items-center gap-1.5"
+                  style={{ gridTemplateColumns: `repeat(${lane.numerator}, ${cellWidth})` }}
+                >
+                  {Array.from({ length: lane.numerator }, (_, beatIndex) => {
+                    const activeBeat = activeStep && currentBeat === beatIndex;
+                    return (
+                      <span
+                        key={beatIndex}
+                        className="grid place-items-center rounded-full border text-[10px] font-mono transition-all"
+                        style={{
+                          width: cellWidth,
+                          height: lane.denominator === 4 ? "2.25rem" : lane.denominator === 8 ? "1.55rem" : "1rem",
+                          borderColor: activeBeat ? palette[laneIndex] : "hsl(var(--border) / 0.65)",
+                          background: activeBeat ? palette[laneIndex] : "hsl(var(--background) / 0.58)",
+                          color: activeBeat ? "hsl(var(--background))" : "hsl(var(--muted-foreground))",
+                          boxShadow: activeBeat ? `0 0 16px ${palette[laneIndex]}` : "none",
+                        }}
+                      >
+                        {lane.denominator === 16 ? "" : beatIndex + 1}
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
+              {laneIndex < lanes.slice(0, 4).length - 1 && (
+                <div className="flex w-7 items-center" aria-hidden>
+                  <span className="h-px flex-1 bg-border" />
+                  <span className="size-2 rotate-45 border-r border-t border-border" />
+                </div>
+              )}
             </div>
           );
         })}
@@ -1051,7 +1066,7 @@ function PolymeterPanel({
   };
   const addLane = () => {
     if (lanes.length >= 4) return;
-    onLanes([...lanes, { numerator: 4, denominator: 8 }]);
+    onLanes([...lanes, { numerator: lanes.length === 1 ? 3 : 5, denominator: lanes.length === 1 ? 8 : 16 }]);
   };
   const addLaneFrom = (lane: PolymeterLane) => {
     if (lanes.length >= 4) {
@@ -1072,10 +1087,10 @@ function PolymeterPanel({
     onLanes(lanes.filter((_, i) => i !== index));
   };
   const quickStacks: Array<{ label: string; lanes: PolymeterLane[] }> = [
-    { label: "4/4 + 4/8 + 4/16", lanes: [{ numerator: 4, denominator: 4 }, { numerator: 4, denominator: 8 }, { numerator: 4, denominator: 16 }] },
-    { label: "4/4 + 5/8 + 3/16", lanes: [{ numerator: 4, denominator: 4 }, { numerator: 5, denominator: 8 }, { numerator: 3, denominator: 16 }] },
-    { label: "5/4 + 5/8 + 5/16", lanes: [{ numerator: 5, denominator: 4 }, { numerator: 5, denominator: 8 }, { numerator: 5, denominator: 16 }] },
-    { label: "4/4 + 7/8", lanes: [{ numerator: 4, denominator: 4 }, { numerator: 7, denominator: 8 }] },
+    { label: "4/4 -> 3/8 -> 5/16", lanes: [{ numerator: 4, denominator: 4 }, { numerator: 3, denominator: 8 }, { numerator: 5, denominator: 16 }] },
+    { label: "4/4 -> 4/8 -> 4/16", lanes: [{ numerator: 4, denominator: 4 }, { numerator: 4, denominator: 8 }, { numerator: 4, denominator: 16 }] },
+    { label: "5/4 -> 5/8 -> 5/16", lanes: [{ numerator: 5, denominator: 4 }, { numerator: 5, denominator: 8 }, { numerator: 5, denominator: 16 }] },
+    { label: "4/4 -> 7/8", lanes: [{ numerator: 4, denominator: 4 }, { numerator: 7, denominator: 8 }] },
   ];
   const quickMeters: PolymeterLane[] = [
     { numerator: 3, denominator: 4 },
@@ -1086,25 +1101,25 @@ function PolymeterPanel({
     { numerator: 3, denominator: 16 },
     { numerator: 5, denominator: 16 },
   ];
-  const summary = enabled ? lanes.map((lane) => `${lane.numerator}/${lane.denominator}`).join(" + ") : "Hidden";
+  const summary = enabled ? lanes.map((lane) => `${lane.numerator}/${lane.denominator}`).join(" -> ") : "Hidden";
 
   return (
-    <CollapsiblePanel title="Polymeter" summary={summary} icon={<Network className="size-4" />} defaultOpen={false}>
+    <CollapsiblePanel title="Polymeter" summary={summary} icon={<PolymeterGlyph />} defaultOpen={false}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <span className="tiny-caps block text-[10px] text-muted-foreground">Layered meters</span>
-          <p className="mt-1 font-mono text-sm text-primary">{lanes.map((lane) => `${lane.numerator}/${lane.denominator}`).join(" + ")}</p>
+          <span className="tiny-caps block text-[10px] text-muted-foreground">Polyrhythm branch</span>
+          <p className="mt-1 font-mono text-sm text-primary">{lanes.map((lane) => `${lane.numerator}/${lane.denominator}`).join(" -> ")}</p>
         </div>
         <Switch checked={enabled} onCheckedChange={onEnabled} />
       </div>
 
       <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-        Use polymeter when the click layers are different time signatures. The first lane is the real metronome click; /8 and /16 lanes move faster and draw tighter.
+        Polymeter plays one meter, then feeds into the next meter, then loops the whole chain as one phrase.
       </p>
 
       <div className="mt-4 space-y-4">
         <div>
-          <span className="tiny-caps block text-[10px] text-muted-foreground">Start with</span>
+          <span className="tiny-caps block text-[10px] text-muted-foreground">Start chain</span>
           <div className="mt-2 grid gap-2">
             {quickStacks.map((stack) => (
               <button
@@ -1124,7 +1139,7 @@ function PolymeterPanel({
         </div>
 
         <div>
-          <span className="tiny-caps block text-[10px] text-muted-foreground">Add meter</span>
+          <span className="tiny-caps block text-[10px] text-muted-foreground">Add step</span>
           <div className="mt-2 flex flex-wrap gap-2">
             {quickMeters.map((meter) => (
               <button
@@ -1148,28 +1163,28 @@ function PolymeterPanel({
             <div key={`${lane.numerator}-${lane.denominator}-${index}`} className="rounded-sm border border-border/60 bg-background/35 p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <span className="tiny-caps block text-[10px] text-muted-foreground">Meter {index + 1}</span>
+                  <span className="tiny-caps block text-[10px] text-muted-foreground">Step {index + 1}</span>
                   <span className="mt-1 block font-serif text-3xl leading-none text-foreground">
                     {lane.numerator} <span className="text-muted-foreground">|</span> {lane.denominator}
                   </span>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <IconButton
-                    label={`Duplicate ${lane.numerator}/${lane.denominator}`}
+                    label={`Duplicate step ${lane.numerator}/${lane.denominator}`}
                     onPress={() => insertLaneAfter(index, lane)}
                     disabled={lanes.length >= 4}
                   >
                     <Copy className="size-4" />
                   </IconButton>
                   <IconButton
-                    label={`Add meter after ${index + 1}`}
+                    label={`Add step after ${index + 1}`}
                     onPress={() => insertLaneAfter(index, { numerator: 4, denominator: lane.denominator })}
                     disabled={lanes.length >= 4}
                   >
                     <Plus className="size-4" />
                   </IconButton>
                   <IconButton
-                    label={`Remove meter ${index + 1}`}
+                    label={`Remove step ${index + 1}`}
                     onPress={() => removeLane(index)}
                     disabled={lanes.length <= 1}
                   >
@@ -1190,7 +1205,7 @@ function PolymeterPanel({
                     value={lane.denominator}
                     onChange={(e) => setLane(index, { denominator: Number(e.target.value) as MeterDenominator })}
                     className="metronome-select"
-                    aria-label={`Meter ${index + 1} denominator`}
+                    aria-label={`Step ${index + 1} denominator`}
                   >
                     {[4, 8, 16].map((denom) => (
                       <option key={denom} value={denom} className="bg-background">/{denom}</option>
@@ -1208,11 +1223,20 @@ function PolymeterPanel({
             onPointerDown={(e) => { e.preventDefault(); onEnabled(true); addLane(); }}
             className="w-full rounded-sm border border-border/70 px-3 py-3 tiny-caps text-[10px] text-muted-foreground hover:text-primary"
           >
-            Add custom meter
+            Add meter step
           </button>
         )}
       </div>
     </CollapsiblePanel>
+  );
+}
+
+function PolymeterGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden>
+      <path d="M4 7h5M9 7l3 5-3 5H4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M13 7h7M13 12h5M13 17h7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
   );
 }
 
