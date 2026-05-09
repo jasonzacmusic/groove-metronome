@@ -57,7 +57,7 @@ import {
   type TimeSignature,
   type TripletAssistMode,
 } from "@/lib/metronome-types";
-import { clamp, formatTime } from "@/lib/utils";
+import { clamp, cn, formatTime } from "@/lib/utils";
 
 const SETLIST_STORAGE_KEY = "groove-metronome.setlists.v1";
 
@@ -207,9 +207,17 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
 
   const handleViewChange = (next: MetronomeView) => {
     onViewChange(next);
+    const firstPolymeterLane = state.polyrhythm.polymeterLanes[0] ?? {
+      numerator: state.timeSignature.numerator,
+      denominator: (state.timeSignature.denominator === 16 ? 16 : state.timeSignature.denominator === 8 ? 8 : 4) as MeterDenominator,
+    };
+    const starterPolymeterLanes = state.polyrhythm.polymeterLanes.length >= 2
+      ? state.polyrhythm.polymeterLanes
+      : [firstPolymeterLane, { numerator: 3, denominator: 8 }, { numerator: 5, denominator: 16 }] as PolymeterLane[];
     setPolyrhythm({
       enabled: next === "polyrhythm",
       polymeterEnabled: next === "polymeter",
+      ...(next === "polymeter" ? { polymeterLanes: starterPolymeterLanes } : {}),
     });
   };
 
@@ -706,15 +714,28 @@ function WheelStage({
   onCyclePulseAccent: (beatIndex: number, pulseIndex: number) => void;
   onTap: () => void;
 }) {
-  const wheelPattern: BeatPattern[] = view === "polyrhythm" && polyrhythm.enabled
-    ? Array.from({ length: polyrhythm.main }, (_, index) => ({
+  const activePolymeterLane = view === "polymeter" && polyrhythm.polymeterEnabled
+    ? polyrhythm.polymeterLanes[Math.max(0, currentPoly)] ?? polyrhythm.polymeterLanes[0]
+    : null;
+  const wheelPattern: BeatPattern[] = activePolymeterLane
+    ? Array.from({ length: activePolymeterLane.numerator }, (_, index) => ({
       pulses: 1,
       accents: [index === 0 ? "accent" : "normal"],
     }))
-    : pattern;
+    : view === "polyrhythm" && polyrhythm.enabled
+      ? Array.from({ length: polyrhythm.main }, (_, index) => ({
+        pulses: 1,
+        accents: [index === 0 ? "accent" : "normal"],
+      }))
+      : pattern;
 
   return (
-    <div className="relative overflow-hidden rounded-lg border border-border/70 bg-card/70 p-3 md:p-5">
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-lg border border-border/70 bg-card/70 p-3 md:p-5",
+        view === "polymeter" && "border-primary/35 bg-[linear-gradient(135deg,hsl(var(--primary)/0.12),hsl(var(--card)/0.74)_38%,hsl(var(--accent)/0.12))]",
+      )}
+    >
       <div className="relative flex justify-center">
         <PolyrhythmWheel
           pattern={wheelPattern}
@@ -750,65 +771,133 @@ function PolymeterStackVisual({
   currentBeat: number;
   currentPoly: number;
 }) {
-  const palette = ["hsl(var(--amber))", "hsl(var(--slate-cyan))", "hsl(338 82% 66%)", "hsl(var(--primary))"];
+  const visibleLanes = lanes.slice(0, 4);
+  const activeIndex = isPlaying && currentPoly >= 0 ? Math.min(currentPoly, visibleLanes.length - 1) : -1;
+  const totalTicks = visibleLanes.reduce((sum, lane) => sum + polymeterLaneTicks(lane), 0) || 1;
+
   return (
-    <div className="mt-4 overflow-x-auto rounded-md border border-border/60 bg-background/35 p-3">
-      <div className="flex min-w-max items-stretch gap-3">
-        {lanes.slice(0, 4).map((lane, laneIndex) => {
-          const cellWidth = lane.denominator === 4 ? "2.65rem" : lane.denominator === 8 ? "1.75rem" : "1rem";
-          const activeStep = isPlaying && currentPoly === laneIndex;
+    <div className="mt-4 rounded-lg border border-primary/25 bg-background/45 p-3 shadow-[0_0_34px_hsl(var(--primary)/0.10)] md:p-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <span className="tiny-caps block text-[10px] text-primary">Polymeter Phrase</span>
+          <div className="mt-1 font-mono text-sm text-foreground">
+            {visibleLanes.map((lane) => `${lane.numerator}/${lane.denominator}`).join(" -> ")}
+          </div>
+        </div>
+        <div className="rounded-full border border-border/70 bg-card/60 px-3 py-1.5 font-mono text-xs text-muted-foreground">
+          {Math.round(totalTicks)} sixteenth steps
+        </div>
+      </div>
+
+      <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-card">
+        {visibleLanes.map((lane, laneIndex) => {
+          const color = polymeterLaneColor(laneIndex);
+          const activeStep = laneIndex === activeIndex;
           return (
-            <div key={`${lane.numerator}-${lane.denominator}-${laneIndex}`} className="flex items-stretch gap-3">
-              <div
-                className="rounded-md border p-3 transition-colors"
-                style={{
-                  borderColor: activeStep ? palette[laneIndex] : "hsl(var(--border) / 0.65)",
-                  background: activeStep ? `${palette[laneIndex]}22` : "hsl(var(--card) / 0.42)",
-                }}
-              >
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <span className="tiny-caps text-[9px] text-muted-foreground">Step {laneIndex + 1}</span>
-                  <span className="font-serif text-2xl leading-none text-foreground">
-                    {lane.numerator} <span className="text-muted-foreground">|</span> {lane.denominator}
-                  </span>
-                </div>
-                <div
-                  className="grid items-center gap-1.5"
-                  style={{ gridTemplateColumns: `repeat(${lane.numerator}, ${cellWidth})` }}
-                >
-                  {Array.from({ length: lane.numerator }, (_, beatIndex) => {
-                    const activeBeat = activeStep && currentBeat === beatIndex;
-                    return (
-                      <span
-                        key={beatIndex}
-                        className="grid place-items-center rounded-full border text-[10px] font-mono transition-all"
-                        style={{
-                          width: cellWidth,
-                          height: lane.denominator === 4 ? "2.25rem" : lane.denominator === 8 ? "1.55rem" : "1rem",
-                          borderColor: activeBeat ? palette[laneIndex] : "hsl(var(--border) / 0.65)",
-                          background: activeBeat ? palette[laneIndex] : "hsl(var(--background) / 0.58)",
-                          color: activeBeat ? "hsl(var(--background))" : "hsl(var(--muted-foreground))",
-                          boxShadow: activeBeat ? `0 0 16px ${palette[laneIndex]}` : "none",
-                        }}
-                      >
-                        {lane.denominator === 16 ? "" : beatIndex + 1}
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-              {laneIndex < lanes.slice(0, 4).length - 1 && (
-                <div className="flex w-7 items-center" aria-hidden>
-                  <span className="h-px flex-1 bg-border" />
-                  <span className="size-2 rotate-45 border-r border-t border-border" />
-                </div>
-              )}
-            </div>
+            <div
+              key={`${lane.numerator}-${lane.denominator}-${laneIndex}-rail`}
+              className="h-full transition-all"
+              style={{
+                width: `${(polymeterLaneTicks(lane) / totalTicks) * 100}%`,
+                background: activeStep ? color : `color-mix(in srgb, ${color} 42%, transparent)`,
+                opacity: isPlaying && !activeStep ? 0.38 : 1,
+              }}
+            />
           );
         })}
       </div>
+
+      <div className="mt-4 overflow-x-auto">
+        <div className="flex min-w-max items-stretch gap-3">
+          {visibleLanes.map((lane, laneIndex) => {
+            const color = polymeterLaneColor(laneIndex);
+            const activeStep = laneIndex === activeIndex;
+            const dotSize = polymeterDotSize(lane.denominator);
+            const cardWidth = lane.denominator === 4 ? "18rem" : lane.denominator === 8 ? "14rem" : "11rem";
+            return (
+              <div key={`${lane.numerator}-${lane.denominator}-${laneIndex}`} className="flex items-stretch gap-3">
+                <div
+                  className="relative overflow-hidden rounded-lg border p-3 transition-all"
+                  style={{
+                    width: cardWidth,
+                    borderColor: activeStep ? color : "hsl(var(--border) / 0.65)",
+                    background: activeStep
+                      ? `linear-gradient(145deg, color-mix(in srgb, ${color} 20%, transparent), hsl(var(--card) / 0.82))`
+                      : "hsl(var(--card) / 0.52)",
+                    boxShadow: activeStep ? `0 0 0 1px ${color}, 0 16px 34px color-mix(in srgb, ${color} 18%, transparent)` : "none",
+                  }}
+                >
+                  <div
+                    className="absolute inset-y-0 left-0 w-1"
+                    style={{ background: color, opacity: activeStep ? 1 : 0.54 }}
+                    aria-hidden
+                  />
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <span className="tiny-caps text-[9px] text-muted-foreground">Step {laneIndex + 1}</span>
+                    <span className="font-serif text-2xl leading-none text-foreground">
+                      {lane.numerator} <span className="text-muted-foreground">|</span> {lane.denominator}
+                    </span>
+                  </div>
+                  <div className="mb-3 flex items-baseline justify-between gap-3">
+                    <span className="font-mono text-xs text-muted-foreground">{polymeterUnitLabel(lane.denominator)}</span>
+                    <span className="tiny-caps text-[9px]" style={{ color }}>{polymeterLaneTicks(lane)} ticks</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {Array.from({ length: lane.numerator }, (_, beatIndex) => {
+                      const activeBeat = activeStep && currentBeat === beatIndex;
+                      return (
+                        <span
+                          key={beatIndex}
+                          className="grid place-items-center rounded-full border font-mono text-[10px] transition-all"
+                          style={{
+                            width: dotSize,
+                            height: dotSize,
+                            borderColor: activeBeat ? color : `color-mix(in srgb, ${color} 58%, hsl(var(--border)))`,
+                            background: activeBeat ? color : `color-mix(in srgb, ${color} 16%, transparent)`,
+                            color: activeBeat ? "hsl(var(--background))" : "hsl(var(--muted-foreground))",
+                            boxShadow: activeBeat ? `0 0 18px ${color}` : "none",
+                            transform: activeBeat ? "scale(1.12)" : "scale(1)",
+                          }}
+                        >
+                          {lane.denominator === 16 ? "" : beatIndex + 1}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+                {laneIndex < visibleLanes.length - 1 && (
+                  <div className="flex w-7 items-center" aria-hidden>
+                    <span className="h-px flex-1 bg-primary/45" />
+                    <span className="size-2 rotate-45 border-r border-t border-primary/45" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
+}
+
+function polymeterLaneTicks(lane: PolymeterLane): number {
+  return lane.numerator * (16 / lane.denominator);
+}
+
+function polymeterDotSize(denominator: MeterDenominator): string {
+  if (denominator === 4) return "2.65rem";
+  if (denominator === 8) return "1.85rem";
+  return "1.15rem";
+}
+
+function polymeterUnitLabel(denominator: MeterDenominator): string {
+  if (denominator === 4) return "quarter-note meter";
+  if (denominator === 8) return "eighth-note meter";
+  return "sixteenth-note meter";
+}
+
+function polymeterLaneColor(index: number): string {
+  return ["hsl(var(--amber))", "hsl(var(--slate-cyan))", "hsl(338 82% 66%)", "hsl(var(--primary))"][index] ?? "hsl(var(--primary))";
 }
 
 function NotationStage({
@@ -1586,7 +1675,7 @@ function PolymeterPanel({
     <>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <span className="tiny-caps block text-[10px] text-muted-foreground">Polyrhythm branch</span>
+          <span className="tiny-caps block text-[10px] text-primary">Phrase chain</span>
           <p className="mt-1 font-mono text-sm text-primary">{lanes.map((lane) => `${lane.numerator}/${lane.denominator}`).join(" -> ")}</p>
         </div>
         <Switch checked={enabled} onCheckedChange={onEnabled} />
@@ -1610,6 +1699,9 @@ function PolymeterPanel({
                   onLanes(stack.lanes);
                 }}
                 className="rounded-sm border border-border/70 bg-background/55 px-3 py-2.5 text-left font-mono text-sm text-muted-foreground transition-colors hover:border-primary/70 hover:text-primary"
+                style={{
+                  background: "linear-gradient(135deg, hsl(var(--background) / 0.66), hsl(var(--primary) / 0.07))",
+                }}
               >
                 {stack.label}
               </button>
@@ -1639,10 +1731,14 @@ function PolymeterPanel({
 
         <div className="space-y-3">
           {lanes.map((lane, index) => (
-            <div key={`${lane.numerator}-${lane.denominator}-${index}`} className="rounded-sm border border-border/60 bg-background/35 p-3">
+            <div
+              key={`${lane.numerator}-${lane.denominator}-${index}`}
+              className="rounded-md border bg-background/35 p-3"
+              style={{ borderColor: `color-mix(in srgb, ${polymeterLaneColor(index)} 34%, hsl(var(--border)))` }}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <span className="tiny-caps block text-[10px] text-muted-foreground">Step {index + 1}</span>
+                  <span className="tiny-caps block text-[10px]" style={{ color: polymeterLaneColor(index) }}>Step {index + 1}</span>
                   <span className="mt-1 block font-serif text-3xl leading-none text-foreground">
                     {lane.numerator} <span className="text-muted-foreground">|</span> {lane.denominator}
                   </span>
@@ -2195,29 +2291,35 @@ function PolyrhythmRow({
 }
 
 function PolymeterLanePreview({ lane, active, index }: { lane: PolymeterLane; active: boolean; index: number }) {
-  const cellWidth = lane.denominator === 4 ? "2.35rem" : lane.denominator === 8 ? "1.45rem" : "0.9rem";
-  const cellHeight = lane.denominator === 4 ? "1rem" : lane.denominator === 8 ? "0.78rem" : "0.58rem";
-  const color = ["hsl(var(--primary))", "hsl(var(--slate-cyan))", "hsl(var(--amber))", "hsl(338 82% 66%)"][index] ?? "hsl(var(--primary))";
+  const cellSize = lane.denominator === 4 ? "2rem" : lane.denominator === 8 ? "1.35rem" : "0.82rem";
+  const color = polymeterLaneColor(index);
 
   return (
-    <div className="mt-3 overflow-x-auto">
-      <div className="inline-grid items-center gap-1.5" style={{ gridTemplateColumns: `repeat(${lane.numerator}, ${cellWidth})` }}>
-        {Array.from({ length: lane.numerator }, (_, beatIndex) => (
-          <span
-            key={beatIndex}
-            className="rounded-full border border-border/50"
-            style={{
-              height: cellHeight,
-              background: active ? color : "hsl(var(--border) / 0.35)",
-              opacity: beatIndex === 0 && active ? 1 : active ? 0.46 : 0.62,
-            }}
-            title={`Beat ${beatIndex + 1} of ${lane.numerator}/${lane.denominator}`}
-          />
-        ))}
+    <div className="mt-3 overflow-x-auto rounded-md border border-border/50 bg-card/45 p-2.5">
+      <div className="flex min-w-max items-center justify-between gap-4">
+        <div className="flex items-center gap-1.5">
+          {Array.from({ length: lane.numerator }, (_, beatIndex) => (
+            <span
+              key={beatIndex}
+              className="grid place-items-center rounded-full border font-mono text-[9px] transition-all"
+              style={{
+                width: cellSize,
+                height: cellSize,
+                borderColor: `color-mix(in srgb, ${color} 55%, hsl(var(--border)))`,
+                background: active ? `color-mix(in srgb, ${color} ${beatIndex === 0 ? 82 : 36}%, transparent)` : "hsl(var(--border) / 0.25)",
+                color: beatIndex === 0 && active ? "hsl(var(--background))" : "hsl(var(--muted-foreground))",
+              }}
+              title={`Beat ${beatIndex + 1} of ${lane.numerator}/${lane.denominator}`}
+            >
+              {lane.denominator === 16 ? "" : beatIndex + 1}
+            </span>
+          ))}
+        </div>
+        <div className="shrink-0 text-right">
+          <span className="block font-mono text-xs text-foreground">{polymeterLaneTicks(lane)} sixteenths</span>
+          <span className="tiny-caps text-[9px] text-muted-foreground">{polymeterUnitLabel(lane.denominator)}</span>
+        </div>
       </div>
-      <span className="ml-3 align-middle font-mono text-xs text-muted-foreground">
-        {lane.denominator === 4 ? "quarter-note beats" : lane.denominator === 8 ? "eighth-note beats" : "sixteenth-note beats"}
-      </span>
     </div>
   );
 }
