@@ -2,11 +2,13 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   BarChart3,
   CircleHelp,
+  Copy,
   Gauge,
   Hand,
   ListMusic,
   Music2,
   Network,
+  Plus,
   RotateCcw,
   SlidersHorizontal,
   Timer,
@@ -14,6 +16,7 @@ import {
   Volume2,
   VolumeX,
   Waves,
+  X,
 } from "lucide-react";
 
 import { LevelMeters } from "@/components/metronome/LevelMeters";
@@ -288,15 +291,11 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
               enabled={state.polyrhythm.enabled}
               isPlaying={state.isPlaying}
               currentBeat={state.currentBeat}
-          currentPoly={state.currentPoly}
-          onToggle={(enabled) => setPolyrhythm({ enabled })}
-          onMain={(main) => setPolyrhythm({ main, enabled: true })}
-          onVoices={(voices) => setPolyrhythm({ voices, enabled: true })}
-          polymeterEnabled={state.polyrhythm.polymeterEnabled}
-          polymeterLanes={state.polyrhythm.polymeterLanes}
-          onPolymeterEnabled={(polymeterEnabled) => setPolyrhythm({ polymeterEnabled })}
-          onPolymeterLanes={(polymeterLanes) => setPolyrhythm({ polymeterLanes, polymeterEnabled: true })}
-        />
+              currentPoly={state.currentPoly}
+              onToggle={(enabled) => setPolyrhythm({ enabled })}
+              onMain={(main) => setPolyrhythm({ main, enabled: true })}
+              onVoices={(voices) => setPolyrhythm({ voices, enabled: true })}
+            />
           )}
         </div>
 
@@ -330,6 +329,13 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
 
         <VisualModePanel view={view} onChange={handleViewChange} />
 
+        <PolymeterPanel
+          enabled={state.polyrhythm.polymeterEnabled}
+          lanes={state.polyrhythm.polymeterLanes}
+          onEnabled={(polymeterEnabled) => setPolyrhythm({ polymeterEnabled })}
+          onLanes={(polymeterLanes) => setPolyrhythm({ polymeterLanes, polymeterEnabled: true })}
+        />
+
         <RhythmAssistPanel
           dottedMode={state.polyrhythm.dottedMode}
           tripletMode={state.polyrhythm.tripletMode}
@@ -341,7 +347,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
           title="Subdivision"
           summary={dominantSubdivision ? `${SUBDIVISION_NOTATION[dominantSubdivision].label}` : "Mixed beats"}
           icon={<Waves className="size-4" />}
-          defaultOpen={true}
+          defaultOpen={false}
         >
           <SubdivisionPalette
             dominantSubdivision={dominantSubdivision}
@@ -842,6 +848,34 @@ function GuideRow({ icon, title, body }: { icon: ReactNode; title: string; body:
   );
 }
 
+function IconButton({
+  label,
+  onPress,
+  disabled = false,
+  children,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      disabled={disabled}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        if (!disabled) onPress();
+      }}
+      className="grid size-8 place-items-center rounded-sm border border-border/70 bg-card/65 text-muted-foreground transition-colors hover:border-primary/70 hover:text-primary disabled:cursor-not-allowed disabled:opacity-35"
+    >
+      {children}
+    </button>
+  );
+}
+
 function VisualModePanel({ view, onChange }: { view: MetronomeView; onChange: (view: MetronomeView) => void }) {
   return (
     <div className="rounded-md border border-border/70 bg-card/50 p-4">
@@ -932,6 +966,186 @@ function RhythmAssistPanel({
         </SelectField>
       </div>
     </CollapsiblePanel>
+  );
+}
+
+function PolymeterPanel({
+  enabled,
+  lanes,
+  onEnabled,
+  onLanes,
+}: {
+  enabled: boolean;
+  lanes: PolymeterLane[];
+  onEnabled: (enabled: boolean) => void;
+  onLanes: (lanes: PolymeterLane[]) => void;
+}) {
+  const setLane = (index: number, patch: Partial<PolymeterLane>) => {
+    onLanes(lanes.map((lane, i) => i === index ? { ...lane, ...patch } : lane));
+  };
+  const addLane = () => {
+    if (lanes.length >= 4) return;
+    onLanes([...lanes, { numerator: 4, denominator: 8 }]);
+  };
+  const addLaneFrom = (lane: PolymeterLane) => {
+    if (lanes.length >= 4) {
+      onLanes([...lanes.slice(0, 3), lane]);
+      return;
+    }
+    onLanes([...lanes, lane]);
+  };
+  const insertLaneAfter = (index: number, lane: PolymeterLane) => {
+    if (lanes.length >= 4) {
+      onLanes([...lanes.slice(0, index + 1), lane, ...lanes.slice(index + 1, 3)]);
+      return;
+    }
+    onLanes([...lanes.slice(0, index + 1), lane, ...lanes.slice(index + 1)]);
+  };
+  const removeLane = (index: number) => {
+    if (lanes.length <= 1) return;
+    onLanes(lanes.filter((_, i) => i !== index));
+  };
+  const quickStacks: Array<{ label: string; lanes: PolymeterLane[] }> = [
+    { label: "4/4 + 5/8 + 3/16", lanes: [{ numerator: 4, denominator: 4 }, { numerator: 5, denominator: 8 }, { numerator: 3, denominator: 16 }] },
+    { label: "5/4 + 5/8 + 5/16", lanes: [{ numerator: 5, denominator: 4 }, { numerator: 5, denominator: 8 }, { numerator: 5, denominator: 16 }] },
+    { label: "4/4 + 7/8", lanes: [{ numerator: 4, denominator: 4 }, { numerator: 7, denominator: 8 }] },
+  ];
+  const quickMeters: PolymeterLane[] = [
+    { numerator: 3, denominator: 4 },
+    { numerator: 4, denominator: 4 },
+    { numerator: 5, denominator: 4 },
+    { numerator: 5, denominator: 8 },
+    { numerator: 7, denominator: 8 },
+    { numerator: 3, denominator: 16 },
+    { numerator: 5, denominator: 16 },
+  ];
+  const summary = lanes.map((lane) => `${lane.numerator}/${lane.denominator}`).join(" + ");
+
+  return (
+    <div className="rounded-md border border-border/70 bg-card/55 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <span className="tiny-caps block text-xs text-foreground">Polymeter</span>
+          <p className="mt-1 font-mono text-sm text-primary">{summary}</p>
+        </div>
+        <Switch checked={enabled} onCheckedChange={onEnabled} />
+      </div>
+
+      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+        Under polyrhythm, use polymeter when the layers are different time signatures. Every lane shares one clock; /8 and /16 lanes move faster and look tighter.
+      </p>
+
+      <div className="mt-4 space-y-4">
+        <div>
+          <span className="tiny-caps block text-[10px] text-muted-foreground">Start with</span>
+          <div className="mt-2 grid gap-2">
+            {quickStacks.map((stack) => (
+              <button
+                key={stack.label}
+                type="button"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  onEnabled(true);
+                  onLanes(stack.lanes);
+                }}
+                className="rounded-sm border border-border/70 bg-background/55 px-3 py-2.5 text-left font-mono text-sm text-muted-foreground transition-colors hover:border-primary/70 hover:text-primary"
+              >
+                {stack.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <span className="tiny-caps block text-[10px] text-muted-foreground">Add meter</span>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {quickMeters.map((meter) => (
+              <button
+                key={`${meter.numerator}/${meter.denominator}`}
+                type="button"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  onEnabled(true);
+                  addLaneFrom(meter);
+                }}
+                className="rounded-full border border-border/70 bg-background/55 px-3 py-2 font-mono text-sm text-muted-foreground transition-colors hover:border-accent/70 hover:text-foreground"
+              >
+                {meter.numerator}/{meter.denominator}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {lanes.map((lane, index) => (
+            <div key={`${lane.numerator}-${lane.denominator}-${index}`} className="rounded-sm border border-border/60 bg-background/35 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="tiny-caps block text-[10px] text-muted-foreground">Meter {index + 1}</span>
+                  <span className="mt-1 block font-serif text-3xl leading-none text-foreground">
+                    {lane.numerator} <span className="text-muted-foreground">|</span> {lane.denominator}
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <IconButton
+                    label={`Duplicate ${lane.numerator}/${lane.denominator}`}
+                    onPress={() => insertLaneAfter(index, lane)}
+                    disabled={lanes.length >= 4}
+                  >
+                    <Copy className="size-4" />
+                  </IconButton>
+                  <IconButton
+                    label={`Add meter after ${index + 1}`}
+                    onPress={() => insertLaneAfter(index, { numerator: 4, denominator: lane.denominator })}
+                    disabled={lanes.length >= 4}
+                  >
+                    <Plus className="size-4" />
+                  </IconButton>
+                  <IconButton
+                    label={`Remove meter ${index + 1}`}
+                    onPress={() => removeLane(index)}
+                    disabled={lanes.length <= 1}
+                  >
+                    <X className="size-4" />
+                  </IconButton>
+                </div>
+              </div>
+              <PolymeterLanePreview lane={lane} active={enabled} index={index} />
+              <div className="mt-3 grid grid-cols-[minmax(0,1fr)_5.25rem] gap-2">
+                <NumberField
+                  label="Beats"
+                  value={lane.numerator}
+                  compact
+                  onChange={(value) => setLane(index, { numerator: clamp(value, 1, 16) })}
+                />
+                <SelectField label="Unit">
+                  <select
+                    value={lane.denominator}
+                    onChange={(e) => setLane(index, { denominator: Number(e.target.value) as MeterDenominator })}
+                    className="metronome-select"
+                    aria-label={`Meter ${index + 1} denominator`}
+                  >
+                    {[4, 8, 16].map((denom) => (
+                      <option key={denom} value={denom} className="bg-background">/{denom}</option>
+                    ))}
+                  </select>
+                </SelectField>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {lanes.length < 4 && (
+          <button
+            type="button"
+            onPointerDown={(e) => { e.preventDefault(); onEnabled(true); addLane(); }}
+            className="w-full rounded-sm border border-border/70 px-3 py-3 tiny-caps text-[10px] text-muted-foreground hover:text-primary"
+          >
+            Add custom meter
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1135,10 +1349,6 @@ function PolyrhythmMode({
   onToggle,
   onMain,
   onVoices,
-  polymeterEnabled,
-  polymeterLanes,
-  onPolymeterEnabled,
-  onPolymeterLanes,
 }: {
   main: number;
   voices: number[];
@@ -1149,10 +1359,6 @@ function PolyrhythmMode({
   onToggle: (enabled: boolean) => void;
   onMain: (main: number) => void;
   onVoices: (voices: number[]) => void;
-  polymeterEnabled: boolean;
-  polymeterLanes: PolymeterLane[];
-  onPolymeterEnabled: (enabled: boolean) => void;
-  onPolymeterLanes: (lanes: PolymeterLane[]) => void;
 }) {
   const allVoices = [main, ...voices].slice(0, 4);
   const sharedSlots = lcmMany(allVoices);
@@ -1177,39 +1383,6 @@ function PolyrhythmMode({
     if (voices.length <= 1) return;
     onVoices(voices.filter((_, i) => i !== index));
   };
-  const setMeterLane = (index: number, patch: Partial<PolymeterLane>) => {
-    onPolymeterLanes(polymeterLanes.map((lane, i) => i === index ? { ...lane, ...patch } : lane));
-  };
-  const addMeterLane = () => {
-    if (polymeterLanes.length >= 4) return;
-    onPolymeterLanes([...polymeterLanes, { numerator: 4, denominator: 8 }]);
-  };
-  const addMeterLaneFrom = (lane: PolymeterLane) => {
-    if (polymeterLanes.length >= 4) {
-      onPolymeterLanes([...polymeterLanes.slice(0, 3), lane]);
-      return;
-    }
-    onPolymeterLanes([...polymeterLanes, lane]);
-  };
-  const removeMeterLane = (index: number) => {
-    if (polymeterLanes.length <= 1) return;
-    onPolymeterLanes(polymeterLanes.filter((_, i) => i !== index));
-  };
-  const polymeterSummary = polymeterLanes.map((lane) => `${lane.numerator}/${lane.denominator}`).join(" + ");
-  const quickStacks: Array<{ label: string; lanes: PolymeterLane[] }> = [
-    { label: "4/4 + 5/8 + 3/16", lanes: [{ numerator: 4, denominator: 4 }, { numerator: 5, denominator: 8 }, { numerator: 3, denominator: 16 }] },
-    { label: "5/4 + 5/8 + 5/16", lanes: [{ numerator: 5, denominator: 4 }, { numerator: 5, denominator: 8 }, { numerator: 5, denominator: 16 }] },
-    { label: "4/4 + 7/8", lanes: [{ numerator: 4, denominator: 4 }, { numerator: 7, denominator: 8 }] },
-  ];
-  const quickMeters: PolymeterLane[] = [
-    { numerator: 3, denominator: 4 },
-    { numerator: 4, denominator: 4 },
-    { numerator: 5, denominator: 4 },
-    { numerator: 5, denominator: 8 },
-    { numerator: 7, denominator: 8 },
-    { numerator: 3, denominator: 16 },
-    { numerator: 5, denominator: 16 },
-  ];
 
   return (
     <div className="rounded-md border border-border/70 bg-card/60 p-5 md:p-6">
@@ -1329,108 +1502,6 @@ function PolyrhythmMode({
             );
           })}
         </div>
-      </div>
-
-      <div className="mt-6 rounded-md border border-border/60 bg-background/35 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <span className="tiny-caps text-xs text-foreground">Polymeter</span>
-              <Switch checked={polymeterEnabled} onCheckedChange={onPolymeterEnabled} />
-            </div>
-            <p className="mt-1 font-mono text-sm text-muted-foreground">{polymeterSummary}</p>
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-3">
-          <div>
-            <span className="tiny-caps block text-[10px] text-muted-foreground">Start with</span>
-            <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {quickStacks.map((stack) => (
-                <button
-                  key={stack.label}
-                  type="button"
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                    onPolymeterEnabled(true);
-                    onPolymeterLanes(stack.lanes);
-                  }}
-                  className="rounded-sm border border-border/70 bg-card/55 px-3 py-2.5 text-left font-mono text-sm text-muted-foreground transition-colors hover:border-primary/70 hover:text-primary"
-                >
-                  {stack.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <span className="tiny-caps block text-[10px] text-muted-foreground">Add a lane</span>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {quickMeters.map((meter) => (
-                <button
-                  key={`${meter.numerator}/${meter.denominator}`}
-                  type="button"
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                    onPolymeterEnabled(true);
-                    addMeterLaneFrom(meter);
-                  }}
-                  className="rounded-full border border-border/70 bg-background/55 px-3 py-2 font-mono text-sm text-muted-foreground transition-colors hover:border-accent/70 hover:text-foreground"
-                >
-                  {meter.numerator}/{meter.denominator}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4 space-y-3">
-          {polymeterLanes.map((lane, index) => (
-            <div key={`${lane.numerator}-${lane.denominator}-${index}`} className="rounded-sm border border-border/60 bg-card/45 p-3">
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3">
-                <div className="grid grid-cols-[minmax(0,1fr)_5.25rem] gap-2">
-                  <NumberField
-                    label={`Meter ${index + 1}`}
-                    value={lane.numerator}
-                    compact
-                    onChange={(value) => setMeterLane(index, { numerator: clamp(value, 1, 16) })}
-                  />
-                  <SelectField label="Unit">
-                    <select
-                      value={lane.denominator}
-                      onChange={(e) => setMeterLane(index, { denominator: Number(e.target.value) as MeterDenominator })}
-                      className="metronome-select"
-                      aria-label={`Meter ${index + 1} denominator`}
-                    >
-                      {[4, 8, 16].map((denom) => (
-                        <option key={denom} value={denom} className="bg-background">/{denom}</option>
-                      ))}
-                    </select>
-                  </SelectField>
-                </div>
-                <button
-                  type="button"
-                  onPointerDown={(e) => { e.preventDefault(); removeMeterLane(index); }}
-                  className="self-end rounded-sm border border-border/70 px-3 py-2 tiny-caps text-[10px] text-muted-foreground hover:text-primary"
-                  disabled={polymeterLanes.length <= 1}
-                >
-                  Remove
-                </button>
-              </div>
-              <PolymeterLanePreview lane={lane} active={polymeterEnabled} index={index} />
-            </div>
-          ))}
-        </div>
-
-        {polymeterLanes.length < 4 && (
-          <button
-            type="button"
-            onPointerDown={(e) => { e.preventDefault(); addMeterLane(); }}
-            className="mt-3 w-full rounded-sm border border-border/70 px-3 py-3 tiny-caps text-[10px] text-muted-foreground hover:text-primary"
-          >
-            Add meter
-          </button>
-        )}
       </div>
 
       <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
