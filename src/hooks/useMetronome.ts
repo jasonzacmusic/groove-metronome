@@ -21,6 +21,7 @@ import {
   type SubdivisionCount,
   type TimeSignature,
 } from "@/lib/metronome-types";
+import { triggerMetronomeHaptic } from "@/lib/haptics";
 import { clamp } from "@/lib/utils";
 
 export interface RampConfig {
@@ -54,6 +55,7 @@ export interface MetronomeState {
   rampEnabled: boolean;
   rampConfig: RampConfig;
   rampProgress: { bar: number; currentBpm: number } | null;
+  hapticsEnabled: boolean;
   practiceSeconds: number;
   toneStarted: boolean;
   tapInfo: { count: number; avgBpm: number | null };
@@ -109,6 +111,7 @@ export function useMetronome() {
   const [rampEnabled, setRampEnabled] = useState(false);
   const [rampConfig, setRampConfig] = useState<RampConfig>({ startBpm: 80, endBpm: 160, durationBars: 2, loop: false });
   const [rampProgress, setRampProgress] = useState<MetronomeState["rampProgress"]>(null);
+  const [hapticsEnabled, setHapticsEnabled] = useState(false);
 
   const [practiceSeconds, setPracticeSeconds] = useState(0);
   const [toneStarted, setToneStarted] = useState(false);
@@ -133,6 +136,7 @@ export function useMetronome() {
   const trainerConfigRef = useRef(trainerConfig);
   const rampEnabledRef = useRef(rampEnabled);
   const rampConfigRef = useRef(rampConfig);
+  const hapticsEnabledRef = useRef(hapticsEnabled);
 
   useEffect(() => { patternRef.current = pattern; }, [pattern]);
   useEffect(() => { swingRef.current = swing; }, [swing]);
@@ -145,6 +149,7 @@ export function useMetronome() {
   useEffect(() => { trainerConfigRef.current = trainerConfig; }, [trainerConfig]);
   useEffect(() => { rampEnabledRef.current = rampEnabled; }, [rampEnabled]);
   useEffect(() => { rampConfigRef.current = rampConfig; }, [rampConfig]);
+  useEffect(() => { hapticsEnabledRef.current = hapticsEnabled; }, [hapticsEnabled]);
 
   // Resize pattern when numerator changes
   useEffect(() => {
@@ -277,6 +282,11 @@ export function useMetronome() {
           : PULSE_ACCENT_VOLUME[accent];
         const role: ClickRole = isFirstPulse ? (accent === "accent" ? "accent" : "normal") : "sub";
         if (!muted) playClick(time + offset, freq, vol, role, beatIdx + 1);
+        if (!muted && isFirstPulse && hapticsEnabledRef.current) {
+          Tone.Draw.schedule(() => {
+            void triggerMetronomeHaptic(accent);
+          }, time + offset);
+        }
 
         const pulseIndex = p;
         Tone.Draw.schedule(() => setCurrentPulse(pulseIndex), time + offset);
@@ -623,6 +633,7 @@ export function useMetronome() {
       rampEnabled,
       rampConfig,
       rampProgress,
+      hapticsEnabled,
       practiceSeconds,
       toneStarted,
       tapInfo,
@@ -637,6 +648,7 @@ export function useMetronome() {
     setTrainerConfig,
     setRampEnabled,
     setRampConfig,
+    setHapticsEnabled,
     start,
     stop,
     toggle,

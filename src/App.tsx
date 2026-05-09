@@ -5,12 +5,12 @@ import { AnalyzerPage } from "@/pages/AnalyzerPage";
 import { MetronomePage } from "@/pages/MetronomePage";
 
 type Tab = "metronome" | "analyzer";
-export type MetronomeView = "beatmap" | "wheel" | "levels" | "polyrhythm";
+export type MetronomeView = "beatmap" | "levels" | "polyrhythm";
 
 export default function App() {
   const metronome = useMetronome();
   const [tab, setTab] = useState<Tab>("metronome");
-  const [view, setView] = useState<MetronomeView>("wheel");
+  const [view, setView] = useState<MetronomeView>("beatmap");
 
   return (
     <div className="relative min-h-full bg-background text-foreground overflow-x-hidden">

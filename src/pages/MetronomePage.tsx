@@ -31,7 +31,6 @@ import { clamp, formatTime } from "@/lib/utils";
 const SETLIST_STORAGE_KEY = "groove-metronome.setlists.v1";
 
 const MODE_OPTIONS: Array<{ id: MetronomeView; label: string; detail: string }> = [
-  { id: "wheel", label: "Wheel", detail: "circular pulse view" },
   { id: "beatmap", label: "Beat Map", detail: "per-beat subdivisions" },
   { id: "levels", label: "Levels", detail: "accent strength" },
   { id: "polyrhythm", label: "Polyrhythm", detail: "LCM grid" },
@@ -70,6 +69,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
     setTrainerConfig,
     setRampEnabled,
     setRampConfig,
+    setHapticsEnabled,
     setPolyrhythm,
     toggle,
     tap,
@@ -85,7 +85,6 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
 
   const [targetMinutes, setTargetMinutes] = useState(5);
   const [selectedBeat, setSelectedBeat] = useState<number | null>(null);
-  const [visualAssist, setVisualAssist] = useState(false);
   const [songName, setSongName] = useState("New song");
   const [setlist, setSetlist] = useState<SetlistState>(() => {
     try {
@@ -138,7 +137,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
     setSwing(0);
     setPattern(buildDefaultPattern(4, 1));
     setPolyrhythm({ enabled: false, against: 3 });
-    onViewChange("wheel");
+    onViewChange("beatmap");
   };
 
   const handleViewChange = (next: MetronomeView) => {
@@ -186,8 +185,6 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
           isPlaying={state.isPlaying}
           currentBeat={state.currentBeat}
           currentPulse={state.currentPulse}
-          visualAssist={visualAssist}
-          onVisualAssistChange={setVisualAssist}
           onCycleBeatSubdivision={cycleBeatSubdivision}
           onCyclePulseAccent={cyclePulse}
         />
@@ -205,20 +202,6 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
           timeSignature={state.timeSignature}
           currentBeat={state.currentBeat}
           isPlaying={state.isPlaying}
-        />
-
-        <QuickSetup
-          view={view}
-          status={state.isPlaying ? `Bar ${state.barCount + 1}` : "Stopped"}
-          timeSignature={state.timeSignature}
-          beatSound={state.beatSound}
-          dominantSubdivision={dominantSubdivision}
-          onViewChange={handleViewChange}
-          onTimeSignatureChange={setTimeSignature}
-          onBeatSoundChange={setBeatSound}
-          onSubdivisionChange={setGlobalSubdivision}
-          onPresetChange={loadPreset}
-          onResetAccents={resetAccents}
         />
 
         <CollapsiblePanel
@@ -268,7 +251,7 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
               onCycleBeatSubdivision={cycleBeatSubdivision}
               onSetPulseLevel={setPulseLevel}
             />
-          ) : view === "polyrhythm" ? (
+          ) : (
             <PolyrhythmMode
               numerator={state.timeSignature.numerator}
               against={state.polyrhythm.against}
@@ -279,24 +262,22 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
               onToggle={(enabled) => setPolyrhythm({ enabled })}
               onAgainst={(against) => setPolyrhythm({ against, enabled: true })}
             />
-          ) : (
-            <BeatMapRow
-              pattern={state.pattern}
-              isPlaying={state.isPlaying}
-              currentBeat={state.currentBeat}
-              currentPulse={state.currentPulse}
-              onSetSubdivision={(beatIndex, pulses) => applyPatternToBeat(beatIndex, {
-                pulses,
-                accents: Array.from({ length: pulses }, (_, pulseIndex) => {
-                  const existing = state.pattern[beatIndex]?.accents[pulseIndex];
-                  if (existing) return existing;
-                  return "normal";
-                }),
-              })}
-              onCyclePulse={cyclePulse}
-            />
           )}
         </div>
+
+        <QuickSetup
+          view={view}
+          status={state.isPlaying ? `Bar ${state.barCount + 1}` : "Stopped"}
+          timeSignature={state.timeSignature}
+          beatSound={state.beatSound}
+          dominantSubdivision={dominantSubdivision}
+          onViewChange={handleViewChange}
+          onTimeSignatureChange={setTimeSignature}
+          onBeatSoundChange={setBeatSound}
+          onSubdivisionChange={setGlobalSubdivision}
+          onPresetChange={loadPreset}
+          onResetAccents={resetAccents}
+        />
 
         {/* Pattern tiles (Pro-Metronome style) */}
         <CollapsiblePanel title="Pattern Tiles" summary="Apply rhythm presets" defaultOpen={false}>
@@ -339,6 +320,17 @@ export function MetronomePage({ metronome, view, onViewChange }: MetronomePagePr
               />
             </Field>
           </div>
+        </CollapsiblePanel>
+
+        <CollapsiblePanel
+          title="Practice Assist"
+          summary={state.hapticsEnabled ? "Haptic pulse on" : "Haptic pulse off"}
+          trailing={<Switch aria-label="Haptic pulse" checked={state.hapticsEnabled} onCheckedChange={setHapticsEnabled} />}
+          defaultOpen={false}
+        >
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Haptic pulse follows the main beat on phones and tablets that support native haptics. Accents feel stronger, ghost notes lighter, and muted beats stay silent.
+          </p>
         </CollapsiblePanel>
 
         <CollapsiblePanel title="Playlist / Setlist" summary={setlist.name} defaultOpen={false}>
@@ -505,8 +497,6 @@ function WheelStage({
   isPlaying,
   currentBeat,
   currentPulse,
-  visualAssist,
-  onVisualAssistChange,
   onCycleBeatSubdivision,
   onCyclePulseAccent,
 }: {
@@ -515,26 +505,11 @@ function WheelStage({
   isPlaying: boolean;
   currentBeat: number;
   currentPulse: number;
-  visualAssist: boolean;
-  onVisualAssistChange: (enabled: boolean) => void;
   onCycleBeatSubdivision: (beatIndex: number) => void;
   onCyclePulseAccent: (beatIndex: number, pulseIndex: number) => void;
 }) {
-  const activeBeat = currentBeat >= 0 ? pattern[currentBeat] : null;
-  const activeAccent = activeBeat && currentPulse >= 0 ? activeBeat.accents[currentPulse] ?? "normal" : "normal";
-  const flashColor = accentColor(activeAccent, true);
-
   return (
     <div className="relative overflow-hidden rounded-lg border border-border/70 bg-card/55 p-4 md:p-5">
-      {visualAssist && isPlaying && (
-        <div
-          className="pointer-events-none absolute inset-0 transition-colors duration-100"
-          style={{
-            background: `radial-gradient(circle at 50% 38%, ${flashColor}, transparent 48%)`,
-            opacity: 0.26,
-          }}
-        />
-      )}
       <div className="relative grid grid-cols-1 lg:grid-cols-[minmax(280px,440px)_minmax(0,1fr)] gap-5 items-center">
         <PolyrhythmWheel
           pattern={pattern}
@@ -549,19 +524,12 @@ function WheelStage({
           <div>
             <span className="tiny-caps text-xs text-muted-foreground">Always-on wheel</span>
             <h2 className="mt-2 font-serif text-3xl md:text-4xl leading-none text-foreground">
-              Count in color.
+              One pulse map, three practice modes.
             </h2>
             <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
-              The wheel stays visible while you edit beat maps, accents, levels, and polyrhythms.
+              The wheel stays visible and adapts while you work in Beat Map, Levels, or Polyrhythm.
             </p>
           </div>
-          <label className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-background/35 px-3 py-3">
-            <span>
-              <span className="tiny-caps block text-xs text-foreground">Visual Flash Assist</span>
-              <span className="mt-1 block text-xs text-muted-foreground">Full-stage pulse for silent or noisy practice rooms.</span>
-            </span>
-            <Switch checked={visualAssist} onCheckedChange={onVisualAssistChange} />
-          </label>
           <div className="grid grid-cols-4 gap-2">
             {pattern.map((beat, index) => {
               const active = isPlaying && currentBeat === index;
@@ -697,12 +665,24 @@ function QuickSetup({
   onPresetChange: (idx: number) => void;
   onResetAccents: () => void;
 }) {
+  const activeMode = MODE_OPTIONS.find((option) => option.id === view);
+
   return (
-    <div className="rounded-md border border-border/70 bg-card/60 p-4 md:p-5">
-      <div className="flex items-baseline justify-between gap-4">
-        <SectionLabel title="Quick Setup" hint={status} />
+    <div className="rounded-lg border border-border/70 bg-card/50 p-4 md:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <SectionLabel title="Quick Setup" hint={status} />
+          <p className="mt-1 text-sm text-muted-foreground">
+            Fast changes live lower on the page so the wheel, transport, notation, and active mode stay easy to read.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <SetupPill label="Mode" value={activeMode?.label ?? "Beat Map"} />
+          <SetupPill label="Sig" value={`${timeSignature.numerator}/${timeSignature.denominator}`} />
+          <SetupPill label="Sound" value={BEAT_SOUND_LABELS[beatSound]} />
+        </div>
       </div>
-      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         <TimeSignatureDropdown value={timeSignature} onChange={onTimeSignatureChange} />
         <SelectField label="Mode">
           <select
@@ -759,7 +739,7 @@ function QuickSetup({
           </select>
         </SelectField>
       </div>
-      <div className="mt-4">
+      <div className="mt-3">
         <SelectField label="Load Preset">
           <select
             onChange={(e) => {
@@ -780,6 +760,15 @@ function QuickSetup({
         </SelectField>
       </div>
     </div>
+  );
+}
+
+function SetupPill({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="rounded-full border border-border/70 bg-background/40 px-3 py-1.5">
+      <span className="tiny-caps mr-2 text-[9px] text-muted-foreground">{label}</span>
+      <span className="font-mono text-xs text-foreground">{value}</span>
+    </span>
   );
 }
 
@@ -1046,43 +1035,6 @@ function BeatMapRow({
           );
         })}
         </div>
-      </div>
-    </div>
-  );
-}
-
-function ModeSwitcher({
-  view,
-  onChange,
-  status,
-}: {
-  view: MetronomeView;
-  onChange: (view: MetronomeView) => void;
-  status: string;
-}) {
-  return (
-    <div className="rounded-md border border-border/70 bg-card/60 p-4">
-      <SectionLabel title="Mode" hint={status} />
-      <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-2">
-        {MODE_OPTIONS.map((option) => {
-          const active = view === option.id;
-          return (
-            <button
-              key={option.id}
-              type="button"
-              onPointerDown={(e) => { e.preventDefault(); onChange(option.id); }}
-              className={
-                "min-h-20 rounded-md border px-3 py-3 text-left transition-colors " +
-                (active
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border/60 text-muted-foreground hover:border-accent/70 hover:text-foreground")
-              }
-            >
-              <span className="block font-serif text-xl leading-tight">{option.label}</span>
-              <span className="tiny-caps mt-2 block text-[11px] leading-relaxed">{option.detail}</span>
-            </button>
-          );
-        })}
       </div>
     </div>
   );
