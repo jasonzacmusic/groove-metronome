@@ -327,50 +327,58 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-8 lg:gap-12 pb-16">
+    <div className="metronome-layout grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-8 lg:gap-12 pb-16">
       {/* HERO column */}
-      <section className="space-y-5">
-        <TempoHeaderStrip
-          bpm={state.bpm}
-          timeSignature={state.timeSignature}
-          pattern={state.pattern}
-          onSetBpm={setBpm}
-          onSetTimeSignature={setTimeSignature}
-          onSetSubdivision={setGlobalSubdivision}
-        />
+      <section className="metronome-hero space-y-5">
+        <div className="metronome-essential-strip">
+          <TempoHeaderStrip
+            bpm={state.bpm}
+            timeSignature={state.timeSignature}
+            pattern={state.pattern}
+            onSetBpm={setBpm}
+            onSetTimeSignature={setTimeSignature}
+            onSetSubdivision={setGlobalSubdivision}
+          />
+        </div>
 
-        <HeroPracticeBar
-          practiceSeconds={state.practiceSeconds}
-          targetMinutes={targetMinutes}
-          onTargetMinutes={setTargetMinutes}
-          onReset={resetDefault}
-          onResetAccents={resetAccents}
-        />
+        <div className="metronome-timer-card">
+          <HeroPracticeBar
+            practiceSeconds={state.practiceSeconds}
+            targetMinutes={targetMinutes}
+            onTargetMinutes={setTargetMinutes}
+            onReset={resetDefault}
+            onResetAccents={resetAccents}
+          />
+        </div>
 
-        <WheelStage
-          view={view}
-          pattern={state.pattern}
-          polyrhythm={state.polyrhythm}
-          bpm={state.bpm}
-          isPlaying={state.isPlaying}
-          currentBeat={state.currentBeat}
-          currentPulse={state.currentPulse}
-          currentPoly={state.currentPoly}
-          onCycleBeatSubdivision={cycleBeatSubdivision}
-          onCyclePulseAccent={cyclePulse}
-          onTap={tap}
-        />
+        <div className="metronome-wheel-stage">
+          <WheelStage
+            view={view}
+            pattern={state.pattern}
+            polyrhythm={state.polyrhythm}
+            bpm={state.bpm}
+            isPlaying={state.isPlaying}
+            currentBeat={state.currentBeat}
+            currentPulse={state.currentPulse}
+            currentPoly={state.currentPoly}
+            onCycleBeatSubdivision={cycleBeatSubdivision}
+            onCyclePulseAccent={cyclePulse}
+            onTap={tap}
+          />
+        </div>
 
-        <TransportDeck
-          state={state}
-          onTap={tap}
-          onToggle={toggle}
-          onAdjustBpm={adjustBpm}
-          onSetBpm={setBpm}
-        />
+        <div className="metronome-transport">
+          <TransportDeck
+            state={state}
+            onTap={tap}
+            onToggle={toggle}
+            onAdjustBpm={adjustBpm}
+            onSetBpm={setBpm}
+          />
+        </div>
 
         {/* Mode detail */}
-        <div className="relative">
+        <div className="metronome-mode-detail relative">
           {view === "beatmap" ? (
             <BeatMapRow
               bpm={state.bpm}
@@ -422,31 +430,35 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
           )}
         </div>
 
-        <NotationStage
-          view={view}
-          pattern={state.pattern}
-          polyrhythm={state.polyrhythm}
-          timeSignature={state.timeSignature}
-          currentBeat={state.currentBeat}
-          currentPulse={state.currentPulse}
-          currentPoly={state.currentPoly}
-          isPlaying={state.isPlaying}
-          onCyclePulse={cyclePulse}
-          onCycleBeatSubdivision={cycleBeatSubdivision}
-        />
+        <div className="metronome-notation">
+          <NotationStage
+            view={view}
+            pattern={state.pattern}
+            polyrhythm={state.polyrhythm}
+            timeSignature={state.timeSignature}
+            currentBeat={state.currentBeat}
+            currentPulse={state.currentPulse}
+            currentPoly={state.currentPoly}
+            isPlaying={state.isPlaying}
+            onCyclePulse={cyclePulse}
+            onCycleBeatSubdivision={cycleBeatSubdivision}
+          />
+        </div>
 
-        <QuickSetup
-          status={state.isPlaying ? `Bar ${state.barCount + 1}` : "Stopped"}
-          beatSound={state.beatSound}
-          onBeatSoundChange={setBeatSound}
-          onPresetChange={loadPreset}
-          onResetAccents={resetAccents}
-          onSetAllPulseAccents={setAllPulseAccents}
-        />
+        <div className="metronome-quick">
+          <QuickSetup
+            status={state.isPlaying ? `Bar ${state.barCount + 1}` : "Stopped"}
+            beatSound={state.beatSound}
+            onBeatSoundChange={setBeatSound}
+            onPresetChange={loadPreset}
+            onResetAccents={resetAccents}
+            onSetAllPulseAccents={setAllPulseAccents}
+          />
+        </div>
       </section>
 
       {/* SIDEBAR column */}
-      <aside className="space-y-4 lg:border-l lg:border-border lg:pl-10">
+      <aside className="metronome-tools-panel space-y-4 lg:border-l lg:border-border lg:pl-10">
         <CollapsiblePanel title="Guide" summary="How this works" icon={<CircleHelp className="size-4" />} defaultOpen={false}>
           <AppGuide />
         </CollapsiblePanel>

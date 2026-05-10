@@ -91,16 +91,16 @@ export default function App() {
   }, [analyzerStartDelay, metronome, tab]);
 
   return (
-    <div data-theme={theme} className="relative min-h-full bg-background text-foreground overflow-x-hidden">
+    <div data-theme={theme} className="app-shell relative min-h-full bg-background text-foreground overflow-x-hidden">
       {/* Background layers */}
       <div className="warm-glow" aria-hidden />
       <div className="film-grain" aria-hidden />
 
       {/* Compact app masthead */}
-      <header className="relative z-10 border-b border-border/70">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-4 md:px-10 md:py-5">
+      <header className="mobile-masthead relative z-10 border-b border-border/70">
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-3 md:px-10 md:py-5">
           <div className="grid gap-4 lg:grid-cols-[minmax(220px,0.75fr)_minmax(0,1.7fr)_auto] lg:items-center">
-            <div className="flex min-w-0 items-center gap-3">
+            <div className="brand-lockup flex min-w-0 items-center gap-3">
               <img
                 src="/brand/nsm-white.png"
                 alt="Nathaniel School of Music"
@@ -116,7 +116,7 @@ export default function App() {
               </div>
             </div>
 
-            <nav className="grid grid-cols-3 gap-2" aria-label="Main app spaces">
+            <nav className="app-space-nav app-space-nav-desktop grid grid-cols-3 gap-2" aria-label="Main app spaces">
               {APP_TABS.map((item) => (
                 <AppTabButton
                   key={item.id}
@@ -131,7 +131,7 @@ export default function App() {
               ))}
             </nav>
 
-            <div className="grid grid-cols-[auto_minmax(0,1fr)] items-end gap-3 lg:grid-cols-1 lg:justify-items-end">
+            <div className="utility-cluster grid grid-cols-[auto_minmax(0,1fr)] items-end gap-3 lg:grid-cols-1 lg:justify-items-end">
               <ShareStrip />
               <ThemeSwitch theme={theme} onThemeChange={setTheme} />
             </div>
@@ -139,7 +139,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="relative z-10 max-w-6xl mx-auto px-5 md:px-10 py-6 md:py-10">
+      <main className="app-main relative z-10 max-w-6xl mx-auto px-4 md:px-10 py-5 md:py-10">
         <div hidden={tab !== "metronome"}>
           <MetronomePage metronome={metronome} view={view} onViewChange={setView} active={tab === "metronome"} />
         </div>
@@ -165,6 +165,20 @@ export default function App() {
           <SetlistPage metronome={metronome} active={tab === "setlist"} />
         </div>
       </main>
+      <nav className="app-space-nav-mobile grid grid-cols-3 gap-2" aria-label="Main app spaces">
+        {APP_TABS.map((item) => (
+          <AppTabButton
+            key={item.id}
+            item={item}
+            active={tab === item.id}
+            bpm={item.id === "metronome" && metronome.state.isPlaying ? Math.round(metronome.state.bpm) : undefined}
+            onSelect={() => {
+              if (item.id === "analyzer") prepareAnalyzerClick();
+              setTab(item.id);
+            }}
+          />
+        ))}
+      </nav>
       <SeoFooter />
     </div>
   );

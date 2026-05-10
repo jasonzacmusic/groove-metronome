@@ -460,3 +460,339 @@
   flex: 1;
   border-top: 1px solid hsl(var(--border));
 }
+
+.app-space-nav-mobile {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .app-shell {
+    min-height: 100dvh;
+  }
+
+  .mobile-masthead {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background:
+      linear-gradient(180deg, hsl(var(--background) / 0.96), hsl(var(--background) / 0.84));
+    backdrop-filter: blur(18px);
+  }
+
+  .brand-lockup img {
+    height: 1.95rem;
+  }
+
+  .brand-lockup h1 {
+    font-size: 1.05rem;
+  }
+
+  .brand-lockup p {
+    display: none;
+  }
+
+  .utility-cluster {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .utility-cluster > div {
+    align-items: start;
+  }
+
+  .utility-cluster .tiny-caps {
+    font-size: 0.5rem;
+  }
+
+  .share-action,
+  .theme-swatch {
+    width: 1.95rem;
+    min-height: 1.95rem;
+    height: 1.95rem;
+    border-radius: 999px;
+  }
+
+  .theme-swatch-palette {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .app-space-nav-desktop {
+    display: none;
+  }
+
+  .app-space-nav-mobile {
+    display: grid;
+    position: fixed !important;
+    z-index: 50;
+    top: auto;
+    right: 0.75rem;
+    bottom: 0.7rem;
+    left: 0.75rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.45rem;
+    border: 1px solid hsl(var(--border) / 0.76);
+    border-radius: 1rem;
+    background: hsl(var(--background) / 0.88);
+    padding: 0.45rem;
+    box-shadow:
+      0 18px 44px hsl(0 0% 0% / 0.42),
+      0 1px 0 hsl(var(--foreground) / 0.06) inset;
+    backdrop-filter: blur(22px);
+  }
+
+  .app-space-nav-mobile .hero-tab {
+    min-height: 3.85rem;
+    border-radius: 0.78rem;
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .app-space-nav-mobile .hero-tab-active {
+    background: hsl(var(--primary) / 0.15);
+    border-color: hsl(var(--primary) / 0.45);
+    box-shadow: none;
+  }
+
+  .app-space-nav-mobile .hero-tab-icon {
+    width: 1.8rem;
+    height: 1.8rem;
+  }
+
+  .app-space-nav-mobile .hero-tab-title {
+    font-size: 0.82rem;
+    line-height: 1.05;
+  }
+
+  .app-space-nav-mobile .hero-tab-detail {
+    display: none;
+  }
+
+  .app-main {
+    padding-top: 0.85rem;
+    padding-bottom: calc(6.4rem + env(safe-area-inset-bottom));
+  }
+
+  .metronome-layout {
+    display: block;
+    padding-bottom: 0;
+  }
+
+  .metronome-hero {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+
+  .metronome-wheel-stage { order: 1; }
+  .metronome-transport { order: 2; }
+  .metronome-essential-strip { order: 3; }
+  .metronome-tools-panel { order: 4; margin-top: 0.85rem; }
+  .metronome-mode-detail { order: 5; }
+  .metronome-notation { order: 6; }
+  .metronome-quick { order: 7; }
+  .metronome-timer-card { order: 8; }
+
+  .metronome-wheel-stage > div {
+    border-color: hsl(var(--primary) / 0.35);
+    background:
+      radial-gradient(circle at 50% 38%, hsl(var(--primary) / 0.10), transparent 58%),
+      linear-gradient(180deg, hsl(var(--card) / 0.94), hsl(var(--background) / 0.78));
+    padding: 0.65rem;
+  }
+
+  .metronome-wheel-stage svg {
+    max-height: min(52dvh, 430px);
+  }
+
+  .metronome-essential-strip > div {
+    display: grid;
+    grid-template-columns: 1.15fr 0.92fr 0.92fr;
+    gap: 0.55rem;
+  }
+
+  .metronome-essential-strip section {
+    border-radius: 0.75rem;
+    padding: 0.72rem;
+    background: hsl(var(--card) / 0.72);
+  }
+
+  .metronome-essential-strip .tiny-caps {
+    font-size: 0.52rem;
+    letter-spacing: 0.18em;
+  }
+
+  .metronome-essential-strip button {
+    gap: 0.35rem;
+  }
+
+  .metronome-essential-strip .font-serif.text-4xl,
+  .metronome-essential-strip .font-serif.md\:text-5xl {
+    font-size: clamp(1.65rem, 8vw, 2.35rem);
+  }
+
+  .metronome-essential-strip .font-serif.italic {
+    display: none;
+  }
+
+  .metronome-transport > div {
+    border-radius: 1rem;
+    background: hsl(var(--card) / 0.76);
+    padding: 0.75rem;
+  }
+
+  .metronome-transport > div > div:first-child {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 5.2rem;
+    grid-template-areas:
+      "bpm play"
+      "tap tap";
+    gap: 0.75rem;
+    align-items: stretch;
+  }
+
+  .metronome-transport > div > div:first-child > div:nth-child(1) {
+    grid-area: tap;
+  }
+
+  .metronome-transport > div > div:first-child > div:nth-child(2) {
+    grid-area: play;
+    align-self: center;
+  }
+
+  .metronome-transport > div > div:first-child > div:nth-child(3) {
+    grid-area: bpm;
+    align-items: stretch;
+  }
+
+  .metronome-transport input[aria-label="BPM"] {
+    width: 4.6rem;
+    font-size: 2rem;
+  }
+
+  .metronome-transport [aria-label="Tap tempo"] {
+    min-height: 4.7rem;
+  }
+
+  .metronome-tools-panel {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .metronome-tools-panel > * {
+    border-radius: 0.82rem;
+  }
+
+  .metronome-timer-card section {
+    background: hsl(var(--card) / 0.58);
+    border-color: hsl(var(--border) / 0.68);
+  }
+
+  .film-grain {
+    opacity: 0.12;
+  }
+
+  .warm-glow {
+    background:
+      radial-gradient(circle at 50% 8%, hsl(var(--primary) / 0.14), transparent 28rem),
+      linear-gradient(180deg, hsl(var(--glow-a) / 0.07), transparent 38%),
+      repeating-linear-gradient(90deg, hsla(224, 28%, 42%, 0.035) 0 1px, transparent 1px 76px);
+  }
+
+  footer {
+    display: none;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1180px) {
+  .mobile-masthead > div {
+    max-width: 54rem;
+  }
+
+  .app-main {
+    max-width: 54rem;
+  }
+
+  .metronome-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .metronome-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem);
+    align-items: start;
+    gap: 1rem;
+  }
+
+  .metronome-wheel-stage,
+  .metronome-transport,
+  .metronome-mode-detail,
+  .metronome-notation {
+    grid-column: 1;
+  }
+
+  .metronome-wheel-stage {
+    grid-row: 1 / span 2;
+  }
+
+  .metronome-transport {
+    grid-row: 3;
+  }
+
+  .metronome-essential-strip,
+  .metronome-timer-card,
+  .metronome-quick {
+    grid-column: 2;
+  }
+
+  .metronome-essential-strip {
+    grid-row: 1;
+  }
+
+  .metronome-essential-strip > div {
+    grid-template-columns: 1fr;
+  }
+
+  .metronome-timer-card {
+    grid-row: 2;
+  }
+
+  .metronome-quick {
+    grid-row: 3;
+  }
+
+  .metronome-transport > div > div:first-child {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 5.4rem;
+    grid-template-areas:
+      "bpm play"
+      "tap tap";
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .metronome-transport > div > div:first-child > div:nth-child(1) {
+    grid-area: tap;
+  }
+
+  .metronome-transport > div > div:first-child > div:nth-child(2) {
+    grid-area: play;
+    align-self: center;
+  }
+
+  .metronome-transport > div > div:first-child > div:nth-child(3) {
+    grid-area: bpm;
+    align-items: stretch;
+  }
+
+  .metronome-tools-panel {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    border-left: 0;
+    padding-left: 0;
+  }
+}
