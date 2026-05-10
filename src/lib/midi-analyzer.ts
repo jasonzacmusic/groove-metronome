@@ -58,6 +58,8 @@ export interface MidiAnalysis {
   /** True if this looks like a "performance" rather than a quantized chart. */
   isPerformance: boolean;
   tempos: MidiTempoChange[];
+  hasExplicitTempo: boolean;
+  hasExplicitTimeSignature: boolean;
   /** Stable tempo estimate. */
   bpm: number;
   /** Duration-weighted average across tempo regions. */
@@ -91,6 +93,7 @@ export async function analyzeMidi(file: File): Promise<MidiAnalysis> {
     timeSec: midi.header.ticksToSeconds(t.ticks),
     bpm: t.bpm,
   }));
+  const hasExplicitTempo = tempos.length > 0;
   if (tempos.length === 0) tempos.push({ timeSec: 0, bpm: 120 });
 
   const timeSignatures: MidiTimeSignatureChange[] = midi.header.timeSignatures.map((ts) => ({
@@ -98,6 +101,7 @@ export async function analyzeMidi(file: File): Promise<MidiAnalysis> {
     numerator: ts.timeSignature[0],
     denominator: ts.timeSignature[1],
   }));
+  const hasExplicitTimeSignature = timeSignatures.length > 0;
   if (timeSignatures.length === 0) timeSignatures.push({ timeSec: 0, numerator: 4, denominator: 4 });
 
   const tracks: MidiTrackSummary[] = [];
@@ -176,6 +180,8 @@ export async function analyzeMidi(file: File): Promise<MidiAnalysis> {
     ppq,
     isPerformance,
     tempos,
+    hasExplicitTempo,
+    hasExplicitTimeSignature,
     bpm: weightedBpm,
     weightedBpm,
     bpmVariation,

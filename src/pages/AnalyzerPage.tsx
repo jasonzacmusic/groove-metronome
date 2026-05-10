@@ -266,7 +266,7 @@ function AnalyzerMetronomeDock({
           <Button size="sm" variant="outline" onClick={() => adjustBpm(-1)}>-1</Button>
           <Button size="sm" onClick={toggleAnalyzerClick}>
             {state.isPlaying ? <Pause className="mr-2 size-4" /> : <Play className="mr-2 size-4" />}
-            {state.isPlaying ? "Stop click" : startDelay > 0.05 ? "Play on transient" : "Play click"}
+            {state.isPlaying ? "Stop click" : "Play click"}
           </Button>
           <Button size="sm" variant="outline" onClick={() => adjustBpm(1)}>+1</Button>
           <Button size="sm" variant="outline" onClick={() => setBpm(Math.max(20, Math.round(state.bpm / 2)))}>Half</Button>
@@ -655,10 +655,23 @@ function MidiWorkspace({
   const ts = analysis?.timeSignatures[0];
   const [selectedSectionIds, setSelectedSectionIds] = useState<number[]>([]);
   const [splitMidi, setSplitMidi] = useState(60);
+  const autoLockedRef = useRef<string | null>(null);
 
   useEffect(() => {
     setSelectedSectionIds([]);
   }, [item.id]);
+
+  useEffect(() => {
+    if (!analysis || autoLockedRef.current === item.id) return;
+    autoLockedRef.current = item.id;
+    if (analysis.hasExplicitTempo) {
+      onUseAsBpm(Math.round(midiLockBpm(analysis)));
+    }
+    const firstMeter = analysis.timeSignatures[0];
+    if (analysis.hasExplicitTimeSignature && firstMeter) {
+      onUseAsTimeSignature(firstMeter.numerator, firstMeter.denominator);
+    }
+  }, [analysis, item.id, onUseAsBpm, onUseAsTimeSignature]);
 
   return (
     <div className="space-y-5">
@@ -695,6 +708,12 @@ function MidiWorkspace({
       )}
     </div>
   );
+}
+
+function midiLockBpm(analysis: MidiAnalysis): number {
+  if (analysis.tempos.length === 1) return analysis.tempos[0].bpm;
+  if (analysis.bpmVariation <= 1.5) return analysis.weightedBpm || analysis.bpm;
+  return analysis.tempos[0]?.bpm ?? analysis.weightedBpm ?? analysis.bpm;
 }
 
 function MidiPlayer({

@@ -88,15 +88,15 @@ export const SAMPLE_SOUND_SETS: Partial<Record<BeatSound, SampleSoundSet>> = {
   },
   "sample-marimba": {
     urls: clickUrls("marimba"),
-    gainDb: -3,
+    gainDb: -2,
   },
   "sample-rim": {
     urls: clickUrls("rim"),
-    gainDb: -5,
+    gainDb: -3,
   },
   "sample-ping": {
     urls: clickUrls("ping"),
-    gainDb: -6,
+    gainDb: -4,
   },
   "voice-male": {
     urls: voiceUrls("male"),
@@ -129,9 +129,9 @@ export const PULSE_ACCENT_LABELS: Record<PulseAccent, string> = {
 };
 
 export const PULSE_ACCENT_VOLUME: Record<PulseAccent, number> = {
-  accent: 0,
-  normal: -8,
-  ghost: -22,
+  accent: -1,
+  normal: -5,
+  ghost: -17,
   mute: -Infinity,
 };
 

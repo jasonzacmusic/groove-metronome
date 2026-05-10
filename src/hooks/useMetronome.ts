@@ -482,7 +482,10 @@ export function useMetronome() {
 
       if (!muted && jazzAssistActive && beatIdx === 0) {
         jazzAssistEvents(poly.jazzMode, ts.numerator, beatDuration).forEach((event) => {
-          playPolyClick(time + event.offset, event.freq, event.vol, event.voiceIndex, event.downbeat);
+          const role: ClickRole = event.downbeat ? "normal" : "sub";
+          const freq = event.downbeat ? freqs.normal : freqs.sub;
+          const vol = event.downbeat ? PULSE_ACCENT_VOLUME.normal : Math.max(PULSE_ACCENT_VOLUME.ghost, -14);
+          playClick(time + event.offset, freq, vol, role, event.beatNumber);
           if (hapticsEnabledRef.current && event.downbeat) {
             Tone.Draw.schedule(() => {
               void triggerMetronomeHaptic("normal");

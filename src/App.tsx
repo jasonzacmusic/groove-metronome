@@ -1,10 +1,8 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { AudioWaveform, Check, Copy, Gauge, ListMusic, MessageCircle, Share2 } from "lucide-react";
 
 import { useMetronome } from "@/hooks/useMetronome";
-import { AnalyzerPage } from "@/pages/AnalyzerPage";
 import { MetronomePage } from "@/pages/MetronomePage";
-import { SetlistPage } from "@/pages/SetlistPage";
 import { buildDefaultPattern, type MeterDenominator, type TimeSignature } from "@/lib/metronome-types";
 
 type Tab = "metronome" | "analyzer" | "setlist";
@@ -35,6 +33,9 @@ const APP_TABS: Array<{
   { id: "setlist", label: "Setlist Studio", shortLabel: "Setlist", detail: "Concert mode", icon: ListMusic },
 ];
 
+const AnalyzerPage = lazy(() => import("@/pages/AnalyzerPage").then((module) => ({ default: module.AnalyzerPage })));
+const SetlistPage = lazy(() => import("@/pages/SetlistPage").then((module) => ({ default: module.SetlistPage })));
+
 function readStoredTheme(): ThemeId {
   if (typeof window === "undefined") return "midnight";
   const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
@@ -47,6 +48,7 @@ export default function App() {
   const [view, setView] = useState<MetronomeView>("beatmap");
   const [theme, setTheme] = useState<ThemeId>(readStoredTheme);
   const [analyzerStartDelay, setAnalyzerStartDelay] = useState(0);
+  const [visitedTabs, setVisitedTabs] = useState({ analyzer: false, setlist: false });
 
   const prepareAnalyzerClick = (timeSignature: TimeSignature = metronome.state.timeSignature) => {
     const denominator: MeterDenominator = timeSignature.denominator === 16 ? 16 : timeSignature.denominator === 8 ? 8 : 4;
@@ -101,18 +103,18 @@ export default function App() {
       {/* Compact app masthead */}
       <header className="mobile-masthead relative z-10 border-b border-border/70">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-3 md:px-10 md:py-5">
-          <div className="grid gap-4 lg:grid-cols-[minmax(220px,0.75fr)_minmax(0,1.7fr)_auto] lg:items-center">
-            <div className="brand-lockup flex min-w-0 items-center gap-3">
+          <div className="grid gap-4 lg:grid-cols-[minmax(285px,1fr)_minmax(360px,1.35fr)_auto] lg:items-center">
+            <div className="brand-lockup flex min-w-0 items-center gap-3 lg:min-w-[285px]">
               <img
                 src="/brand/nsm-white.png"
                 alt="Nathaniel School of Music"
                 className="h-9 w-auto shrink-0 object-contain md:h-11"
               />
               <div className="min-w-0 border-l border-border/70 pl-3">
-                <h1 className="font-serif text-xl leading-none tracking-tight text-foreground md:text-2xl">
+                <h1 className="whitespace-nowrap font-serif text-xl leading-none tracking-tight text-foreground md:text-2xl">
                   Groove Metronome
                 </h1>
-                <p className="mt-1 truncate text-xs text-muted-foreground/80">
+                <p className="mt-1 whitespace-nowrap text-xs text-muted-foreground/80">
                   See it. Count it. Lock it in.
                 </p>
               </div>
@@ -127,6 +129,9 @@ export default function App() {
                   bpm={item.id === "metronome" && metronome.state.isPlaying ? Math.round(metronome.state.bpm) : undefined}
                   onSelect={() => {
                     if (item.id === "analyzer") prepareAnalyzerClick();
+                    if (item.id === "analyzer" || item.id === "setlist") {
+                      setVisitedTabs((prev) => ({ ...prev, [item.id]: true }));
+                    }
                     setTab(item.id);
                   }}
                 />
@@ -146,25 +151,33 @@ export default function App() {
           <MetronomePage metronome={metronome} view={view} onViewChange={setView} active={tab === "metronome"} />
         </div>
         <div hidden={tab !== "analyzer"}>
-          <AnalyzerPage
-            metronome={metronome}
-            active={tab === "analyzer"}
-            analyzerStartDelay={analyzerStartDelay}
-            onAnalyzerStartDelayChange={setAnalyzerStartDelay}
-            onPrepareAnalyzerClick={prepareAnalyzerClick}
-            onUseAsBpm={(bpm) => {
-              prepareAnalyzerClick();
-              metronome.setBpm(bpm);
-            }}
-            onUseAsTimeSignature={(numerator, denominator) => {
-              const next = { numerator, denominator } as TimeSignature;
-              metronome.setTimeSignature(next);
-              prepareAnalyzerClick(next);
-            }}
-          />
+          {visitedTabs.analyzer && (
+            <Suspense fallback={<AppPaneFallback />}>
+              <AnalyzerPage
+                metronome={metronome}
+                active={tab === "analyzer"}
+                analyzerStartDelay={analyzerStartDelay}
+                onAnalyzerStartDelayChange={setAnalyzerStartDelay}
+                onPrepareAnalyzerClick={prepareAnalyzerClick}
+                onUseAsBpm={(bpm) => {
+                  prepareAnalyzerClick();
+                  metronome.setBpm(bpm);
+                }}
+                onUseAsTimeSignature={(numerator, denominator) => {
+                  const next = { numerator, denominator } as TimeSignature;
+                  metronome.setTimeSignature(next);
+                  prepareAnalyzerClick(next);
+                }}
+              />
+            </Suspense>
+          )}
         </div>
         <div hidden={tab !== "setlist"}>
-          <SetlistPage metronome={metronome} active={tab === "setlist"} />
+          {visitedTabs.setlist && (
+            <Suspense fallback={<AppPaneFallback />}>
+              <SetlistPage metronome={metronome} active={tab === "setlist"} />
+            </Suspense>
+          )}
         </div>
       </main>
       <nav className="app-space-nav-mobile grid grid-cols-3 gap-2" aria-label="Main app spaces">
@@ -176,12 +189,23 @@ export default function App() {
             bpm={item.id === "metronome" && metronome.state.isPlaying ? Math.round(metronome.state.bpm) : undefined}
             onSelect={() => {
               if (item.id === "analyzer") prepareAnalyzerClick();
+              if (item.id === "analyzer" || item.id === "setlist") {
+                setVisitedTabs((prev) => ({ ...prev, [item.id]: true }));
+              }
               setTab(item.id);
             }}
           />
         ))}
       </nav>
       <SeoFooter />
+    </div>
+  );
+}
+
+function AppPaneFallback() {
+  return (
+    <div className="rounded-lg border border-border bg-card/60 p-5 font-mono text-xs text-muted-foreground">
+      Loading...
     </div>
   );
 }
