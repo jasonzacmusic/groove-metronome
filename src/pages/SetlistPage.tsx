@@ -5,7 +5,18 @@ import { Button } from "@/components/ui/button";
 import { PolyrhythmWheel } from "@/components/metronome/PolyrhythmWheel";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { UseMetronomeReturn } from "@/hooks/useMetronome";
-import { buildDefaultPattern, type BeatPattern, type MeterDenominator, type TimeSignature } from "@/lib/metronome-types";
+import {
+  BEAT_SOUND_OPTIONS,
+  buildDefaultPattern,
+  pitchLabel,
+  SUBDIVISION_NOTATION,
+  SUBDIVISION_OPTIONS,
+  type BeatPattern,
+  type BeatSound,
+  type MeterDenominator,
+  type SubdivisionCount,
+  type TimeSignature,
+} from "@/lib/metronome-types";
 import { clamp, formatTime } from "@/lib/utils";
 
 const SETLIST_STORAGE_KEY = "groove-metronome.setlists.v1";
@@ -30,7 +41,7 @@ interface SetlistPageProps {
 }
 
 export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
-  const { state, setBpm, setTimeSignature, setPattern, setSwing, setPolyrhythm, setTrainerEnabled, setRampEnabled, toggle, adjustBpm } = metronome;
+  const { state, setBpm, setTimeSignature, setBeatSound, setPitch, setPattern, setSwing, setGlobalSubdivision, setPolyrhythm, setTrainerEnabled, setRampEnabled, toggle, adjustBpm } = metronome;
   const [setlist, setSetlist] = useState<SetlistState>(() => readSetlist());
   const [songName, setSongName] = useState("New song");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -227,9 +238,13 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
           onAdjustBpm={adjustBpm}
           onSetBpm={setBpm}
           onSetTimeSignature={(timeSignature) => {
+            const subdivision = dominantSubdivision(state.pattern) ?? 1;
             setTimeSignature(timeSignature);
-            setPattern(buildDefaultPattern(timeSignature.numerator, 1));
+            setPattern(buildDefaultPattern(timeSignature.numerator, subdivision));
           }}
+          onSetSubdivision={setGlobalSubdivision}
+          onSetBeatSound={setBeatSound}
+          onSetPitch={setPitch}
           onSetSwing={setSwing}
         />
       </div>
@@ -252,6 +267,9 @@ function ConcertDeck({
   onAdjustBpm,
   onSetBpm,
   onSetTimeSignature,
+  onSetSubdivision,
+  onSetBeatSound,
+  onSetPitch,
   onSetSwing,
 }: {
   active: boolean;
@@ -268,12 +286,16 @@ function ConcertDeck({
   onAdjustBpm: (delta: number) => void;
   onSetBpm: (bpm: number) => void;
   onSetTimeSignature: (timeSignature: TimeSignature) => void;
+  onSetSubdivision: (subdivision: SubdivisionCount) => void;
+  onSetBeatSound: (sound: BeatSound) => void;
+  onSetPitch: (pitch: number) => void;
   onSetSwing: (swing: number) => void;
 }) {
   const tapsRef = useRef<number[]>([]);
   const bpmInputRef = useRef<HTMLInputElement | null>(null);
   const [tapPreview, setTapPreview] = useState<{ count: number; bpm: number | null }>({ count: 0, bpm: null });
   const [bpmDraft, setBpmDraft] = useState(String(Math.round(state.bpm)));
+  const activeSubdivision = dominantSubdivision(state.pattern);
 
   useEffect(() => {
     if (document.activeElement !== bpmInputRef.current) {
@@ -409,12 +431,66 @@ function ConcertDeck({
             </div>
           </StageSettingsPanel>
 
-          <StageSettingsPanel title="Meter & Swing" summary={`${state.timeSignature.numerator}/${state.timeSignature.denominator} · ${state.swing}% swing`}>
+          <StageSettingsPanel title="Time Signature" summary={`${state.timeSignature.numerator}/${state.timeSignature.denominator}`}>
             <div className="grid grid-cols-3 gap-2">
               <StageButton label="4/4" compact onClick={() => setMeter(4, 4)} />
               <StageButton label="3/4" compact onClick={() => setMeter(3, 4)} />
               <StageButton label="6/8" compact onClick={() => setMeter(6, 8)} />
             </div>
+            <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+              <select
+                value={state.timeSignature.numerator}
+                onChange={(event) => setMeter(Number(event.target.value), state.timeSignature.denominator as MeterDenominator)}
+                className="stage-select"
+                aria-label="Stage beat count"
+              >
+                {Array.from({ length: 16 }, (_, index) => index + 1).map((value) => (
+                  <option key={value} value={value} className="bg-background">{value}</option>
+                ))}
+              </select>
+              <span className="font-serif text-3xl text-primary">/</span>
+              <select
+                value={state.timeSignature.denominator}
+                onChange={(event) => setMeter(state.timeSignature.numerator, Number(event.target.value) as MeterDenominator)}
+                className="stage-select"
+                aria-label="Stage beat unit"
+              >
+                {[2, 4, 8, 16].map((value) => (
+                  <option key={value} value={value} className="bg-background">{value}</option>
+                ))}
+              </select>
+            </div>
+          </StageSettingsPanel>
+
+          <StageSettingsPanel
+            title="Subdivision"
+            summary={activeSubdivision ? `${SUBDIVISION_NOTATION[activeSubdivision].glyph} ${SUBDIVISION_NOTATION[activeSubdivision].label}` : "Mixed beats"}
+          >
+            <div className="grid grid-cols-4 gap-2">
+              {SUBDIVISION_OPTIONS.map((subdivision) => (
+                <button
+                  key={subdivision}
+                  type="button"
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    onSetSubdivision(subdivision);
+                  }}
+                  className={
+                    "min-h-16 rounded-lg border px-2 text-center transition-colors " +
+                    (activeSubdivision === subdivision
+                      ? "border-primary bg-primary/15 text-primary"
+                      : "border-border bg-background/45 text-muted-foreground hover:border-primary/70 hover:text-primary")
+                  }
+                  aria-pressed={activeSubdivision === subdivision}
+                >
+                  <span className="block font-serif text-2xl leading-none">{SUBDIVISION_NOTATION[subdivision].glyph}</span>
+                  <span className="tiny-caps mt-1 block text-[9px]">{subdivision}</span>
+                </button>
+              ))}
+            </div>
+          </StageSettingsPanel>
+
+          <StageSettingsPanel title="Swing" summary={`${state.swing}%`}>
             <label className="mt-3 block">
               <span className="tiny-caps text-[10px] text-muted-foreground">Swing</span>
               <input
@@ -426,6 +502,39 @@ function ConcertDeck({
                 onChange={(event) => onSetSwing(Number(event.target.value))}
                 className="mt-2 w-full accent-primary"
                 aria-label="Stage swing"
+              />
+            </label>
+          </StageSettingsPanel>
+
+          <StageSettingsPanel title="Sound" summary={`${BEAT_SOUND_OPTIONS.find((sound) => sound.id === state.beatSound)?.label ?? "Click"} · ${pitchLabel(state.pitch)}`}>
+            <label className="block">
+              <span className="tiny-caps text-[10px] text-muted-foreground">Click sound</span>
+              <select
+                value={state.beatSound}
+                onChange={(event) => onSetBeatSound(event.target.value as BeatSound)}
+                className="stage-select mt-2"
+                aria-label="Stage sound"
+              >
+                {BEAT_SOUND_OPTIONS.map((sound) => (
+                  <option key={sound.id} value={sound.id} className="bg-background">
+                    {sound.label} - {sound.family}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="mt-4 block">
+              <span className="tiny-caps text-[10px] text-muted-foreground">Pitch</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={state.pitch}
+                onChange={(event) => onSetPitch(Number(event.target.value))}
+                onDoubleClick={() => onSetPitch(50)}
+                className="mt-2 w-full accent-primary"
+                aria-label="Stage pitch"
+                title="Double-click to reset pitch"
               />
             </label>
           </StageSettingsPanel>
@@ -571,6 +680,12 @@ function readSetlistBackup(value: unknown): SetlistState | null {
         swing: song.swing ?? 0,
       })),
   };
+}
+
+function dominantSubdivision(pattern: BeatPattern[]): SubdivisionCount | null {
+  if (pattern.length === 0) return null;
+  const first = pattern[0]?.pulses;
+  return first && pattern.every((beat) => beat.pulses === first) ? first : null;
 }
 
 function safeFileName(value: string): string {
