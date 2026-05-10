@@ -80,6 +80,9 @@ const MODE_ICON: Record<MetronomeView, ReactNode> = {
   polymeter: <PolymeterGlyph />,
 };
 
+const POLYRHYTHM_VOICE_COLORS = ["hsl(var(--primary))", "hsl(var(--slate-cyan))", "hsl(var(--amber))", "hsl(338 82% 66%)"];
+const POLYRHYTHM_VOICE_SOUNDS = ["Warm click", "Low tone", "Round tap", "Deep pulse"];
+
 interface SavedSong {
   id: string;
   name: string;
@@ -2444,6 +2447,24 @@ function PolyrhythmMode({
         </div>
       </div>
 
+      <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+        {allVoices.map((voice, index) => (
+          <div
+            key={`${voice}-voice-card-${index}`}
+            className="rounded-md border border-border/60 bg-background/35 p-2.5"
+            style={{ boxShadow: `inset 3px 0 0 ${POLYRHYTHM_VOICE_COLORS[index] ?? POLYRHYTHM_VOICE_COLORS[0]}` }}
+          >
+            <span className="tiny-caps block text-[9px] text-muted-foreground">
+              {index === 0 ? "Main" : `Voice ${index + 1}`}
+            </span>
+            <span className="mt-1 block font-mono text-lg leading-none text-foreground">{voice}</span>
+            <span className="mt-1 block tiny-caps text-[9px]" style={{ color: POLYRHYTHM_VOICE_COLORS[index] ?? POLYRHYTHM_VOICE_COLORS[0] }}>
+              {POLYRHYTHM_VOICE_SOUNDS[index] ?? "Pulse"}
+            </span>
+          </div>
+        ))}
+      </div>
+
       <PolyrhythmBounceStage
         voices={allVoices}
         sharedSlots={sharedSlots}
@@ -2451,8 +2472,6 @@ function PolyrhythmMode({
         isPlaying={isPlaying}
         bpm={bpm}
         rate={rate}
-        currentBeat={currentBeat}
-        currentPoly={currentPoly}
       />
 
       <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -2489,7 +2508,7 @@ function PolyrhythmMode({
             slots={sharedSlots}
             step={sharedSlots / voice}
             activeSlot={isPlaying && enabled ? (index === 0 ? mainActiveSlot : index === 1 ? crossActiveSlot : -1) : -1}
-            color={["hsl(var(--primary))", "hsl(var(--slate-cyan))", "hsl(var(--amber))", "hsl(338 82% 66%)"][index]}
+            color={POLYRHYTHM_VOICE_COLORS[index] ?? POLYRHYTHM_VOICE_COLORS[0]}
           />
         ))}
         <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${sharedSlots}, minmax(0, 1fr))` }}>
@@ -2555,8 +2574,6 @@ function PolyrhythmBounceStage({
   isPlaying,
   bpm,
   rate,
-  currentBeat,
-  currentPoly,
 }: {
   voices: number[];
   sharedSlots: number;
@@ -2564,8 +2581,6 @@ function PolyrhythmBounceStage({
   isPlaying: boolean;
   bpm: number;
   rate: PolyrhythmRate;
-  currentBeat: number;
-  currentPoly: number;
 }) {
   const [now, setNow] = useState(() => performance.now());
 
@@ -2583,16 +2598,13 @@ function PolyrhythmBounceStage({
   const visibleVoices = voices.slice(0, 4);
   const cycleMs = Math.max(600, (60000 / Math.max(20, bpm)) * (rate === "double" ? 2 : 4));
   const phase = isPlaying && enabled ? (now % cycleMs) / cycleMs : 0;
-  const colors = ["hsl(var(--primary))", "hsl(var(--slate-cyan))", "hsl(var(--amber))", "hsl(338 82% 66%)"];
-  const activeVoiceIndex = isPlaying && enabled
-    ? currentPoly >= 0 ? 1 : currentBeat >= 0 ? 0 : -1
-    : -1;
+  const activeSlot = isPlaying && enabled ? Math.round(phase * sharedSlots) % sharedSlots : -1;
 
   return (
-    <div className="mt-5 overflow-hidden rounded-lg border border-primary/25 bg-[radial-gradient(circle_at_50%_0%,hsl(var(--primary)/0.14),transparent_34%),linear-gradient(180deg,hsl(var(--background)/0.30),hsl(var(--card)/0.78))] p-3 md:p-4">
+    <div className="mt-5 overflow-hidden rounded-lg border border-primary/30 bg-[radial-gradient(circle_at_50%_0%,hsl(var(--primary)/0.15),transparent_34%),linear-gradient(180deg,hsl(var(--background)/0.32),hsl(var(--card)/0.82))] p-3 md:p-4">
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <span className="tiny-caps text-[10px] text-primary">Bounce Map</span>
-        <span className="font-mono text-xs text-muted-foreground">{sharedSlots} slot cycle</span>
+        <span className="font-mono text-xs text-muted-foreground">{sharedSlots} slot LCM</span>
       </div>
       <div className="space-y-3">
         {visibleVoices.map((voice, voiceIndex) => (
@@ -2602,11 +2614,38 @@ function PolyrhythmBounceStage({
             voice={voice}
             sharedSlots={sharedSlots}
             phase={phase}
-            color={colors[voiceIndex] ?? colors[0]}
+            color={POLYRHYTHM_VOICE_COLORS[voiceIndex] ?? POLYRHYTHM_VOICE_COLORS[0]}
             dimmed={!enabled}
-            active={activeVoiceIndex === voiceIndex}
+            active={isPlaying && enabled}
           />
         ))}
+      </div>
+      <div className="mt-4 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${sharedSlots}, minmax(0, 1fr))` }}>
+        {Array.from({ length: sharedSlots }, (_, index) => {
+          const hits = visibleVoices.map((voice) => index % (sharedSlots / voice) === 0);
+          const hitCount = hits.filter(Boolean).length;
+          const isActive = activeSlot === index;
+          return (
+            <span
+              key={index}
+              className="h-3 rounded-full border transition-all"
+              style={{
+                borderColor: hitCount > 1 ? "hsl(var(--foreground) / 0.52)" : "hsl(var(--border) / 0.5)",
+                background: hitCount > 1
+                  ? `linear-gradient(135deg, ${POLYRHYTHM_VOICE_COLORS[0]} 0 34%, ${POLYRHYTHM_VOICE_COLORS[1]} 34% 67%, ${POLYRHYTHM_VOICE_COLORS[2]} 67% 100%)`
+                  : hits[0]
+                    ? POLYRHYTHM_VOICE_COLORS[0]
+                    : hits.find(Boolean)
+                      ? POLYRHYTHM_VOICE_COLORS[Math.max(1, hits.findIndex(Boolean))] ?? POLYRHYTHM_VOICE_COLORS[1]
+                      : "hsl(var(--border) / 0.22)",
+                opacity: hitCount ? 1 : 0.42,
+                transform: isActive ? "scaleY(1.9)" : "scaleY(1)",
+                boxShadow: isActive ? "0 0 14px hsl(var(--amber) / 0.58)" : "none",
+              }}
+              aria-label={`LCM slot ${index + 1}, ${hitCount} voice${hitCount === 1 ? "" : "s"}`}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -2637,28 +2676,35 @@ function PolyrhythmBounceLane({
   const bounce = Math.sin(localPhase * Math.PI);
   const y = 74 - bounce * 44;
   const squash = localPhase < 0.08 || localPhase > 0.92 ? 1 : 0;
+  const landing = active && !dimmed && (localPhase < 0.08 || localPhase > 0.92);
 
   return (
     <div className="grid grid-cols-[3.25rem_minmax(0,1fr)] items-center gap-3">
       <div className="text-right">
-        <span className="block font-mono text-sm text-foreground">{voice}</span>
+        <span className="block font-mono text-base leading-none text-foreground" style={{ color }}>{voice}</span>
         <span className="tiny-caps text-[9px] text-muted-foreground">{label}</span>
       </div>
-      <div className="relative h-20 rounded-md border border-border/60 bg-background/35 shadow-[inset_0_-18px_28px_hsl(var(--ink)/0.22)]">
+      <div
+        className="relative h-20 rounded-md border bg-background/35 shadow-[inset_0_-18px_28px_hsl(var(--ink)/0.22)]"
+        style={{ borderColor: landing ? color : "hsl(var(--border) / 0.6)" }}
+      >
         <div className="absolute inset-x-3 bottom-4 h-px bg-border/70" />
         {Array.from({ length: voice }, (_, index) => {
           const left = voice <= 1 ? 0 : (index / (voice - 1)) * 100;
           const slot = index * step;
           const meeting = slot === 0;
+          const isCurrentHit = landing && index === hitIndex;
           return (
             <span
               key={index}
               className="absolute bottom-[0.78rem] grid size-3 -translate-x-1/2 place-items-center rounded-full border"
               style={{
                 left: `calc(${left}% + ${left === 0 ? "0.75rem" : left === 100 ? "-0.75rem" : "0rem"})`,
-                borderColor: meeting ? color : "hsl(var(--border))",
-                background: meeting ? color : "hsl(var(--background))",
+                borderColor: meeting || isCurrentHit ? color : "hsl(var(--border))",
+                background: meeting || isCurrentHit ? color : "hsl(var(--background))",
                 opacity: dimmed ? 0.42 : 1,
+                transform: isCurrentHit ? "scale(1.35)" : "scale(1)",
+                boxShadow: isCurrentHit ? `0 0 14px ${color}` : "none",
               }}
               aria-hidden
             />
@@ -2682,7 +2728,7 @@ function PolyrhythmBounceLane({
             borderColor: "hsl(var(--background) / 0.82)",
             opacity: dimmed ? 0.42 : 1,
             transform: `translate(-50%, -50%) scale(${1 + squash * 0.08}, ${1 - squash * 0.13})`,
-            boxShadow: active ? `0 0 22px ${color}` : `0 8px 18px hsl(var(--ink) / 0.28)`,
+            boxShadow: landing ? `0 0 26px ${color}` : `0 8px 18px hsl(var(--ink) / 0.28)`,
           }}
           aria-label={`${label} bouncing ${voice}`}
         />

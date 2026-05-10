@@ -90,6 +90,9 @@ const VOICE_ACCENT_VOLUME: Record<PulseAccent, number> = {
   mute: -Infinity,
 };
 
+const POLYRHYTHM_VOICE_FREQS = [760, 560, 430, 330];
+const POLYRHYTHM_VOICE_OSCILLATORS = ["triangle", "sine", "triangle", "sine"] as const;
+
 function displayBpmToTransportBpm(displayBpm: number, denominator: number): number {
   void denominator;
   return displayBpm;
@@ -408,25 +411,10 @@ export function useMetronome() {
   }, []);
 
   const playPolyClick = useCallback((time: number, freq: number, vol: number, voiceIndex: number, downbeat: boolean) => {
-    const players = samplePlayersRef.current;
-    const sampleSet = SAMPLE_SOUND_SETS[beatSoundRef.current];
-    if (players?.loaded && sampleSet && !sampleSet.beatNumbered) {
-      const role: ClickRole = downbeat ? "accent" : voiceIndex === 0 ? "normal" : "sub";
-      const sampleKey = players.has(role) ? role : players.has("normal") ? "normal" : "sub";
-      if (players.has(sampleKey)) {
-        const player = players.player(sampleKey);
-        const voiceRate = [1, 0.92, 1.08, 0.84][voiceIndex] ?? 1;
-        player.playbackRate = samplePlaybackRate(pitchRef.current) * voiceRate;
-        player.volume.setValueAtTime(vol, time);
-        player.start(time);
-        return;
-      }
-    }
-
     if (!polySynthsRef.current) {
       polySynthsRef.current = Array.from({ length: 4 }, (_, index) =>
         new Tone.Synth({
-          oscillator: { type: index === 0 ? "triangle" : index === 1 ? "sine" : index === 2 ? "triangle" : "sine" },
+          oscillator: { type: POLYRHYTHM_VOICE_OSCILLATORS[index] ?? "sine" },
           envelope: { attack: 0.0015, decay: 0.075, sustain: 0, release: 0.045 },
         }).toDestination(),
       );
@@ -528,7 +516,7 @@ export function useMetronome() {
               const offset = cycleOffset + polyStep * k;
               const isPolyDownbeat = k === 0;
               if (!muted) {
-                const polyFreq = [760, 560, 430, 330][voiceIndex] ?? 420;
+                const polyFreq = POLYRHYTHM_VOICE_FREQS[voiceIndex] ?? 420;
                 const polyVol = isPolyDownbeat ? -4 - voiceIndex * 1.5 : -11 - voiceIndex * 1.5;
                 playPolyClick(time + offset, polyFreq, polyVol, voiceIndex, isPolyDownbeat);
               }
