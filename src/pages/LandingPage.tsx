@@ -9,7 +9,6 @@ import {
   ListMusic,
   Music2,
   Plug,
-  Share2,
   ShieldCheck,
   Smartphone,
   Sparkles,
@@ -18,6 +17,10 @@ import {
 } from "lucide-react";
 
 const LIVE_URL = "https://metronome.nathanielschool.com/";
+const GITHUB_URL = "https://github.com/jasonzacmusic/groove-metronome";
+const IOS_STATUS_URL = "#app-store";
+const PLUGIN_URL = `${GITHUB_URL}/tree/main/plugin`;
+const WHATSAPP_SHARE_URL = `https://wa.me/?text=${encodeURIComponent(`Try Groove Metronome: ${LIVE_URL}`)}`;
 
 const appSpaces = [
   {
@@ -67,18 +70,24 @@ const versions = [
     title: "Web Browser",
     status: "Live now",
     copy: "The production app runs at metronome.nathanielschool.com and can be installed as a PWA.",
+    action: "Open web app",
+    href: LIVE_URL,
     icon: Laptop,
   },
   {
     title: "iOS, iPad & Android",
-    status: "Native shells ready",
-    copy: "Capacitor iOS/Android projects are in the repo. App Store and Play Store packaging are the next release step.",
+    status: "App Store kit ready",
+    copy: "The iOS/iPad build is passing locally. Store metadata, privacy copy, screenshots, and review notes are prepared for submission.",
+    action: "Store prep",
+    href: IOS_STATUS_URL,
     icon: TabletSmartphone,
   },
   {
     title: "DAW Plugin",
     status: "AU/VST3 scaffold working",
     copy: "Logic uses AU, Reaper uses VST3. AAX is planned after the core plugin stabilizes and Avid signing is handled.",
+    action: "Plugin guide",
+    href: PLUGIN_URL,
     icon: Plug,
   },
 ];
@@ -100,7 +109,7 @@ export function LandingPage() {
           <a href="#themes">Themes</a>
           <a href="#assets">Assets</a>
         </nav>
-        <a href="/" className="landing-button landing-button-primary">Open app</a>
+        <a href={LIVE_URL} className="landing-button landing-button-primary">Open app</a>
       </header>
 
       <main>
@@ -113,9 +122,9 @@ export function LandingPage() {
               analyze audio or MIDI, and keep the same rhythm logic across browser, mobile shells, and DAW plugins.
             </p>
             <div className="landing-cta-row">
-              <a href="/" className="landing-button landing-button-primary">Use Groove Metronome</a>
+              <a href={LIVE_URL} className="landing-button landing-button-primary">Use Groove Metronome</a>
               <a href="#versions" className="landing-button">See versions</a>
-              <a href={`https://wa.me/?text=${encodeURIComponent(`Try Groove Metronome: ${LIVE_URL}`)}`} className="landing-button landing-button-quiet">Share</a>
+              <a href={WHATSAPP_SHARE_URL} className="landing-button landing-button-quiet">Share</a>
             </div>
             <div className="landing-proof-row">
               <Proof icon={BadgeCheck} title="Fact checked" text="Claims match the current repo state." />
@@ -179,6 +188,7 @@ export function LandingPage() {
                   <span>{version.status}</span>
                   <h3>{version.title}</h3>
                   <p>{version.copy}</p>
+                  <a className="landing-card-link" href={version.href}>{version.action}</a>
                 </article>
               );
             })}
@@ -188,6 +198,28 @@ export function LandingPage() {
               <h3>Apple Watch</h3>
               <p>A SwiftUI watch target exists for tempo, play/stop, crown BPM, and haptic-focused practice after signing is configured.</p>
             </article>
+          </div>
+        </section>
+
+        <section id="app-store" className="landing-section landing-store">
+          <SectionHeader eyebrow="iOS and iPad launch" title="Free 1.0 first, clean paid upgrade path later." />
+          <div className="landing-store-grid">
+            <div className="landing-store-panel">
+              <Smartphone className="size-6" />
+              <h3>App Store submission pack</h3>
+              <p>
+                The iOS/iPad build, metadata, privacy policy, review notes, icons, and screenshot package are organized for App Store Connect.
+                The first release is positioned as free, offline-ready, and musician-safe for stage use.
+              </p>
+            </div>
+            <div className="landing-store-panel">
+              <ShieldCheck className="size-6" />
+              <h3>Monetization without breaking trust</h3>
+              <p>
+                Backend flags can keep feature rollout smooth, but paid iOS digital features should ship through Apple pricing or StoreKit
+                in-app purchases when Groove moves from free launch to premium tiers.
+              </p>
+            </div>
           </div>
         </section>
 
@@ -215,16 +247,18 @@ export function LandingPage() {
             and app icon sources in one dated Groove Metronome marketing folder.
           </p>
           <div className="landing-cta-row justify-center">
-            <a href="/" className="landing-button landing-button-primary">Open the app</a>
+            <a href={LIVE_URL} className="landing-button landing-button-primary">Open the app</a>
             <a href={LIVE_URL} className="landing-button">Public link</a>
+            <a href={GITHUB_URL} className="landing-button landing-button-quiet">Source</a>
           </div>
         </section>
       </main>
 
       <footer className="landing-footer">
         <span>Groove Metronome by Nathaniel School of Music</span>
-        <span>Web live now. Mobile packaging next. AU/VST3 plugin in progress.</span>
-        <a href="/" className="inline-flex items-center gap-1"><Download className="size-3" /> Use in browser</a>
+        <span>Web live now. iOS/iPad submission pack ready. AU/VST3 plugin in progress.</span>
+        <a href="/privacy.html">Privacy</a>
+        <a href={LIVE_URL} className="inline-flex items-center gap-1"><Download className="size-3" /> Use in browser</a>
       </footer>
     </div>
   );
