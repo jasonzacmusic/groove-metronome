@@ -26,12 +26,13 @@ const THEMES: Array<{ id: ThemeId; label: string; colors: [string, string, strin
 const APP_TABS: Array<{
   id: Tab;
   label: string;
+  shortLabel: string;
   detail: string;
   icon: typeof Gauge;
 }> = [
-  { id: "metronome", label: "Metronome", detail: "Practice click", icon: Gauge },
-  { id: "analyzer", label: "Analyzer", detail: "Audio & MIDI", icon: AudioWaveform },
-  { id: "setlist", label: "Setlist Studio", detail: "Concert mode", icon: ListMusic },
+  { id: "metronome", label: "Metronome", shortLabel: "Click", detail: "Practice click", icon: Gauge },
+  { id: "analyzer", label: "Analyzer", shortLabel: "Analyze", detail: "Audio & MIDI", icon: AudioWaveform },
+  { id: "setlist", label: "Setlist Studio", shortLabel: "Setlist", detail: "Concert mode", icon: ListMusic },
 ];
 
 function readStoredTheme(): ThemeId {
@@ -207,7 +208,8 @@ function AppTabButton({
         <Icon className="size-4" aria-hidden />
       </span>
       <span className="min-w-0 text-left">
-        <span className="hero-tab-title">{item.label}</span>
+        <span className="hero-tab-title hero-tab-title-full">{item.label}</span>
+        <span className="hero-tab-title hero-tab-title-short">{item.shortLabel}</span>
         <span className="hero-tab-detail">{bpm ? `${bpm} BPM live` : item.detail}</span>
       </span>
     </button>

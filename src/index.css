@@ -323,6 +323,10 @@
   color: hsl(var(--muted-foreground));
 }
 
+.hero-tab-title-short {
+  display: none;
+}
+
 .hero-tab-active .hero-tab-icon {
   border-color: hsl(var(--primary) / 0.75);
   background: hsl(var(--primary) / 0.16);
@@ -480,11 +484,11 @@
   }
 
   .brand-lockup img {
-    height: 1.95rem;
+    height: 1.85rem;
   }
 
   .brand-lockup h1 {
-    font-size: 1.05rem;
+    font-size: 1.08rem;
   }
 
   .brand-lockup p {
@@ -493,24 +497,37 @@
 
   .utility-cluster {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    gap: 0.75rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem;
   }
 
   .utility-cluster > div {
     align-items: start;
   }
 
-  .utility-cluster .tiny-caps {
-    font-size: 0.5rem;
+  .utility-cluster > div > .tiny-caps {
+    display: none;
+  }
+
+  .utility-cluster > div:first-child {
+    order: 2;
+  }
+
+  .utility-cluster > div:last-child {
+    order: 1;
+  }
+
+  .utility-cluster > div > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
   }
 
   .share-action,
   .theme-swatch {
-    width: 1.95rem;
-    min-height: 1.95rem;
-    height: 1.95rem;
+    width: 2rem;
+    min-height: 2rem;
+    height: 2rem;
     border-radius: 999px;
   }
 
@@ -563,8 +580,19 @@
   }
 
   .app-space-nav-mobile .hero-tab-title {
-    font-size: 0.82rem;
+    font-family: var(--app-font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     line-height: 1.05;
+  }
+
+  .app-space-nav-mobile .hero-tab-title-full {
+    display: none;
+  }
+
+  .app-space-nav-mobile .hero-tab-title-short {
+    display: block;
   }
 
   .app-space-nav-mobile .hero-tab-detail {
@@ -616,7 +644,7 @@
 
   .metronome-essential-strip section {
     border-radius: 0.75rem;
-    padding: 0.72rem;
+    padding: 0.68rem;
     background: hsl(var(--card) / 0.72);
   }
 
@@ -636,6 +664,10 @@
 
   .metronome-essential-strip .font-serif.italic {
     display: none;
+  }
+
+  .metronome-essential-strip section:first-child .grid {
+    grid-template-columns: 1fr;
   }
 
   .metronome-transport > div {
