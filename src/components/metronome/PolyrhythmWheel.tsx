@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 
 import {
   PULSE_ACCENT_HEIGHT,
-  subdivisionShortcutForKey,
   type BeatPattern,
   type PulseAccent,
   type SubdivisionCount,
 } from "@/lib/metronome-types";
+import { useSubdivisionShortcut } from "@/hooks/useSubdivisionShortcut";
 import { getTempoMarking } from "@/lib/utils";
 
 interface PolyrhythmWheelProps {
@@ -15,7 +15,7 @@ interface PolyrhythmWheelProps {
   isPlaying: boolean;
   currentBeat: number;
   currentPulse: number;
-  onCycleBeatSubdivision: (beatIndex: number) => void;
+  onToggleBeat: (beatIndex: number) => void;
   onSetBeatSubdivision?: (beatIndex: number, pulses: SubdivisionCount) => void;
   onCyclePulseAccent: (beatIndex: number, pulseIndex: number) => void;
   onTapTempo: () => void;
@@ -71,37 +71,14 @@ export function PolyrhythmWheel({
   isPlaying,
   currentBeat,
   currentPulse,
-  onCycleBeatSubdivision,
+  onToggleBeat,
   onSetBeatSubdivision,
   onCyclePulseAccent,
   onTapTempo,
 }: PolyrhythmWheelProps) {
   const numerator = pattern.length;
   const beatSpan = (2 * Math.PI) / Math.max(1, numerator);
-  const heldSubdivisionRef = useRef<SubdivisionCount | null>(null);
-
-  useEffect(() => {
-    const isEditableTarget = (target: EventTarget | null) =>
-      target instanceof HTMLInputElement
-      || target instanceof HTMLSelectElement
-      || target instanceof HTMLTextAreaElement
-      || (target instanceof HTMLElement && target.isContentEditable);
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (isEditableTarget(event.target)) return;
-      const shortcut = subdivisionShortcutForKey(event.key, bpm);
-      if (shortcut) heldSubdivisionRef.current = shortcut;
-    };
-    const onKeyUp = (event: KeyboardEvent) => {
-      const shortcut = subdivisionShortcutForKey(event.key, bpm);
-      if (shortcut && heldSubdivisionRef.current === shortcut) heldSubdivisionRef.current = null;
-    };
-    window.addEventListener("keydown", onKeyDown, { capture: true });
-    window.addEventListener("keyup", onKeyUp, { capture: true });
-    return () => {
-      window.removeEventListener("keydown", onKeyDown, { capture: true });
-      window.removeEventListener("keyup", onKeyUp, { capture: true });
-    };
-  }, [bpm]);
+  const readSubdivisionShortcut = useSubdivisionShortcut(bpm);
 
   const handAngle = useMemo(() => {
     if (!isPlaying) return null;
@@ -192,28 +169,30 @@ export function PolyrhythmWheel({
           });
         })}
 
-        {/* Beat number labels — click to cycle subdivision */}
+        {/* Beat number labels: tap toggles the beat, number-hold assigns subdivision. */}
         {pattern.map((beat, i) => {
           const a = -Math.PI / 2 + beatSpan * (i + 0.5);
           const pos = polar(CX, CY, R_LABEL, a);
           const isActiveBeat = isPlaying && currentBeat === i;
+          const isMuted = beat.accents.every((accent) => accent === "mute");
           return (
             <g
               key={`lbl-${i}`}
               style={{ cursor: "pointer" }}
-              onClick={() => {
-                const heldSubdivision = heldSubdivisionRef.current;
-                if (heldSubdivision && onSetBeatSubdivision) onSetBeatSubdivision(i, heldSubdivision);
-                else onCycleBeatSubdivision(i);
+              onPointerDown={(event) => {
+                event.preventDefault();
+                const shortcutSubdivision = readSubdivisionShortcut();
+                if (shortcutSubdivision && onSetBeatSubdivision) onSetBeatSubdivision(i, shortcutSubdivision);
+                else onToggleBeat(i);
               }}
-              aria-label={`Beat ${i + 1}, ${beat.pulses} pulse${beat.pulses > 1 ? "s" : ""}. Click to cycle subdivision, or hold a number while clicking to set it directly.`}
+              aria-label={`Beat ${i + 1}, ${beat.pulses} pulse${beat.pulses > 1 ? "s" : ""}. Tap to toggle beat on or off, or hold a number while tapping to set subdivision.`}
             >
               <circle
                 cx={pos.x}
                 cy={pos.y}
                 r={20}
-                fill="hsl(var(--ink))"
-                stroke={isActiveBeat ? "hsl(var(--slate-cyan))" : "hsl(var(--border))"}
+                fill={isMuted ? "hsl(var(--background) / 0.38)" : "hsl(var(--ink))"}
+                stroke={isActiveBeat ? "hsl(var(--slate-cyan))" : isMuted ? "hsl(var(--muted-foreground) / 0.42)" : "hsl(var(--border))"}
                 strokeWidth={isActiveBeat ? 1.2 : 0.7}
                 style={{ transition: "stroke 120ms linear" }}
               />
@@ -224,7 +203,7 @@ export function PolyrhythmWheel({
                 dominantBaseline="central"
                 fontFamily="var(--app-font-serif)"
                 fontSize="22"
-                fill={isActiveBeat ? "hsl(var(--slate-cyan))" : "hsl(var(--foreground) / 0.85)"}
+                fill={isActiveBeat ? "hsl(var(--slate-cyan))" : isMuted ? "hsl(var(--muted-foreground) / 0.48)" : "hsl(var(--foreground) / 0.85)"}
               >
                 {i + 1}
               </text>

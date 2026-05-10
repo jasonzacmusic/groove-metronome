@@ -220,7 +220,7 @@ export function useMetronome() {
   const [timeSignature, setTimeSignature] = useState<TimeSignature>({ numerator: 4, denominator: 4 });
   const [currentBeat, setCurrentBeat] = useState(-1);
   const [currentPulse, setCurrentPulse] = useState(-1);
-  const [beatSound, setBeatSound] = useState<BeatSound>("tone");
+  const [beatSound, setBeatSound] = useState<BeatSound>("wood");
   const [pitch, setPitch] = useState(50);
   const [pattern, setPattern] = useState<BeatPattern[]>(() => buildDefaultPattern(4, 1));
   const [accentVolumes, setAccentVolumes] = useState<Record<PulseAccent, number>>({ ...PULSE_ACCENT_VOLUME });
@@ -832,6 +832,23 @@ export function useMetronome() {
     });
   }, []);
 
+  const toggleBeatEnabled = useCallback((beatIndex: number) => {
+    setPattern((prev) => {
+      if (beatIndex < 0 || beatIndex >= prev.length) return prev;
+      const beat = prev[beatIndex];
+      const isMuted = beat.accents.every((accent) => accent === "mute");
+      const next = [...prev];
+      next[beatIndex] = {
+        ...beat,
+        accents: Array.from({ length: beat.pulses }, (_, pulseIndex) => {
+          if (!isMuted) return "mute" as PulseAccent;
+          return pulseIndex === 0 ? "normal" as PulseAccent : "ghost" as PulseAccent;
+        }),
+      };
+      return next;
+    });
+  }, []);
+
   const cycleBeatSubdivision = useCallback((beatIndex: number) => {
     setPattern((prev) => {
       if (beatIndex < 0 || beatIndex >= prev.length) return prev;
@@ -1007,6 +1024,7 @@ export function useMetronome() {
     adjustBpm,
     setAccentVolume,
     setBeatSubdivision,
+    toggleBeatEnabled,
     cycleBeatSubdivision,
     cyclePulse,
     cyclePulseLevel,

@@ -2,14 +2,18 @@ import {
   PULSE_ACCENT_LEVEL,
   type BeatPattern,
   type PulseAccent,
+  type SubdivisionCount,
 } from "@/lib/metronome-types";
+import { useSubdivisionShortcut } from "@/hooks/useSubdivisionShortcut";
 
 interface LevelMetersProps {
   pattern: BeatPattern[];
+  bpm: number;
   isPlaying: boolean;
   currentBeat: number;
   currentPulse: number;
-  onCycleBeatSubdivision: (beatIndex: number) => void;
+  onToggleBeat: (beatIndex: number) => void;
+  onSetBeatSubdivision: (beatIndex: number, pulses: SubdivisionCount) => void;
   onCyclePulse: (beatIndex: number, pulseIndex: number) => void;
   onSetPulseLevel: (beatIndex: number, pulseIndex: number, level: number) => void;
 }
@@ -26,13 +30,17 @@ function segmentColor(filled: boolean, accent: PulseAccent, isActive: boolean): 
 
 export function LevelMeters({
   pattern,
+  bpm,
   isPlaying,
   currentBeat,
   currentPulse,
-  onCycleBeatSubdivision,
+  onToggleBeat,
+  onSetBeatSubdivision,
   onCyclePulse,
   onSetPulseLevel,
 }: LevelMetersProps) {
+  const readSubdivisionShortcut = useSubdivisionShortcut(bpm);
+
   return (
     <div className="w-full">
       <div className="flex items-stretch gap-3 h-64">
@@ -95,9 +103,14 @@ export function LevelMeters({
               {/* Beat label */}
               <button
                 type="button"
-                onPointerDown={(e) => { e.preventDefault(); onCycleBeatSubdivision(i); }}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  const shortcutSubdivision = readSubdivisionShortcut();
+                  if (shortcutSubdivision) onSetBeatSubdivision(i, shortcutSubdivision);
+                  else onToggleBeat(i);
+                }}
                 className="flex flex-col items-center gap-0.5 py-1 transition-colors"
-                aria-label={`Beat ${i + 1}: ${beat.pulses} pulses. Tap to cycle subdivision.`}
+                aria-label={`Beat ${i + 1}: ${beat.pulses} pulses. Tap to toggle beat on or off, or hold a number while tapping to set subdivision.`}
               >
                 <span
                   className="font-serif text-2xl leading-none transition-colors"

@@ -15,12 +15,15 @@ import {
   type BeatPattern,
   type PolyrhythmConfig,
   type PulseAccent,
+  type SubdivisionCount,
   type TimeSignature,
 } from "@/lib/metronome-types";
+import { useSubdivisionShortcut } from "@/hooks/useSubdivisionShortcut";
 
 interface NotationPanelProps {
   view?: "beatmap" | "levels" | "polyrhythm" | "polymeter";
   pattern: BeatPattern[];
+  bpm: number;
   polyrhythm?: PolyrhythmConfig;
   timeSignature: TimeSignature;
   currentBeat: number;
@@ -30,6 +33,7 @@ interface NotationPanelProps {
   onCyclePulse?: (beatIndex: number, pulseIndex: number) => void;
   onSetPulseLevel?: (beatIndex: number, pulseIndex: number, level: number) => void;
   onCycleBeatSubdivision?: (beatIndex: number) => void;
+  onSetBeatSubdivision?: (beatIndex: number, pulses: SubdivisionCount) => void;
 }
 
 interface NoteSpec {
@@ -78,6 +82,7 @@ function colorFor(accent: PulseAccent, isActive: boolean): string {
 export function NotationPanel({
   view = "beatmap",
   pattern,
+  bpm,
   polyrhythm,
   timeSignature,
   currentBeat,
@@ -87,8 +92,10 @@ export function NotationPanel({
   onCyclePulse,
   onSetPulseLevel,
   onCycleBeatSubdivision,
+  onSetBeatSubdivision,
 }: NotationPanelProps) {
   const ref = useRef<HTMLDivElement | null>(null);
+  const readSubdivisionShortcut = useSubdivisionShortcut(bpm);
 
   useEffect(() => {
     const host = ref.current;
@@ -207,7 +214,9 @@ export function NotationPanel({
                   onPointerDown={(e) => e.preventDefault()}
                   onClick={(e) => {
                     e.preventDefault();
-                    onCyclePulse?.(beatIndex, pulseIndex);
+                    const shortcutSubdivision = readSubdivisionShortcut();
+                    if (shortcutSubdivision && onSetBeatSubdivision) onSetBeatSubdivision(beatIndex, shortcutSubdivision);
+                    else onCyclePulse?.(beatIndex, pulseIndex);
                   }}
                   onDoubleClick={(e) => {
                     e.preventDefault();

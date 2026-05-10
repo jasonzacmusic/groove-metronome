@@ -12,7 +12,6 @@ import {
   getSubdivisionOptionsForBpm,
   JAZZ_ASSIST_LABELS,
   SUBDIVISION_NOTATION,
-  subdivisionShortcutForKey,
   TRIPLET_ASSIST_LABELS,
   type BeatPattern,
   type BeatSound,
@@ -64,7 +63,7 @@ interface SetlistPageProps {
 }
 
 export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
-  const { state, setBpm, setTimeSignature, setBeatSound, setPitch, setPattern, setSwing, setGlobalSubdivision, setPolyrhythm, setTrainerEnabled, setRampEnabled, setAccentVolume, toggle, adjustBpm, cycleBeatSubdivision, cyclePulseLevel } = metronome;
+  const { state, setBpm, setTimeSignature, setBeatSound, setPitch, setPattern, setSwing, setGlobalSubdivision, setPolyrhythm, setTrainerEnabled, setRampEnabled, setAccentVolume, toggle, adjustBpm, setBeatSubdivision, toggleBeatEnabled, cyclePulseLevel } = metronome;
   const [setlist, setSetlist] = useState<SetlistState>(() => readSetlist());
   const [songName, setSongName] = useState("New song");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -320,15 +319,8 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
             setPattern(buildNeutralPattern(timeSignature.numerator, subdivision));
           }}
           onSetSubdivision={setGlobalSubdivision}
-          onCycleBeatSubdivision={cycleBeatSubdivision}
-          onSetBeatSubdivision={(beatIndex, pulses) => {
-            setPattern(state.pattern.map((beat, index) => index === beatIndex
-              ? {
-                pulses,
-                accents: Array.from({ length: pulses }, (_, pulseIndex) => beat.accents[pulseIndex] ?? "normal"),
-              }
-              : beat));
-          }}
+          onToggleBeat={toggleBeatEnabled}
+          onSetBeatSubdivision={setBeatSubdivision}
           onCyclePulseAccent={cyclePulseLevel}
           onSetAllAccents={(accent) => {
             setPattern(state.pattern.map((beat) => ({ ...beat, accents: beat.accents.map(() => accent) })));
@@ -364,7 +356,7 @@ function ConcertDeck({
   onSetBpm,
   onSetTimeSignature,
   onSetSubdivision,
-  onCycleBeatSubdivision,
+  onToggleBeat,
   onSetBeatSubdivision,
   onCyclePulseAccent,
   onSetAllAccents,
@@ -393,7 +385,7 @@ function ConcertDeck({
   onSetBpm: (bpm: number) => void;
   onSetTimeSignature: (timeSignature: TimeSignature) => void;
   onSetSubdivision: (subdivision: SubdivisionCount) => void;
-  onCycleBeatSubdivision: (beatIndex: number) => void;
+  onToggleBeat: (beatIndex: number) => void;
   onSetBeatSubdivision: (beatIndex: number, pulses: SubdivisionCount) => void;
   onCyclePulseAccent: (beatIndex: number, pulseIndex: number) => void;
   onSetAllAccents: (accent: PulseAccent) => void;
@@ -442,19 +434,13 @@ function ConcertDeck({
         || target instanceof HTMLTextAreaElement
         || (target instanceof HTMLElement && target.isContentEditable);
       if (editable) return;
-      const shortcutSubdivision = subdivisionShortcutForKey(event.key, state.bpm);
-      if (shortcutSubdivision) {
-        event.preventDefault();
-        if (!controlsLocked) onSetSubdivision(shortcutSubdivision);
-        return;
-      }
       if (event.key !== "t" && event.key !== "T") return;
       event.preventDefault();
       tap();
     };
     window.addEventListener("keydown", handler, { capture: true });
     return () => window.removeEventListener("keydown", handler, { capture: true });
-  }, [active, controlsLocked, onSetSubdivision, state.bpm]);
+  }, [active, tap]);
 
   const setMeter = (numerator: number, denominator: MeterDenominator) => {
     onSetTimeSignature({ numerator, denominator });
@@ -550,8 +536,8 @@ function ConcertDeck({
             isPlaying={state.isPlaying}
             currentBeat={state.currentBeat}
             currentPulse={state.currentPulse}
-            onCycleBeatSubdivision={(beatIndex) => {
-              if (!controlsLocked) onCycleBeatSubdivision(beatIndex);
+            onToggleBeat={(beatIndex) => {
+              if (!controlsLocked) onToggleBeat(beatIndex);
             }}
             onSetBeatSubdivision={(beatIndex, pulses) => {
               if (!controlsLocked) onSetBeatSubdivision(beatIndex, pulses);

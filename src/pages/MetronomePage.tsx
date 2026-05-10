@@ -36,6 +36,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import type { MetronomeView } from "@/App";
 import type { UseMetronomeReturn } from "@/hooks/useMetronome";
+import { useSubdivisionShortcut } from "@/hooks/useSubdivisionShortcut";
 import {
   BEAT_SOUND_LABELS,
   BEAT_SOUND_OPTIONS,
@@ -48,7 +49,6 @@ import {
   PULSE_ACCENT_VOLUME,
   PULSE_ACCENT_LEVEL,
   SUBDIVISION_NOTATION,
-  subdivisionShortcutForKey,
   TRIPLET_ASSIST_LABELS,
   type BeatPattern,
   type DottedPlaybackMode,
@@ -120,6 +120,8 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
     toggle,
     tap,
     adjustBpm,
+    setBeatSubdivision,
+    toggleBeatEnabled,
     cycleBeatSubdivision,
     cyclePulse,
     setPulseLevel,
@@ -173,19 +175,6 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
     if (!active) return;
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
-      const shortcutSubdivision = subdivisionShortcutForKey(e.key, state.bpm);
-      if (shortcutSubdivision) {
-        e.preventDefault();
-        if (selectedBeat === null) {
-          setGlobalSubdivision(shortcutSubdivision);
-        } else {
-          applyPatternToBeat(selectedBeat, {
-            pulses: shortcutSubdivision,
-            accents: Array.from({ length: shortcutSubdivision }, (_, pulseIndex) => state.pattern[selectedBeat]?.accents[pulseIndex] ?? "normal"),
-          });
-        }
-        return;
-      }
       if (e.code === "Space") { e.preventDefault(); }
       else if (e.code === "ArrowUp") { e.preventDefault(); adjustBpm(1); }
       else if (e.code === "ArrowDown") { e.preventDefault(); adjustBpm(-1); }
@@ -196,7 +185,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [active, adjustBpm, applyPatternToBeat, concertMode, selectedBeat, setGlobalSubdivision, state.bpm, state.pattern, tap]);
+  }, [active, adjustBpm, concertMode, tap]);
 
   const loadPreset = (idx: number) => {
     const p = METRONOME_PRESETS[idx];
@@ -382,7 +371,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
             currentBeat={state.currentBeat}
             currentPulse={state.currentPulse}
             currentPoly={state.currentPoly}
-            onCycleBeatSubdivision={cycleBeatSubdivision}
+            onToggleBeat={toggleBeatEnabled}
             onSetBeatSubdivision={(beatIndex, pulses) => applyPatternToBeat(beatIndex, {
               pulses,
               accents: Array.from({ length: pulses }, (_, pulseIndex) => state.pattern[beatIndex]?.accents[pulseIndex] ?? "normal"),
@@ -413,6 +402,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
               currentBeat={state.currentBeat}
               currentPulse={state.currentPulse}
               onSelectBeat={setSelectedBeat}
+              onToggleBeat={toggleBeatEnabled}
               onSetSubdivision={(beatIndex, pulses) => applyPatternToBeat(beatIndex, {
                 pulses,
                 accents: Array.from({ length: pulses }, (_, pulseIndex) => {
@@ -427,10 +417,12 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
           ) : view === "levels" ? (
             <LevelMeters
               pattern={state.pattern}
+              bpm={state.bpm}
               isPlaying={state.isPlaying}
               currentBeat={state.currentBeat}
               currentPulse={state.currentPulse}
-              onCycleBeatSubdivision={cycleBeatSubdivision}
+              onToggleBeat={toggleBeatEnabled}
+              onSetBeatSubdivision={setBeatSubdivision}
               onCyclePulse={cyclePulse}
               onSetPulseLevel={setPulseLevel}
             />
@@ -469,9 +461,11 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
             currentPulse={state.currentPulse}
             currentPoly={state.currentPoly}
             isPlaying={state.isPlaying}
+            bpm={state.bpm}
             onCyclePulse={cyclePulse}
             onSetPulseLevel={setPulseLevel}
             onCycleBeatSubdivision={cycleBeatSubdivision}
+            onSetBeatSubdivision={setBeatSubdivision}
           />
         </div>
 
@@ -747,7 +741,7 @@ function WheelStage({
   currentBeat,
   currentPulse,
   currentPoly,
-  onCycleBeatSubdivision,
+  onToggleBeat,
   onSetBeatSubdivision,
   onCyclePulseAccent,
   onTap,
@@ -760,7 +754,7 @@ function WheelStage({
   currentBeat: number;
   currentPulse: number;
   currentPoly: number;
-  onCycleBeatSubdivision: (beatIndex: number) => void;
+  onToggleBeat: (beatIndex: number) => void;
   onSetBeatSubdivision: (beatIndex: number, pulses: SubdivisionCount) => void;
   onCyclePulseAccent: (beatIndex: number, pulseIndex: number) => void;
   onTap: () => void;
@@ -794,7 +788,7 @@ function WheelStage({
           isPlaying={isPlaying}
           currentBeat={currentBeat}
           currentPulse={currentPulse}
-          onCycleBeatSubdivision={onCycleBeatSubdivision}
+          onToggleBeat={onToggleBeat}
           onSetBeatSubdivision={onSetBeatSubdivision}
           onCyclePulseAccent={onCyclePulseAccent}
           onTapTempo={onTap}
@@ -961,9 +955,11 @@ function NotationStage({
   currentPulse,
   currentPoly,
   isPlaying,
+  bpm,
   onCyclePulse,
   onSetPulseLevel,
   onCycleBeatSubdivision,
+  onSetBeatSubdivision,
 }: {
   view: MetronomeView;
   pattern: BeatPattern[];
@@ -973,9 +969,11 @@ function NotationStage({
   currentPulse: number;
   currentPoly: number;
   isPlaying: boolean;
+  bpm: number;
   onCyclePulse: (beatIndex: number, pulseIndex: number) => void;
   onSetPulseLevel: (beatIndex: number, pulseIndex: number, level: number) => void;
   onCycleBeatSubdivision: (beatIndex: number) => void;
+  onSetBeatSubdivision: (beatIndex: number, pulses: SubdivisionCount) => void;
 }) {
   const previewHint = view === "polyrhythm" && polyrhythm.enabled
     ? `${polyrhythm.main}:${polyrhythm.voices.join(":") || polyrhythm.against}`
@@ -993,6 +991,7 @@ function NotationStage({
         <NotationPanel
           view={view}
           pattern={pattern}
+          bpm={bpm}
           polyrhythm={polyrhythm}
           timeSignature={timeSignature}
           currentBeat={currentBeat}
@@ -1002,6 +1001,7 @@ function NotationStage({
           onCyclePulse={onCyclePulse}
           onSetPulseLevel={onSetPulseLevel}
           onCycleBeatSubdivision={onCycleBeatSubdivision}
+          onSetBeatSubdivision={onSetBeatSubdivision}
         />
       </div>
       <AssistNotationStrip dottedMode={polyrhythm.dottedMode} tripletMode={polyrhythm.tripletMode} jazzMode={polyrhythm.jazzMode} />
@@ -2108,6 +2108,7 @@ function BeatMapRow({
   currentBeat,
   currentPulse,
   onSelectBeat,
+  onToggleBeat,
   onSetSubdivision,
   onCyclePulse,
   onSetPulseLevel,
@@ -2119,11 +2120,14 @@ function BeatMapRow({
   currentBeat: number;
   currentPulse: number;
   onSelectBeat: (beatIndex: number) => void;
+  onToggleBeat: (beatIndex: number) => void;
   onSetSubdivision: (beatIndex: number, pulses: SubdivisionCount) => void;
   onCyclePulse: (beatIndex: number, pulseIndex: number) => void;
   onSetPulseLevel: (beatIndex: number, pulseIndex: number, level: number) => void;
 }) {
   const options = getSubdivisionOptionsForBpm(bpm);
+  const readSubdivisionShortcut = useSubdivisionShortcut(bpm);
+
   return (
     <div className="rounded-lg border border-border/70 bg-card/60 p-4">
       <SectionLabel title="Beat Map" hint="beats in one row" />
@@ -2143,8 +2147,18 @@ function BeatMapRow({
               style={{ borderColor: color }}
             >
               <div className="flex flex-col items-center gap-3">
-                  <span
+                  <button
+                    type="button"
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onSelectBeat(beatIndex);
+                      const shortcutSubdivision = readSubdivisionShortcut();
+                      if (shortcutSubdivision) onSetSubdivision(beatIndex, shortcutSubdivision);
+                      else onToggleBeat(beatIndex);
+                    }}
                     className="relative grid size-14 place-items-center rounded-full border"
+                    aria-label={`Beat ${beatIndex + 1}: tap to toggle beat on or off`}
                     style={{
                       background: subdivisionBackground(beat, activeBeat),
                       borderColor: color,
@@ -2152,7 +2166,7 @@ function BeatMapRow({
                   >
                     <span className="absolute inset-[30%] rounded-full bg-background/90" />
                     <span className="relative font-serif text-2xl leading-none">{beatIndex + 1}</span>
-                  </span>
+                  </button>
                 <div className="text-center">
                   <span className="tiny-caps block text-[9px] text-muted-foreground">Beat {beatIndex + 1}</span>
                   <span className="font-mono text-sm tabular">{beat.pulses} pulse{beat.pulses > 1 ? "s" : ""}</span>
