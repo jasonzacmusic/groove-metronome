@@ -102,9 +102,9 @@ export default function App() {
 
       {/* Compact app masthead */}
       <header className="mobile-masthead relative z-10 border-b border-border/70">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-3 md:px-10 md:py-5">
-          <div className="grid gap-4 lg:grid-cols-[minmax(285px,1fr)_minmax(360px,1.35fr)_auto] lg:items-center">
-            <div className="brand-lockup flex min-w-0 items-center gap-3 lg:min-w-[285px]">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-3 md:px-10 md:py-5">
+          <div className="grid gap-4 xl:grid-cols-[minmax(380px,1fr)_minmax(500px,1.38fr)_auto] xl:items-center">
+            <div className="brand-lockup flex min-w-0 items-center gap-3 xl:min-w-[380px]">
               <img
                 src="/brand/nsm-white.png"
                 alt="Nathaniel School of Music"

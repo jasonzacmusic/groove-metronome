@@ -263,6 +263,7 @@
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 0.65rem;
+  min-width: 0;
   min-height: 4.2rem;
   border-radius: 0.45rem;
   border: 1px solid hsl(var(--border) / 0.76);
@@ -327,6 +328,21 @@
   display: none;
 }
 
+.app-space-nav-desktop .hero-tab {
+  padding: 0.68rem;
+}
+
+.app-space-nav-desktop .hero-tab-title,
+.app-space-nav-desktop .hero-tab-detail {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.app-space-nav-desktop .hero-tab-detail {
+  line-height: 1.15;
+}
+
 .hero-tab-active .hero-tab-icon {
   border-color: hsl(var(--primary) / 0.75);
   background: hsl(var(--primary) / 0.16);
@@ -364,6 +380,21 @@
 @media (min-width: 768px) {
   .hero-tab-title {
     font-size: 1.125rem;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1180px) {
+  .app-space-nav-desktop .hero-tab {
+    gap: 0.5rem;
+  }
+
+  .app-space-nav-desktop .hero-tab-title {
+    font-size: 1rem;
+  }
+
+  .app-space-nav-desktop .hero-tab-icon {
+    width: 2rem;
+    height: 2rem;
   }
 }
 

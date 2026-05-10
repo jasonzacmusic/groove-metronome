@@ -143,7 +143,11 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
   });
 
   useEffect(() => {
-    window.localStorage.setItem(SETLIST_STORAGE_KEY, JSON.stringify(setlist));
+    try {
+      window.localStorage.setItem(SETLIST_STORAGE_KEY, JSON.stringify(setlist));
+    } catch {
+      // Practice mode should remain usable if storage is unavailable.
+    }
   }, [setlist]);
 
   useEffect(() => {
@@ -1293,6 +1297,22 @@ function TransportDeck({
   onAdjustBpm: (delta: number) => void;
   onSetBpm: (bpm: number) => void;
 }) {
+  const [bpmDraft, setBpmDraft] = useState(String(Math.round(state.bpm)));
+  const bpmInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (document.activeElement !== bpmInputRef.current) {
+      setBpmDraft(String(Math.round(state.bpm)));
+    }
+  }, [state.bpm]);
+
+  const commitBpmDraft = (rawValue = bpmDraft) => {
+    const next = Number(rawValue.replace(/[^0-9]/g, ""));
+    const safe = clamp(Number.isFinite(next) && next > 0 ? next : state.bpm, 20, 300);
+    onSetBpm(safe);
+    setBpmDraft(String(Math.round(safe)));
+  };
+
   return (
     <div className="rounded-md border border-border/70 bg-card/60 p-4 md:p-5">
       <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-4 items-center">
@@ -1306,15 +1326,21 @@ function TransportDeck({
             <Stepper label="−10" onTap={() => onAdjustBpm(-10)} />
             <Stepper label="−1" onTap={() => onAdjustBpm(-1)} primary />
             <input
-              type="number"
-              value={Math.round(state.bpm)}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                if (v >= 20 && v <= 300) onSetBpm(v);
+              ref={bpmInputRef}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={bpmDraft}
+              onChange={(e) => setBpmDraft(e.target.value.replace(/[^0-9]/g, ""))}
+              onFocus={(e) => e.currentTarget.select()}
+              onBlur={(e) => commitBpmDraft(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  commitBpmDraft(e.currentTarget.value);
+                  e.currentTarget.blur();
+                }
               }}
               className="w-20 bg-transparent border-b border-border text-center font-serif text-3xl tabular focus:outline-none focus:border-primary"
-              min={20}
-              max={300}
               aria-label="BPM"
             />
             <Stepper label="+1" onTap={() => onAdjustBpm(1)} primary />

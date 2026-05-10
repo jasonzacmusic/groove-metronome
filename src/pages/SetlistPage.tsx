@@ -24,9 +24,10 @@ import {
   type TimeSignature,
   type TripletAssistMode,
 } from "@/lib/metronome-types";
-import { clamp, formatTime } from "@/lib/utils";
+import { clamp } from "@/lib/utils";
 
 const SETLIST_STORAGE_KEY = "groove-metronome.setlists.v1";
+const CONCERT_SESSION_STORAGE_KEY = "groove-metronome.concert-session.v1";
 
 interface SavedSong {
   id: string;
@@ -42,6 +43,20 @@ interface SetlistState {
   songs: SavedSong[];
 }
 
+interface SongDurationLog {
+  name: string;
+  ms: number;
+  lastPlayedAt: number;
+}
+
+interface ConcertSessionState {
+  concertAccumulatedMs: number;
+  concertActiveSince: number | null;
+  activeSongId: string | null;
+  songActiveSince: number | null;
+  songDurations: Record<string, SongDurationLog>;
+}
+
 interface SetlistPageProps {
   metronome: UseMetronomeReturn;
   active?: boolean;
@@ -53,15 +68,48 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
   const [songName, setSongName] = useState("New song");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [stageLock, setStageLock] = useState(false);
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  const [concertSession, setConcertSession] = useState<ConcertSessionState>(() => readConcertSession());
   const stageInitializedRef = useRef(false);
   const importRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    window.localStorage.setItem(SETLIST_STORAGE_KEY, JSON.stringify(setlist));
+    try {
+      window.localStorage.setItem(SETLIST_STORAGE_KEY, JSON.stringify(setlist));
+    } catch {
+      // Keep the stage deck running even if browser storage is unavailable.
+    }
   }, [setlist]);
 
   const selectedSong = setlist.songs[selectedIndex] ?? null;
   const nextSong = setlist.songs[selectedIndex + 1] ?? null;
+  const concertElapsedMs = getConcertElapsedMs(concertSession, clockNow);
+  const songElapsedMs = getCurrentSongElapsedMs(concertSession, selectedSong?.id ?? null, clockNow);
+  const songLogs = Object.values(concertSession.songDurations).sort((a, b) => b.lastPlayedAt - a.lastPlayedAt);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setClockNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(CONCERT_SESSION_STORAGE_KEY, JSON.stringify(concertSession));
+    } catch {
+      // Stage timing is helpful but should never risk the show.
+    }
+  }, [concertSession]);
+
+  useEffect(() => {
+    const now = Date.now();
+    setClockNow(now);
+    setConcertSession((prev) => syncConcertSession(prev, {
+      now,
+      playing: active && state.isPlaying,
+      songId: selectedSong?.id ?? null,
+      songName: selectedSong?.name ?? "Live stage",
+    }));
+  }, [active, selectedSong?.id, selectedSong?.name, state.isPlaying]);
 
   useEffect(() => {
     if (!active || stageInitializedRef.current || selectedSong) return;
@@ -135,20 +183,28 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
     const payload = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), setlist }, null, 2);
     const file = new File([payload], setlistFileName(), { type: "application/json" });
     const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean };
-    if (navigator.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
-      await navigator.share({ title: setlist.name, text: "Groove Metronome setlist backup", files: [file] });
-      return;
+    try {
+      if (navigator.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
+        await navigator.share({ title: setlist.name, text: "Groove Metronome setlist backup", files: [file] });
+        return;
+      }
+    } catch {
+      // Native share can be cancelled on stage; fall back to a downloadable backup.
     }
     exportSetlist();
   };
 
   const importSetlist = async (file: File) => {
-    const raw = await file.text();
-    const incoming = readSetlistBackup(JSON.parse(raw));
-    if (!incoming) return;
-    setSetlist(incoming);
-    setSelectedIndex(0);
-    if (incoming.songs[0]) loadSong(incoming.songs[0], 0);
+    try {
+      const raw = await file.text();
+      const incoming = readSetlistBackup(JSON.parse(raw));
+      if (!incoming) return;
+      setSetlist(incoming);
+      setSelectedIndex(0);
+      if (incoming.songs[0]) loadSong(incoming.songs[0], 0);
+    } catch {
+      // Ignore invalid backups rather than interrupting concert mode.
+    }
   };
 
   return (
@@ -246,6 +302,10 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
           songIndex={selectedIndex}
           songCount={setlist.songs.length}
           state={state}
+          nowMs={clockNow}
+          concertElapsedMs={concertElapsedMs}
+          songElapsedMs={songElapsedMs}
+          songLogs={songLogs}
           stageLock={stageLock}
           onStageLock={setStageLock}
           onPrev={() => goToSong(selectedIndex - 1)}
@@ -281,6 +341,10 @@ function ConcertDeck({
   songIndex,
   songCount,
   state,
+  nowMs,
+  concertElapsedMs,
+  songElapsedMs,
+  songLogs,
   stageLock,
   onStageLock,
   onPrev,
@@ -304,6 +368,10 @@ function ConcertDeck({
   songIndex: number;
   songCount: number;
   state: UseMetronomeReturn["state"];
+  nowMs: number;
+  concertElapsedMs: number;
+  songElapsedMs: number;
+  songLogs: SongDurationLog[];
   stageLock: boolean;
   onStageLock: (locked: boolean) => void;
   onPrev: () => void;
@@ -413,8 +481,7 @@ function ConcertDeck({
           </div>
           <div className="rounded-lg border border-border bg-background/35 p-4">
             <span className="tiny-caps text-[10px] text-muted-foreground">Tempo</span>
-            <div className="mt-2 grid grid-cols-[minmax(0,1fr)_5.5rem] items-end gap-3">
-              <div className="font-serif text-6xl leading-none text-primary">{Math.round(state.bpm)}</div>
+            <div className="mt-2">
               <input
                 ref={bpmInputRef}
                 type="text"
@@ -423,6 +490,7 @@ function ConcertDeck({
                 value={bpmDraft}
                 disabled={controlsLocked}
                 onChange={(event) => setBpmDraft(event.target.value)}
+                onFocus={(event) => event.currentTarget.select()}
                 onBlur={(event) => commitBpmDraft(event.currentTarget.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
@@ -430,12 +498,20 @@ function ConcertDeck({
                     event.currentTarget.blur();
                   }
                 }}
-                className="min-h-12 rounded-md border border-border bg-background/55 px-2 text-center font-mono text-lg outline-none focus:border-primary disabled:cursor-not-allowed disabled:opacity-45"
+                className="w-full rounded-md border border-border bg-background/55 px-2 py-2 text-center font-serif text-6xl leading-none text-primary outline-none focus:border-primary disabled:cursor-not-allowed disabled:opacity-45"
                 aria-label="Stage tempo"
               />
             </div>
+            <StageTempoNudges disabled={controlsLocked} onAdjustBpm={onAdjustBpm} />
           </div>
         </div>
+
+        <StageClockStrip
+          nowMs={nowMs}
+          concertElapsedMs={concertElapsedMs}
+          songElapsedMs={songElapsedMs}
+          songLogs={songLogs}
+        />
 
         <div className="rounded-lg border border-primary/30 bg-[linear-gradient(145deg,hsl(var(--primary)/0.10),hsl(var(--background)/0.50))] p-3 md:p-5">
           <PolyrhythmWheel
@@ -463,14 +539,6 @@ function ConcertDeck({
         <div className="grid gap-3 md:grid-cols-2">
           <StageSettingsPanel title="Tap" summary={tapPreview.bpm ? `${tapPreview.bpm} BPM` : `${tapPreview.count} taps`} defaultOpen>
             <TapPreview preview={tapPreview} onTap={tap} onSetBpm={onSetBpm} disabled={controlsLocked} />
-          </StageSettingsPanel>
-
-          <StageSettingsPanel title="Tempo" summary="1 2 5">
-            <div className="grid grid-cols-6 gap-2">
-              {[-5, -2, -1, 1, 2, 5].map((delta) => (
-                <StageButton key={delta} label={delta > 0 ? `+${delta}` : `${delta}`} onClick={() => onAdjustBpm(delta)} compact disabled={controlsLocked} />
-              ))}
-            </div>
           </StageSettingsPanel>
 
           <StageSettingsPanel title="Time Signature" summary={`${state.timeSignature.numerator}/${state.timeSignature.denominator}`}>
@@ -557,13 +625,88 @@ function ConcertDeck({
               onJazzMode={(jazzMode) => onSetPolyrhythm({ jazzMode })}
             />
           </StageSettingsPanel>
-
-          <StageSettingsPanel title="Timer" summary={formatTime(state.practiceSeconds)}>
-            <div className="font-mono text-3xl tabular">{formatTime(state.practiceSeconds)}</div>
-          </StageSettingsPanel>
         </div>
       </div>
     </section>
+  );
+}
+
+function StageClockStrip({
+  nowMs,
+  concertElapsedMs,
+  songElapsedMs,
+  songLogs,
+}: {
+  nowMs: number;
+  concertElapsedMs: number;
+  songElapsedMs: number;
+  songLogs: SongDurationLog[];
+}) {
+  return (
+    <div className="grid gap-3 md:grid-cols-[0.8fr_0.8fr_1.4fr]">
+      <StageClockTile label="IST" value={formatIstTime(nowMs)} />
+      <StageClockTile label="Concert" value={formatStageDuration(concertElapsedMs)} />
+      <div className="rounded-lg border border-border bg-background/35 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <span className="tiny-caps text-[10px] text-muted-foreground">Song time</span>
+          <span className="font-mono text-lg tabular text-primary">{formatStageDuration(songElapsedMs)}</span>
+        </div>
+        <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+          {songLogs.slice(0, 5).map((log) => (
+            <span key={log.name} className="shrink-0 rounded-full border border-border bg-card/60 px-3 py-1 font-mono text-[11px] text-muted-foreground">
+              {log.name}: {formatStageDuration(log.ms)}
+            </span>
+          ))}
+          {songLogs.length === 0 && (
+            <span className="font-mono text-xs text-muted-foreground">Song lengths are saved for this browser session.</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StageClockTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-background/35 p-3">
+      <span className="tiny-caps block text-[10px] text-muted-foreground">{label}</span>
+      <span className="mt-1 block font-mono text-3xl tabular text-foreground">{value}</span>
+    </div>
+  );
+}
+
+function StageTempoNudges({ disabled, onAdjustBpm }: { disabled?: boolean; onAdjustBpm: (delta: number) => void }) {
+  return (
+    <div className="mt-3 grid grid-cols-3 gap-2" aria-label="Stage tempo adjustments">
+      {[1, 2, 5].map((amount) => (
+        <div key={amount} className="grid grid-cols-2 overflow-hidden rounded-lg border border-border bg-background/35">
+          <button
+            type="button"
+            disabled={disabled}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              if (!disabled) onAdjustBpm(-amount);
+            }}
+            className="min-h-14 border-r border-border px-2 font-mono text-lg text-muted-foreground transition-colors hover:bg-destructive/12 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-35"
+            aria-label={`Decrease tempo by ${amount}`}
+          >
+            -{amount}
+          </button>
+          <button
+            type="button"
+            disabled={disabled}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              if (!disabled) onAdjustBpm(amount);
+            }}
+            className="min-h-14 px-2 font-mono text-lg text-primary transition-colors hover:bg-primary/14 disabled:cursor-not-allowed disabled:opacity-35"
+            aria-label={`Increase tempo by ${amount}`}
+          >
+            +{amount}
+          </button>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -840,6 +983,133 @@ function readSetlist(): SetlistState {
     // Ignore corrupted local storage.
   }
   return { name: "My Band / Concert", songs: [] };
+}
+
+function emptyConcertSession(): ConcertSessionState {
+  return {
+    concertAccumulatedMs: 0,
+    concertActiveSince: null,
+    activeSongId: null,
+    songActiveSince: null,
+    songDurations: {},
+  };
+}
+
+function readConcertSession(): ConcertSessionState {
+  try {
+    const saved = window.sessionStorage.getItem(CONCERT_SESSION_STORAGE_KEY);
+    if (!saved) return emptyConcertSession();
+    const parsed = JSON.parse(saved) as Partial<ConcertSessionState>;
+    const songDurations = parsed.songDurations && typeof parsed.songDurations === "object" ? parsed.songDurations : {};
+    return {
+      concertAccumulatedMs: Number.isFinite(parsed.concertAccumulatedMs) ? Math.max(0, Number(parsed.concertAccumulatedMs)) : 0,
+      concertActiveSince: typeof parsed.concertActiveSince === "number" ? parsed.concertActiveSince : null,
+      activeSongId: typeof parsed.activeSongId === "string" ? parsed.activeSongId : null,
+      songActiveSince: typeof parsed.songActiveSince === "number" ? parsed.songActiveSince : null,
+      songDurations: Object.fromEntries(
+        Object.entries(songDurations)
+          .filter((entry): entry is [string, SongDurationLog] => {
+            const log = entry[1] as SongDurationLog;
+            return Boolean(log) && typeof log.name === "string" && typeof log.ms === "number";
+          })
+          .map(([id, log]) => [id, {
+            name: log.name,
+            ms: Math.max(0, log.ms),
+            lastPlayedAt: typeof log.lastPlayedAt === "number" ? log.lastPlayedAt : Date.now(),
+          }]),
+      ),
+    };
+  } catch {
+    return emptyConcertSession();
+  }
+}
+
+function syncConcertSession(
+  prev: ConcertSessionState,
+  nextState: { now: number; playing: boolean; songId: string | null; songName: string },
+): ConcertSessionState {
+  const next: ConcertSessionState = {
+    ...prev,
+    songDurations: { ...prev.songDurations },
+  };
+  const closeConcertSpan = () => {
+    if (next.concertActiveSince !== null) {
+      next.concertAccumulatedMs += Math.max(0, nextState.now - next.concertActiveSince);
+      next.concertActiveSince = null;
+    }
+  };
+  const closeSongSpan = () => {
+    if (next.songActiveSince !== null && next.activeSongId) {
+      const existing = next.songDurations[next.activeSongId] ?? { name: nextState.songName, ms: 0, lastPlayedAt: nextState.now };
+      next.songDurations[next.activeSongId] = {
+        name: existing.name,
+        ms: existing.ms + Math.max(0, nextState.now - next.songActiveSince),
+        lastPlayedAt: nextState.now,
+      };
+      next.songActiveSince = null;
+    }
+  };
+
+  if (!nextState.playing) {
+    closeConcertSpan();
+    closeSongSpan();
+    next.activeSongId = nextState.songId;
+    if (nextState.songId) {
+      next.songDurations[nextState.songId] = {
+        name: nextState.songName,
+        ms: next.songDurations[nextState.songId]?.ms ?? 0,
+        lastPlayedAt: next.songDurations[nextState.songId]?.lastPlayedAt ?? nextState.now,
+      };
+    }
+    return next;
+  }
+
+  if (next.concertActiveSince === null) next.concertActiveSince = nextState.now;
+  if (next.activeSongId !== nextState.songId) {
+    closeSongSpan();
+    next.activeSongId = nextState.songId;
+    next.songActiveSince = nextState.songId ? nextState.now : null;
+  } else if (nextState.songId && next.songActiveSince === null) {
+    next.songActiveSince = nextState.now;
+  }
+
+  if (nextState.songId) {
+    next.songDurations[nextState.songId] = {
+      name: nextState.songName,
+      ms: next.songDurations[nextState.songId]?.ms ?? 0,
+      lastPlayedAt: next.songDurations[nextState.songId]?.lastPlayedAt ?? nextState.now,
+    };
+  }
+  return next;
+}
+
+function getConcertElapsedMs(session: ConcertSessionState, now: number): number {
+  return session.concertAccumulatedMs + (session.concertActiveSince === null ? 0 : Math.max(0, now - session.concertActiveSince));
+}
+
+function getCurrentSongElapsedMs(session: ConcertSessionState, songId: string | null, now: number): number {
+  if (!songId) return 0;
+  const saved = session.songDurations[songId]?.ms ?? 0;
+  const live = session.activeSongId === songId && session.songActiveSince !== null ? Math.max(0, now - session.songActiveSince) : 0;
+  return saved + live;
+}
+
+function formatStageDuration(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatIstTime(ms: number): string {
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date(ms)).toLowerCase();
 }
 
 function readSetlistBackup(value: unknown): SetlistState | null {

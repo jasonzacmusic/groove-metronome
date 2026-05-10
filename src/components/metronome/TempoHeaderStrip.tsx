@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import {
@@ -37,11 +37,34 @@ export function TempoHeaderStrip({
   onSetSubdivision,
 }: TempoHeaderStripProps) {
   const [open, setOpen] = useState<OpenPanel>(null);
+  const [tempoDraft, setTempoDraft] = useState(String(Math.round(bpm)));
+  const tempoInputRef = useRef<HTMLInputElement | null>(null);
   const dom = dominantPulses(pattern);
   const tempoWord = getTempoMarking(bpm);
   const subdivisionOptions = bpm <= 80 ? SUBDIVISION_OPTIONS : bpm <= 100 ? SUBDIVISION_OPTIONS.filter((n) => n <= 5) : SUBDIVISION_OPTIONS.filter((n) => n <= 4);
 
   const toggle = (panel: OpenPanel) => setOpen((current) => (current === panel ? null : panel));
+  const commitTempoDraft = (rawValue = tempoDraft) => {
+    const next = Number(rawValue.replace(/[^0-9]/g, ""));
+    const safe = Math.min(300, Math.max(20, Number.isFinite(next) && next > 0 ? next : bpm));
+    onSetBpm(safe);
+    setTempoDraft(String(Math.round(safe)));
+  };
+
+  useEffect(() => {
+    if (document.activeElement !== tempoInputRef.current) {
+      setTempoDraft(String(Math.round(bpm)));
+    }
+  }, [bpm]);
+
+  useEffect(() => {
+    if (open !== "tempo-number") return;
+    const id = window.setTimeout(() => {
+      tempoInputRef.current?.focus();
+      tempoInputRef.current?.select();
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [open]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -68,13 +91,18 @@ export function TempoHeaderStrip({
         {open === "tempo-number" && (
           <div className="mt-3 border-t border-border/60 pt-3">
             <input
+              ref={tempoInputRef}
               type="text"
               inputMode="numeric"
               pattern="[0-9]*"
-              value={Math.round(bpm)}
-              onChange={(e) => {
-                const next = Number(e.target.value.replace(/[^0-9]/g, ""));
-                if (Number.isFinite(next)) onSetBpm(Math.min(300, Math.max(20, next)));
+              value={tempoDraft}
+              onChange={(e) => setTempoDraft(e.target.value.replace(/[^0-9]/g, ""))}
+              onBlur={(e) => commitTempoDraft(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  commitTempoDraft(e.currentTarget.value);
+                  e.currentTarget.blur();
+                }
               }}
               className="w-full bg-background/50 border border-border rounded-md px-3 py-2 font-serif text-3xl tabular text-foreground focus:outline-none focus:border-primary"
               aria-label="Tempo BPM"
