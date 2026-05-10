@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Download, Lock, Plus, RotateCcw, Share2, Trash2, Unlock, Upload, Volume2, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Download, FileText, Link, Lock, Plus, RotateCcw, ShieldAlert, Share2, Trash2, Unlock, Upload, Volume2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { PolyrhythmWheel } from "@/components/metronome/PolyrhythmWheel";
@@ -29,6 +29,7 @@ import { clamp } from "@/lib/utils";
 
 const SETLIST_STORAGE_KEY = "groove-metronome.setlists.v1";
 const CONCERT_SESSION_STORAGE_KEY = "groove-metronome.concert-session.v1";
+const SETLIST_SHARE_PARAM = "setlist";
 
 interface SavedSong {
   id: string;
@@ -64,13 +65,14 @@ interface SetlistPageProps {
 }
 
 export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
-  const { state, setBpm, setTimeSignature, setBeatSound, setPitch, setPattern, setSwing, setGlobalSubdivision, setPolyrhythm, setTrainerEnabled, setRampEnabled, setAccentVolume, toggle, adjustBpm, setBeatSubdivision, toggleBeatEnabled, cyclePulseStrength } = metronome;
+  const { state, setBpm, setTimeSignature, setBeatSound, setPitch, setPattern, setSwing, setGlobalSubdivision, setPolyrhythm, setTrainerEnabled, setRampEnabled, setAccentVolume, stop, toggle, adjustBpm, setBeatSubdivision, toggleBeatEnabled, cyclePulseStrength } = metronome;
   const [setlist, setSetlist] = useState<SetlistState>(() => readSetlist());
   const [songName, setSongName] = useState("New song");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [stageLock, setStageLock] = useState(false);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [concertSession, setConcertSession] = useState<ConcertSessionState>(() => readConcertSession());
+  const [shareStatus, setShareStatus] = useState("");
   const stageInitializedRef = useRef(false);
   const importRef = useRef<HTMLInputElement | null>(null);
 
@@ -138,6 +140,26 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
       polymeterLanes: [{ numerator: song.timeSignature.numerator, denominator: song.timeSignature.denominator === 16 ? 16 : song.timeSignature.denominator === 8 ? 8 : 4 }],
     });
   };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const shareCode = params.get(SETLIST_SHARE_PARAM);
+    if (!shareCode) return;
+    const incoming = decodeSetlistShareCode(shareCode);
+    if (!incoming) {
+      setShareStatus("Could not read setlist link");
+      return;
+    }
+    setSetlist(incoming);
+    setSelectedIndex(0);
+    setShareStatus("Setlist link loaded");
+    if (incoming.songs[0]) loadSong(incoming.songs[0], 0);
+    params.delete(SETLIST_SHARE_PARAM);
+    const cleanUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}${window.location.hash}`;
+    window.history.replaceState(null, "", cleanUrl);
+    // Only read the incoming share link when this pane is first mounted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const addCurrentSong = () => {
     const name = songName.trim() || `Song ${setlist.songs.length + 1}`;
@@ -209,10 +231,10 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
     if (song) loadSong(song, safeIndex);
   };
 
-  const setlistFileName = () => `${safeFileName(setlist.name || "groove-setlist")}.groove-setlist.json`;
+  const setlistFileName = () => `${safeFileName(setlist.name || "groove-setlist")}.groove-setlist`;
 
   const exportSetlist = () => {
-    const file = new Blob([JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), setlist }, null, 2)], { type: "application/json" });
+    const file = new Blob([JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), setlist }, null, 2)], { type: "application/vnd.groove.setlist+json" });
     const url = URL.createObjectURL(file);
     const link = document.createElement("a");
     link.href = url;
@@ -223,7 +245,7 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
 
   const shareSetlist = async () => {
     const payload = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), setlist }, null, 2);
-    const file = new File([payload], setlistFileName(), { type: "application/json" });
+    const file = new File([payload], setlistFileName(), { type: "application/vnd.groove.setlist+json" });
     const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean };
     try {
       if (navigator.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
@@ -236,17 +258,74 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
     exportSetlist();
   };
 
+  const copySetlistLink = async () => {
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", "setlist");
+    params.set(SETLIST_SHARE_PARAM, encodeSetlistShareCode(setlist));
+    const link = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      setShareStatus("Setlist link copied");
+    } catch {
+      setShareStatus("Copy blocked; use Back up");
+    }
+  };
+
   const importSetlist = async (file: File) => {
     try {
       const raw = await file.text();
-      const incoming = readSetlistBackup(JSON.parse(raw));
+      const incoming = file.name.toLowerCase().endsWith(".csv") || file.type.includes("csv")
+        ? readCsvSetlist(raw)
+        : readSetlistBackup(JSON.parse(raw));
       if (!incoming) return;
       setSetlist(incoming);
       setSelectedIndex(0);
+      setShareStatus(`${incoming.songs.length} songs imported`);
       if (incoming.songs[0]) loadSong(incoming.songs[0], 0);
     } catch {
-      // Ignore invalid backups rather than interrupting concert mode.
+      try {
+        const raw = await file.text();
+        const incoming = readCsvSetlist(raw);
+        if (!incoming) return;
+        setSetlist(incoming);
+        setSelectedIndex(0);
+        setShareStatus(`${incoming.songs.length} songs imported`);
+        if (incoming.songs[0]) loadSong(incoming.songs[0], 0);
+      } catch {
+        setShareStatus("Could not import that setlist");
+      }
     }
+  };
+
+  const importClipboardSongs = async () => {
+    try {
+      const raw = await navigator.clipboard.readText();
+      const incoming = readCsvSetlist(raw);
+      if (!incoming) {
+        setShareStatus("Paste songs as: Song, 120, 4/4");
+        return;
+      }
+      setSetlist(incoming);
+      setSelectedIndex(0);
+      setShareStatus(`${incoming.songs.length} songs pasted`);
+      if (incoming.songs[0]) loadSong(incoming.songs[0], 0);
+    } catch {
+      setShareStatus("Paste access blocked");
+    }
+  };
+
+  const panicRecover = () => {
+    const keepBpm = state.bpm;
+    stop();
+    if (selectedSong) loadSong(selectedSong, selectedIndex);
+    setBpm(keepBpm);
+    const numerator = selectedSong?.timeSignature.numerator ?? state.timeSignature.numerator;
+    const subdivision = dominantSubdivision(selectedSong?.pattern ?? state.pattern) ?? 1;
+    setPattern(buildNeutralPattern(numerator, subdivision));
+    setTrainerEnabled(false);
+    setRampEnabled(false);
+    setPolyrhythm({ enabled: false, dottedMode: "off", tripletMode: "off", jazzMode: "off", polymeterEnabled: false });
+    setShareStatus("Recovered stage click");
   };
 
   return (
@@ -265,14 +344,17 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
           <SetlistHeaderClock nowMs={clockNow} />
           <div className="flex flex-wrap gap-2 pb-0.5">
             <StageAction label="Share" icon={<Share2 className="size-4" />} onClick={() => void shareSetlist()} />
+            <StageAction label="Copy Link" icon={<Link className="size-4" />} onClick={() => void copySetlistLink()} />
             <StageAction label="Back up" icon={<Download className="size-4" />} onClick={exportSetlist} />
             <StageAction label="Restore" icon={<Upload className="size-4" />} onClick={() => importRef.current?.click()} />
+            <StageAction label="Paste CSV" icon={<FileText className="size-4" />} onClick={() => void importClipboardSongs()} />
           </div>
         </div>
+        {shareStatus && <div className="mt-2 font-mono text-xs text-primary">{shareStatus}</div>}
         <input
           ref={importRef}
           type="file"
-          accept=".json,.groove-setlist.json,application/json"
+          accept=".groove-setlist,.json,.csv,.txt,application/json,text/csv,text/plain"
           className="hidden"
           onChange={(event) => {
             const file = event.target.files?.[0];
@@ -420,6 +502,7 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
           onSetSwing={setSwing}
           onSetAccentVolume={setAccentVolume}
           onSetPolyrhythm={setPolyrhythm}
+          onPanicRecover={panicRecover}
         />
       </div>
     </div>
@@ -485,6 +568,7 @@ function ConcertDeck({
   onSetSwing,
   onSetAccentVolume,
   onSetPolyrhythm,
+  onPanicRecover,
 }: {
   active: boolean;
   song: SavedSong | null;
@@ -513,6 +597,7 @@ function ConcertDeck({
   onSetSwing: (swing: number) => void;
   onSetAccentVolume: (accent: Exclude<PulseAccent, "mute">, volume: number) => void;
   onSetPolyrhythm: (config: Partial<PolyrhythmConfig>) => void;
+  onPanicRecover: () => void;
 }) {
   const tapsRef = useRef<number[]>([]);
   const bpmInputRef = useRef<HTMLInputElement | null>(null);
@@ -683,6 +768,19 @@ function ConcertDeck({
           <StagePlayButton playing={state.isPlaying} onToggle={onToggle} />
           <StageButton label="Next" icon={<ChevronRight className="size-6" />} disabled={controlsLocked || songIndex >= songCount - 1} onClick={onNext} />
         </div>
+        <button
+          type="button"
+          disabled={controlsLocked}
+          onPointerDown={(event) => {
+            event.preventDefault();
+            if (!controlsLocked) onPanicRecover();
+          }}
+          className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-lg border border-destructive/45 bg-destructive/10 px-4 tiny-caps text-[11px] text-destructive transition-colors hover:bg-destructive/16 disabled:cursor-not-allowed disabled:opacity-35"
+          aria-label="Concert panic recover"
+        >
+          <ShieldAlert className="size-5" />
+          Panic recover
+        </button>
 
         <div className="grid gap-3 md:grid-cols-2">
           <StageSettingsPanel title="Tap" summary={tapPreview.bpm ? `${tapPreview.bpm} BPM` : `${tapPreview.count} taps`} defaultOpen>
@@ -1452,6 +1550,86 @@ function readSetlistBackup(value: unknown): SetlistState | null {
         swing: song.swing ?? 0,
       })),
   };
+}
+
+function encodeSetlistShareCode(setlist: SetlistState): string {
+  const json = JSON.stringify({ version: 1, setlist });
+  const bytes = new TextEncoder().encode(json);
+  let binary = "";
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function decodeSetlistShareCode(code: string): SetlistState | null {
+  try {
+    const padded = code.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(code.length / 4) * 4, "=");
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return readSetlistBackup(JSON.parse(new TextDecoder().decode(bytes)));
+  } catch {
+    return null;
+  }
+}
+
+function readCsvSetlist(raw: string): SetlistState | null {
+  const rows = raw
+    .split(/\r?\n/)
+    .map((line) => parseDelimitedLine(line.trim()))
+    .filter((row) => row.length > 0 && row.some(Boolean));
+
+  const songs = rows
+    .filter((row, index) => !(index === 0 && /song|title|bpm|tempo/i.test(row.join(" "))))
+    .map((row, index): SavedSong | null => {
+      const name = row[0]?.trim() || `Song ${index + 1}`;
+      const bpm = clamp(Math.round(Number(row[1]) || 100), 20, 300);
+      const timeSignature = parseTimeSignature(row[2] || "4/4");
+      return {
+        id: `${Date.now()}-${index}-${Math.random().toString(16).slice(2)}`,
+        name,
+        bpm,
+        timeSignature,
+        pattern: buildDefaultPattern(timeSignature.numerator, 1),
+        swing: 0,
+      };
+    })
+    .filter((song): song is SavedSong => Boolean(song));
+
+  if (songs.length === 0) return null;
+  return { name: "Imported Setlist", songs };
+}
+
+function parseDelimitedLine(line: string): string[] {
+  if (!line) return [];
+  const delimiter = line.includes("\t") ? "\t" : ",";
+  const cells: string[] = [];
+  let current = "";
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === "\"") {
+      if (quoted && line[i + 1] === "\"") {
+        current += "\"";
+        i++;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (char === delimiter && !quoted) {
+      cells.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+function parseTimeSignature(value: string): TimeSignature {
+  const [rawNumerator, rawDenominator] = value.split("/");
+  const numerator = clamp(Math.round(Number(rawNumerator) || 4), 1, 16);
+  const denominatorValue = Number(rawDenominator) || 4;
+  const denominator: MeterDenominator = denominatorValue === 16 ? 16 : denominatorValue === 8 ? 8 : 4;
+  return { numerator, denominator };
 }
 
 function dominantSubdivision(pattern: BeatPattern[]): SubdivisionCount | null {

@@ -93,6 +93,25 @@ const VOICE_ACCENT_VOLUME: Record<PulseAccent, number> = {
 const POLYRHYTHM_VOICE_FREQS = [760, 560, 430, 330];
 const POLYRHYTHM_VOICE_OSCILLATORS = ["triangle", "sine", "triangle", "sine"] as const;
 
+function polyVoiceProfile(sound: BeatSound): { freqs: number[]; oscillators: Array<"sine" | "triangle" | "square">; gain: number } {
+  if (sound === "sample-tabla") {
+    return { freqs: [440, 540, 660, 780], oscillators: ["sine", "triangle", "sine", "triangle"], gain: -1 };
+  }
+  if (sound === "sample-shaker") {
+    return { freqs: [2400, 1800, 1300, 950], oscillators: ["triangle", "triangle", "sine", "sine"], gain: -5 };
+  }
+  if (sound === "sample-clave" || sound === "sample-rim" || sound === "sample-ping") {
+    return { freqs: [1180, 860, 650, 500], oscillators: ["triangle", "square", "triangle", "sine"], gain: -2 };
+  }
+  if (sound === "sample-marimba" || sound === "wood") {
+    return { freqs: [720, 540, 410, 320], oscillators: ["triangle", "sine", "triangle", "sine"], gain: 0 };
+  }
+  if (sound === "voice-male" || sound === "voice-female") {
+    return { freqs: [650, 490, 380, 300], oscillators: ["triangle", "sine", "triangle", "sine"], gain: -3 };
+  }
+  return { freqs: POLYRHYTHM_VOICE_FREQS, oscillators: [...POLYRHYTHM_VOICE_OSCILLATORS], gain: 0 };
+}
+
 function displayBpmToTransportBpm(displayBpm: number, denominator: number): number {
   void denominator;
   return displayBpm;
@@ -425,16 +444,17 @@ export function useMetronome() {
   }, []);
 
   const playPolyClick = useCallback((time: number, freq: number, vol: number, voiceIndex: number, downbeat: boolean) => {
+    const profile = polyVoiceProfile(beatSoundRef.current);
     if (!polySynthsRef.current) {
       polySynthsRef.current = Array.from({ length: 4 }, (_, index) =>
         new Tone.Synth({
-          oscillator: { type: POLYRHYTHM_VOICE_OSCILLATORS[index] ?? "sine" },
-          envelope: { attack: 0.0015, decay: 0.075, sustain: 0, release: 0.045 },
+          oscillator: { type: profile.oscillators[index] ?? "sine" },
+          envelope: { attack: 0.0015, decay: downbeat ? 0.09 : 0.065, sustain: 0, release: 0.045 },
         }).toDestination(),
       );
     }
     const synth = polySynthsRef.current[voiceIndex % polySynthsRef.current.length];
-    synth.triggerAttackRelease(freq, downbeat ? "32n" : "64n", time, Tone.dbToGain(vol));
+    synth.triggerAttackRelease(profile.freqs[voiceIndex] ?? freq, downbeat ? "32n" : "64n", time, Tone.dbToGain(vol + profile.gain));
   }, []);
 
   const scheduleLoop = useCallback(() => {

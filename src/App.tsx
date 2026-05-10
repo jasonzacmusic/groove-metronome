@@ -42,13 +42,25 @@ function readStoredTheme(): ThemeId {
   return THEMES.some((theme) => theme.id === stored) ? (stored as ThemeId) : "midnight";
 }
 
+function readInitialTab(): Tab {
+  if (typeof window === "undefined") return "metronome";
+  const params = new URLSearchParams(window.location.search);
+  const requested = params.get("tab");
+  if (requested === "analyzer" || requested === "setlist" || requested === "metronome") return requested;
+  if (params.has("setlist")) return "setlist";
+  return "metronome";
+}
+
 export default function App() {
   const metronome = useMetronome();
-  const [tab, setTab] = useState<Tab>("metronome");
+  const [tab, setTab] = useState<Tab>(readInitialTab);
   const [view, setView] = useState<MetronomeView>("beatmap");
   const [theme, setTheme] = useState<ThemeId>(readStoredTheme);
   const [analyzerStartDelay, setAnalyzerStartDelay] = useState(0);
-  const [visitedTabs, setVisitedTabs] = useState({ analyzer: false, setlist: false });
+  const [visitedTabs, setVisitedTabs] = useState(() => {
+    const initialTab = readInitialTab();
+    return { analyzer: initialTab === "analyzer", setlist: initialTab === "setlist" };
+  });
 
   const prepareAnalyzerClick = (timeSignature: TimeSignature = metronome.state.timeSignature) => {
     const denominator: MeterDenominator = timeSignature.denominator === 16 ? 16 : timeSignature.denominator === 8 ? 8 : 4;
