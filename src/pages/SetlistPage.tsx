@@ -220,6 +220,7 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
               aria-label="Setlist name"
             />
           </div>
+          <SetlistHeaderClock nowMs={clockNow} />
           <div className="flex flex-wrap gap-2 pb-0.5">
             <StageAction label="Share" icon={<Share2 className="size-4" />} onClick={() => void shareSetlist()} />
             <StageAction label="Back up" icon={<Download className="size-4" />} onClick={exportSetlist} />
@@ -302,7 +303,6 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
           songIndex={selectedIndex}
           songCount={setlist.songs.length}
           state={state}
-          nowMs={clockNow}
           concertElapsedMs={concertElapsedMs}
           songElapsedMs={songElapsedMs}
           songLogs={songLogs}
@@ -343,7 +343,6 @@ function ConcertDeck({
   songIndex,
   songCount,
   state,
-  nowMs,
   concertElapsedMs,
   songElapsedMs,
   songLogs,
@@ -372,7 +371,6 @@ function ConcertDeck({
   songIndex: number;
   songCount: number;
   state: UseMetronomeReturn["state"];
-  nowMs: number;
   concertElapsedMs: number;
   songElapsedMs: number;
   songLogs: SongDurationLog[];
@@ -515,12 +513,7 @@ function ConcertDeck({
           </div>
         </div>
 
-        <StageClockStrip
-          nowMs={nowMs}
-          concertElapsedMs={concertElapsedMs}
-          songElapsedMs={songElapsedMs}
-          songLogs={songLogs}
-        />
+        <StageClockStrip concertElapsedMs={concertElapsedMs} songElapsedMs={songElapsedMs} songLogs={songLogs} />
 
         <StageTopPerformanceControls
           timeSignature={state.timeSignature}
@@ -676,24 +669,31 @@ function StageSubdivisionApplyAllTool({
   );
 }
 
+function SetlistHeaderClock({ nowMs }: { nowMs: number }) {
+  const localTimeZone = getLocalTimeZone();
+  const localLabel = getTimeZoneLabel(nowMs, localTimeZone);
+  return (
+    <div className="ml-auto min-w-[7.25rem] rounded-md border border-accent/35 bg-accent/8 px-3 py-2 text-right shadow-[inset_0_1px_0_hsl(var(--foreground)/0.04)]">
+      <span className="tiny-caps block text-[9px] text-accent/80">{localLabel}</span>
+      <span className="mt-0.5 block font-mono text-2xl font-semibold leading-none tabular text-accent">
+        {formatZoneTime(nowMs, localTimeZone)}
+      </span>
+    </div>
+  );
+}
+
 function StageClockStrip({
-  nowMs,
   concertElapsedMs,
   songElapsedMs,
   songLogs,
 }: {
-  nowMs: number;
   concertElapsedMs: number;
   songElapsedMs: number;
   songLogs: SongDurationLog[];
 }) {
-  const localTimeZone = getLocalTimeZone();
-  const localLabel = getTimeZoneLabel(nowMs, localTimeZone);
   return (
     <div className="rounded-lg border border-border bg-background/35 p-2.5">
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        <StageClockTile label={`Geo ${localLabel}`} value={formatZoneTime(nowMs, localTimeZone)} tone="cyan" />
-        <StageClockTile label="IST" value={formatZoneTime(nowMs, "Asia/Kolkata")} tone="gold" />
+      <div className="grid gap-2 sm:grid-cols-2">
         <StageClockTile label="Concert" value={formatStageDuration(concertElapsedMs)} tone="green" />
         <StageClockTile label="Song" value={formatStageDuration(songElapsedMs)} tone="rose" />
       </div>
