@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Download, Lock, Plus, RotateCcw, Share2, Trash2, Unlock, Upload, Volume2, X } from "lucide-react";
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Download, Lock, Plus, RotateCcw, Share2, Trash2, Unlock, Upload, Volume2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { PolyrhythmWheel } from "@/components/metronome/PolyrhythmWheel";
@@ -154,11 +154,52 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
     setSongName(`Song ${setlist.songs.length + 2}`);
   };
 
+  const renameSong = (id: string, name: string) => {
+    setSetlist((prev) => ({
+      ...prev,
+      songs: prev.songs.map((song) => (song.id === id ? { ...song, name } : song)),
+    }));
+  };
+
+  const duplicateSong = (index: number) => {
+    const source = setlist.songs[index];
+    if (!source) return;
+    const copy: SavedSong = {
+      ...source,
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      name: `${source.name || `Song ${index + 1}`} copy`,
+      pattern: source.pattern.map((beat) => ({ pulses: beat.pulses, accents: [...beat.accents] })),
+    };
+    const insertIndex = index + 1;
+    setSetlist((prev) => ({
+      ...prev,
+      songs: [...prev.songs.slice(0, insertIndex), copy, ...prev.songs.slice(insertIndex)],
+    }));
+    loadSong(copy, insertIndex);
+  };
+
   const removeSong = (id: string) => {
     setSetlist((prev) => {
       const songs = prev.songs.filter((song) => song.id !== id);
       setSelectedIndex((index) => clamp(index, 0, Math.max(0, songs.length - 1)));
       return { ...prev, songs };
+    });
+  };
+
+  const moveSong = (index: number, direction: -1 | 1) => {
+    const target = clamp(index + direction, 0, Math.max(0, setlist.songs.length - 1));
+    if (target === index) return;
+    setSetlist((prev) => {
+      const songs = [...prev.songs];
+      const [song] = songs.splice(index, 1);
+      if (!song) return prev;
+      songs.splice(target, 0, song);
+      return { ...prev, songs };
+    });
+    setSelectedIndex((current) => {
+      if (current === index) return target;
+      if (current === target) return index;
+      return current;
     });
   };
 
@@ -261,33 +302,81 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
 
           <div className="max-h-[42rem] space-y-2 overflow-auto pr-1">
             {setlist.songs.map((song, index) => (
-              <button
+              <div
                 key={song.id}
-                type="button"
-                onClick={() => goToSong(index)}
                 className={
-                  "grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-2 rounded-md border px-3 py-3 text-left transition-colors " +
+                  "rounded-md border bg-card/45 p-2.5 transition-colors " +
                   (index === selectedIndex ? "border-primary bg-primary/10" : "border-border bg-card/45 hover:border-primary/60")
                 }
               >
-                <span className="font-mono text-xs text-muted-foreground">{index + 1}</span>
-                <span className="min-w-0">
-                  <span className="block truncate text-sm text-foreground">{song.name}</span>
-                  <span className="tiny-caps text-[10px] text-muted-foreground">{song.bpm} BPM · {song.timeSignature.numerator}/{song.timeSignature.denominator}</span>
-                </span>
-                <span
-                  role="button"
-                  tabIndex={0}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    removeSong(song.id);
-                  }}
-                  className="rounded-sm p-2 text-muted-foreground hover:text-destructive"
-                  aria-label={`Remove ${song.name}`}
-                >
-                  <Trash2 className="size-4" />
-                </span>
-              </button>
+                <div className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => goToSong(index)}
+                    className={
+                      "grid size-8 place-items-center rounded-md border font-mono text-xs transition-colors " +
+                      (index === selectedIndex ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground hover:text-primary")
+                    }
+                    aria-label={`Load ${song.name}`}
+                    title="Load song"
+                  >
+                    {index + 1}
+                  </button>
+                  <label className="min-w-0">
+                    <span className="sr-only">Song name</span>
+                    <input
+                      value={song.name}
+                      onChange={(event) => renameSong(song.id, event.target.value)}
+                      onFocus={() => setSelectedIndex(index)}
+                      className="block w-full min-w-0 rounded-sm border border-transparent bg-transparent px-1 py-1 text-sm text-foreground outline-none focus:border-primary/60 focus:bg-background/45"
+                      aria-label={`Rename song ${index + 1}`}
+                    />
+                    <span className="block px-1 tiny-caps text-[10px] text-muted-foreground">
+                      {song.bpm} BPM · {song.timeSignature.numerator}/{song.timeSignature.denominator}
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => goToSong(index)}
+                    className="min-h-9 rounded-md border border-border px-3 tiny-caps text-[9px] text-primary transition-colors hover:bg-primary/12"
+                  >
+                    Load
+                  </button>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-1.5">
+                  <SetlistSongAction
+                    icon={<ChevronUp className="size-4" />}
+                    label="Up"
+                    disabled={index === 0}
+                    onClick={() => moveSong(index, -1)}
+                    aria-label={`Move ${song.name} up`}
+                    title="Move up"
+                  />
+                  <SetlistSongAction
+                    icon={<ChevronDown className="size-4" />}
+                    label="Down"
+                    disabled={index === setlist.songs.length - 1}
+                    onClick={() => moveSong(index, 1)}
+                    aria-label={`Move ${song.name} down`}
+                    title="Move down"
+                  />
+                  <SetlistSongAction
+                    icon={<Copy className="size-4" />}
+                    label="Copy"
+                    onClick={() => duplicateSong(index)}
+                    aria-label={`Duplicate ${song.name}`}
+                    title="Duplicate"
+                  />
+                  <SetlistSongAction
+                    icon={<Trash2 className="size-4" />}
+                    label="Delete"
+                    onClick={() => removeSong(song.id)}
+                    danger
+                    aria-label={`Remove ${song.name}`}
+                    title="Delete"
+                  />
+                </div>
+              </div>
             ))}
             {setlist.songs.length === 0 && (
               <div className="rounded-md border border-border bg-card/40 p-4 text-sm text-muted-foreground">
@@ -334,6 +423,37 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
         />
       </div>
     </div>
+  );
+}
+
+function SetlistSongAction({
+  icon,
+  label,
+  danger = false,
+  disabled = false,
+  onClick,
+  ...buttonProps
+}: {
+  icon: ReactNode;
+  label: string;
+  danger?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className" | "children" | "type" | "onClick">) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={
+        "inline-flex min-h-10 min-w-0 items-center justify-center gap-1 rounded-md border border-border bg-background/35 px-2 tiny-caps text-[9px] text-muted-foreground transition-colors hover:border-primary/60 hover:text-primary disabled:cursor-not-allowed disabled:opacity-35 " +
+        (danger ? "hover:border-destructive/60 hover:text-destructive" : "")
+      }
+      {...buttonProps}
+    >
+      {icon}
+      <span className="truncate">{label}</span>
+    </button>
   );
 }
 
