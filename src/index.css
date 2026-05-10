@@ -451,25 +451,6 @@
   box-shadow: 0 0 0 1px hsl(var(--primary) / 0.25);
 }
 
-.stage-select {
-  width: 100%;
-  min-height: 3rem;
-  border-radius: 0.5rem;
-  border: 1px solid hsl(var(--border) / 0.85);
-  background: hsl(var(--background) / 0.6);
-  color: hsl(var(--foreground));
-  padding: 0.55rem 0.7rem;
-  font-family: var(--app-font-mono);
-  font-size: 1rem;
-  line-height: 1.25;
-  outline: none;
-}
-
-.stage-select:focus {
-  border-color: hsl(var(--primary));
-  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.22);
-}
-
 /* Hairline editorial divider with center diamond */
 .editorial-divider {
   display: flex;

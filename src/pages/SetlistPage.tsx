@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Download, Plus, Share2, Shield, Trash2, Upload } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Lock, Plus, RotateCcw, Share2, Trash2, Unlock, Upload, Volume2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { PolyrhythmWheel } from "@/components/metronome/PolyrhythmWheel";
@@ -8,14 +8,21 @@ import type { UseMetronomeReturn } from "@/hooks/useMetronome";
 import {
   BEAT_SOUND_OPTIONS,
   buildDefaultPattern,
-  pitchLabel,
+  DOTTED_PLAYBACK_LABELS,
+  JAZZ_ASSIST_LABELS,
   SUBDIVISION_NOTATION,
   SUBDIVISION_OPTIONS,
+  TRIPLET_ASSIST_LABELS,
   type BeatPattern,
   type BeatSound,
+  type DottedPlaybackMode,
+  type JazzAssistMode,
   type MeterDenominator,
+  type PolyrhythmConfig,
+  type PulseAccent,
   type SubdivisionCount,
   type TimeSignature,
+  type TripletAssistMode,
 } from "@/lib/metronome-types";
 import { clamp, formatTime } from "@/lib/utils";
 
@@ -41,11 +48,12 @@ interface SetlistPageProps {
 }
 
 export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
-  const { state, setBpm, setTimeSignature, setBeatSound, setPitch, setPattern, setSwing, setGlobalSubdivision, setPolyrhythm, setTrainerEnabled, setRampEnabled, toggle, adjustBpm } = metronome;
+  const { state, setBpm, setTimeSignature, setBeatSound, setPitch, setPattern, setSwing, setGlobalSubdivision, setPolyrhythm, setTrainerEnabled, setRampEnabled, toggle, adjustBpm, cycleBeatSubdivision, cyclePulseLevel } = metronome;
   const [setlist, setSetlist] = useState<SetlistState>(() => readSetlist());
   const [songName, setSongName] = useState("New song");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [stageLock, setStageLock] = useState(false);
+  const stageInitializedRef = useRef(false);
   const importRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -54,6 +62,14 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
 
   const selectedSong = setlist.songs[selectedIndex] ?? null;
   const nextSong = setlist.songs[selectedIndex + 1] ?? null;
+
+  useEffect(() => {
+    if (!active || stageInitializedRef.current || selectedSong) return;
+    stageInitializedRef.current = true;
+    const subdivision = dominantSubdivision(state.pattern) ?? 1;
+    setPattern(buildNeutralPattern(state.timeSignature.numerator, subdivision));
+    setPolyrhythm({ enabled: false, dottedMode: "off", tripletMode: "off", jazzMode: "off", polymeterEnabled: false });
+  }, [active, selectedSong, setPattern, setPolyrhythm, state.pattern, state.timeSignature.numerator]);
 
   const loadSong = (song: SavedSong, index = selectedIndex) => {
     setSelectedIndex(index);
@@ -240,12 +256,18 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
           onSetTimeSignature={(timeSignature) => {
             const subdivision = dominantSubdivision(state.pattern) ?? 1;
             setTimeSignature(timeSignature);
-            setPattern(buildDefaultPattern(timeSignature.numerator, subdivision));
+            setPattern(buildNeutralPattern(timeSignature.numerator, subdivision));
           }}
           onSetSubdivision={setGlobalSubdivision}
+          onCycleBeatSubdivision={cycleBeatSubdivision}
+          onCyclePulseAccent={cyclePulseLevel}
+          onSetAllAccents={(accent) => {
+            setPattern(state.pattern.map((beat) => ({ ...beat, accents: beat.accents.map(() => accent) })));
+          }}
           onSetBeatSound={setBeatSound}
           onSetPitch={setPitch}
           onSetSwing={setSwing}
+          onSetPolyrhythm={setPolyrhythm}
         />
       </div>
     </div>
@@ -268,9 +290,13 @@ function ConcertDeck({
   onSetBpm,
   onSetTimeSignature,
   onSetSubdivision,
+  onCycleBeatSubdivision,
+  onCyclePulseAccent,
+  onSetAllAccents,
   onSetBeatSound,
   onSetPitch,
   onSetSwing,
+  onSetPolyrhythm,
 }: {
   active: boolean;
   song: SavedSong | null;
@@ -287,15 +313,21 @@ function ConcertDeck({
   onSetBpm: (bpm: number) => void;
   onSetTimeSignature: (timeSignature: TimeSignature) => void;
   onSetSubdivision: (subdivision: SubdivisionCount) => void;
+  onCycleBeatSubdivision: (beatIndex: number) => void;
+  onCyclePulseAccent: (beatIndex: number, pulseIndex: number) => void;
+  onSetAllAccents: (accent: PulseAccent) => void;
   onSetBeatSound: (sound: BeatSound) => void;
   onSetPitch: (pitch: number) => void;
   onSetSwing: (swing: number) => void;
+  onSetPolyrhythm: (config: Partial<PolyrhythmConfig>) => void;
 }) {
   const tapsRef = useRef<number[]>([]);
   const bpmInputRef = useRef<HTMLInputElement | null>(null);
   const [tapPreview, setTapPreview] = useState<{ count: number; bpm: number | null }>({ count: 0, bpm: null });
   const [bpmDraft, setBpmDraft] = useState(String(Math.round(state.bpm)));
   const activeSubdivision = dominantSubdivision(state.pattern);
+  const controlsLocked = stageLock;
+  const activeAssist = stageAssistSummary(state.polyrhythm);
 
   useEffect(() => {
     if (document.activeElement !== bpmInputRef.current) {
@@ -351,13 +383,15 @@ function ConcertDeck({
         <button
           type="button"
           onClick={() => onStageLock(!stageLock)}
+          aria-pressed={stageLock}
+          aria-label={stageLock ? "Unlock stage controls" : "Lock stage controls"}
           className={
             "inline-flex min-h-10 items-center gap-2 rounded-md border px-3 tiny-caps text-[10px] transition-colors " +
             (stageLock ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground")
           }
         >
-          <Shield className="size-4" />
-          {stageLock ? "Songs locked" : "Lock songs"}
+          {stageLock ? <Lock className="size-4" /> : <Unlock className="size-4" />}
+          {stageLock ? "Locked" : "Ready"}
         </button>
       </div>
 
@@ -387,6 +421,7 @@ function ConcertDeck({
                 inputMode="numeric"
                 pattern="[0-9]*"
                 value={bpmDraft}
+                disabled={controlsLocked}
                 onChange={(event) => setBpmDraft(event.target.value)}
                 onBlur={(event) => commitBpmDraft(event.currentTarget.value)}
                 onKeyDown={(event) => {
@@ -395,7 +430,7 @@ function ConcertDeck({
                     event.currentTarget.blur();
                   }
                 }}
-                className="min-h-12 rounded-md border border-border bg-background/55 px-2 text-center font-mono text-lg outline-none focus:border-primary"
+                className="min-h-12 rounded-md border border-border bg-background/55 px-2 text-center font-mono text-lg outline-none focus:border-primary disabled:cursor-not-allowed disabled:opacity-45"
                 aria-label="Stage tempo"
               />
             </div>
@@ -409,138 +444,118 @@ function ConcertDeck({
             isPlaying={state.isPlaying}
             currentBeat={state.currentBeat}
             currentPulse={state.currentPulse}
-            onCycleBeatSubdivision={() => {}}
-            onCyclePulseAccent={() => {}}
+            onCycleBeatSubdivision={(beatIndex) => {
+              if (!controlsLocked) onCycleBeatSubdivision(beatIndex);
+            }}
+            onCyclePulseAccent={(beatIndex, pulseIndex) => {
+              if (!controlsLocked) onCyclePulseAccent(beatIndex, pulseIndex);
+            }}
             onTapTempo={tap}
           />
         </div>
 
         <div className="grid gap-3 sm:grid-cols-[1fr_1.45fr_1fr]">
-          <StageButton label="Previous" icon={<ChevronLeft className="size-6" />} disabled={stageLock || songIndex <= 0} onClick={onPrev} />
+          <StageButton label="Previous" icon={<ChevronLeft className="size-6" />} disabled={controlsLocked || songIndex <= 0} onClick={onPrev} />
           <StagePlayButton playing={state.isPlaying} onToggle={onToggle} />
-          <StageButton label="Next" icon={<ChevronRight className="size-6" />} disabled={stageLock || songIndex >= songCount - 1} onClick={onNext} />
+          <StageButton label="Next" icon={<ChevronRight className="size-6" />} disabled={controlsLocked || songIndex >= songCount - 1} onClick={onNext} />
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
-          <StageSettingsPanel title="Tempo Nudges" summary="-1 / +1 / -5 / +5">
-            <div className="grid grid-cols-4 gap-2">
-              <StageButton label="-1" onClick={() => onAdjustBpm(-1)} compact />
-              <StageButton label="+1" onClick={() => onAdjustBpm(1)} compact />
-              <StageButton label="-5" onClick={() => onAdjustBpm(-5)} compact />
-              <StageButton label="+5" onClick={() => onAdjustBpm(5)} compact />
+          <StageSettingsPanel title="Tap" summary={tapPreview.bpm ? `${tapPreview.bpm} BPM` : `${tapPreview.count} taps`} defaultOpen>
+            <TapPreview preview={tapPreview} onTap={tap} onSetBpm={onSetBpm} disabled={controlsLocked} />
+          </StageSettingsPanel>
+
+          <StageSettingsPanel title="Tempo" summary="1 2 5">
+            <div className="grid grid-cols-6 gap-2">
+              {[-5, -2, -1, 1, 2, 5].map((delta) => (
+                <StageButton key={delta} label={delta > 0 ? `+${delta}` : `${delta}`} onClick={() => onAdjustBpm(delta)} compact disabled={controlsLocked} />
+              ))}
             </div>
           </StageSettingsPanel>
 
           <StageSettingsPanel title="Time Signature" summary={`${state.timeSignature.numerator}/${state.timeSignature.denominator}`}>
-            <div className="grid grid-cols-3 gap-2">
-              <StageButton label="4/4" compact onClick={() => setMeter(4, 4)} />
-              <StageButton label="3/4" compact onClick={() => setMeter(3, 4)} />
-              <StageButton label="6/8" compact onClick={() => setMeter(6, 8)} />
+            <div className="grid grid-cols-2 gap-3">
+              <StageStepper label="Beats" value={state.timeSignature.numerator} onMinus={() => setMeter(clamp(state.timeSignature.numerator - 1, 1, 16), state.timeSignature.denominator as MeterDenominator)} onPlus={() => setMeter(clamp(state.timeSignature.numerator + 1, 1, 16), state.timeSignature.denominator as MeterDenominator)} disabled={controlsLocked} />
+              <StageDenominatorPad value={state.timeSignature.denominator as MeterDenominator} onChange={(denominator) => setMeter(state.timeSignature.numerator, denominator)} disabled={controlsLocked} />
             </div>
-            <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
-              <select
-                value={state.timeSignature.numerator}
-                onChange={(event) => setMeter(Number(event.target.value), state.timeSignature.denominator as MeterDenominator)}
-                className="stage-select"
-                aria-label="Stage beat count"
-              >
-                {Array.from({ length: 16 }, (_, index) => index + 1).map((value) => (
-                  <option key={value} value={value} className="bg-background">{value}</option>
-                ))}
-              </select>
-              <span className="font-serif text-3xl text-primary">/</span>
-              <select
-                value={state.timeSignature.denominator}
-                onChange={(event) => setMeter(state.timeSignature.numerator, Number(event.target.value) as MeterDenominator)}
-                className="stage-select"
-                aria-label="Stage beat unit"
-              >
-                {[2, 4, 8, 16].map((value) => (
-                  <option key={value} value={value} className="bg-background">{value}</option>
-                ))}
-              </select>
+            <div className="mt-3 grid grid-cols-4 gap-2">
+              {([3, 4, 5, 6, 7, 9, 11, 12] as const).map((numerator) => (
+                <StageTile
+                  key={numerator}
+                  label={`${numerator}/${state.timeSignature.denominator}`}
+                  active={state.timeSignature.numerator === numerator}
+                  disabled={controlsLocked}
+                  onPress={() => setMeter(numerator, state.timeSignature.denominator as MeterDenominator)}
+                >
+                  {numerator}
+                </StageTile>
+              ))}
+            </div>
+          </StageSettingsPanel>
+
+          <StageSettingsPanel title="Accents" summary="0 · ● ◆">
+            <div className="grid grid-cols-5 gap-2">
+              <StageAccentTile label="Mute all" symbol="0" active={allPulsesAre(state.pattern, "mute")} disabled={controlsLocked} onPress={() => onSetAllAccents("mute")} />
+              <StageAccentTile label="Ghost all" symbol="·" active={allPulsesAre(state.pattern, "ghost")} disabled={controlsLocked} onPress={() => onSetAllAccents("ghost")} />
+              <StageAccentTile label="Normal all" symbol="●" active={allPulsesAre(state.pattern, "normal")} disabled={controlsLocked} onPress={() => onSetAllAccents("normal")} />
+              <StageAccentTile label="Accent all" symbol="◆" active={allPulsesAre(state.pattern, "accent")} disabled={controlsLocked} onPress={() => onSetAllAccents("accent")} />
+              <StageTile label="Reset live accents" disabled={controlsLocked} onPress={() => onSetAllAccents("normal")}>
+                <RotateCcw className="size-5" />
+              </StageTile>
             </div>
           </StageSettingsPanel>
 
           <StageSettingsPanel
             title="Subdivision"
-            summary={activeSubdivision ? `${SUBDIVISION_NOTATION[activeSubdivision].glyph} ${SUBDIVISION_NOTATION[activeSubdivision].label}` : "Mixed beats"}
+            summary={activeSubdivision ? SUBDIVISION_NOTATION[activeSubdivision].glyph : "Mix"}
           >
             <div className="grid grid-cols-4 gap-2">
               {SUBDIVISION_OPTIONS.map((subdivision) => (
-                <button
+                <StageTile
                   key={subdivision}
-                  type="button"
-                  onPointerDown={(event) => {
-                    event.preventDefault();
-                    onSetSubdivision(subdivision);
-                  }}
-                  className={
-                    "min-h-16 rounded-lg border px-2 text-center transition-colors " +
-                    (activeSubdivision === subdivision
-                      ? "border-primary bg-primary/15 text-primary"
-                      : "border-border bg-background/45 text-muted-foreground hover:border-primary/70 hover:text-primary")
-                  }
-                  aria-pressed={activeSubdivision === subdivision}
+                  label={SUBDIVISION_NOTATION[subdivision].label}
+                  active={activeSubdivision === subdivision}
+                  disabled={controlsLocked}
+                  onPress={() => onSetSubdivision(subdivision)}
                 >
                   <span className="block font-serif text-2xl leading-none">{SUBDIVISION_NOTATION[subdivision].glyph}</span>
                   <span className="tiny-caps mt-1 block text-[9px]">{subdivision}</span>
-                </button>
+                </StageTile>
               ))}
             </div>
           </StageSettingsPanel>
 
-          <StageSettingsPanel title="Swing" summary={`${state.swing}%`}>
-            <label className="mt-3 block">
-              <span className="tiny-caps text-[10px] text-muted-foreground">Swing</span>
-              <input
-                type="range"
-                min={0}
-                max={70}
-                step={5}
-                value={clamp(state.swing, 0, 70)}
-                onChange={(event) => onSetSwing(Number(event.target.value))}
-                className="mt-2 w-full accent-primary"
-                aria-label="Stage swing"
-              />
-            </label>
+          <StageSettingsPanel title="Sound" summary={`${BEAT_SOUND_OPTIONS.find((sound) => sound.id === state.beatSound)?.label ?? "Tone"} · ${state.swing}%`}>
+            <div className="grid grid-cols-3 gap-2">
+              {BEAT_SOUND_OPTIONS.map((sound) => (
+                <StageTile
+                  key={sound.id}
+                  label={sound.label}
+                  active={state.beatSound === sound.id}
+                  disabled={controlsLocked}
+                  onPress={() => onSetBeatSound(sound.id)}
+                >
+                  <Volume2 className="size-4" />
+                  <span className="tiny-caps text-[9px]">{sound.label}</span>
+                </StageTile>
+              ))}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <StageVerticalSlider label="Pitch" value={state.pitch} min={0} max={100} step={1} disabled={controlsLocked} onChange={onSetPitch} onReset={() => onSetPitch(50)} />
+              <StageVerticalSlider label="Swing" value={clamp(state.swing, 0, 70)} min={0} max={70} step={5} disabled={controlsLocked} onChange={onSetSwing} />
+            </div>
           </StageSettingsPanel>
 
-          <StageSettingsPanel title="Sound" summary={`${BEAT_SOUND_OPTIONS.find((sound) => sound.id === state.beatSound)?.label ?? "Click"} · ${pitchLabel(state.pitch)}`}>
-            <label className="block">
-              <span className="tiny-caps text-[10px] text-muted-foreground">Click sound</span>
-              <select
-                value={state.beatSound}
-                onChange={(event) => onSetBeatSound(event.target.value as BeatSound)}
-                className="stage-select mt-2"
-                aria-label="Stage sound"
-              >
-                {BEAT_SOUND_OPTIONS.map((sound) => (
-                  <option key={sound.id} value={sound.id} className="bg-background">
-                    {sound.label} - {sound.family}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="mt-4 block">
-              <span className="tiny-caps text-[10px] text-muted-foreground">Pitch</span>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={state.pitch}
-                onChange={(event) => onSetPitch(Number(event.target.value))}
-                onDoubleClick={() => onSetPitch(50)}
-                className="mt-2 w-full accent-primary"
-                aria-label="Stage pitch"
-                title="Double-click to reset pitch"
-              />
-            </label>
-          </StageSettingsPanel>
-
-          <StageSettingsPanel title="Tap Preview" summary={tapPreview.bpm ? `${tapPreview.bpm} BPM` : "Preview only"}>
-            <TapPreview preview={tapPreview} onTap={tap} onSetBpm={onSetBpm} />
+          <StageSettingsPanel title="Rhythm Assist" summary={activeAssist}>
+            <StageRhythmAssist
+              dottedMode={state.polyrhythm.dottedMode}
+              tripletMode={state.polyrhythm.tripletMode}
+              jazzMode={state.polyrhythm.jazzMode}
+              disabled={controlsLocked}
+              onDottedMode={(dottedMode) => onSetPolyrhythm({ dottedMode })}
+              onTripletMode={(tripletMode) => onSetPolyrhythm({ tripletMode })}
+              onJazzMode={(jazzMode) => onSetPolyrhythm({ jazzMode })}
+            />
           </StageSettingsPanel>
 
           <StageSettingsPanel title="Timer" summary={formatTime(state.practiceSeconds)}>
@@ -571,13 +586,166 @@ function StageSettingsPanel({ title, summary, defaultOpen = false, children }: {
   );
 }
 
-function TapPreview({ preview, onTap, onSetBpm }: { preview: { count: number; bpm: number | null }; onTap: () => void; onSetBpm: (bpm: number) => void }) {
+function StageStepper({ label, value, onMinus, onPlus, disabled }: { label: string; value: number; onMinus: () => void; onPlus: () => void; disabled?: boolean }) {
+  return (
+    <div className="rounded-lg border border-border/70 bg-background/35 p-2">
+      <span className="sr-only">{label}</span>
+      <div className="grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2">
+        <StageTile label={`${label} down`} disabled={disabled} onPress={onMinus}>-</StageTile>
+        <div className="grid min-h-14 place-items-center rounded-md border border-primary/35 bg-primary/10 font-serif text-4xl text-primary">{value}</div>
+        <StageTile label={`${label} up`} disabled={disabled} onPress={onPlus}>+</StageTile>
+      </div>
+    </div>
+  );
+}
+
+function StageDenominatorPad({ value, onChange, disabled }: { value: MeterDenominator; onChange: (value: MeterDenominator) => void; disabled?: boolean }) {
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {([4, 8, 16] as MeterDenominator[]).map((denominator) => (
+        <StageTile
+          key={denominator}
+          label={`Beat unit ${denominator}`}
+          active={value === denominator}
+          disabled={disabled}
+          onPress={() => onChange(denominator)}
+        >
+          {denominator}
+        </StageTile>
+      ))}
+    </div>
+  );
+}
+
+function StageTile({ label, active = false, disabled = false, onPress, children }: { label: string; active?: boolean; disabled?: boolean; onPress: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+      disabled={disabled}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        if (!disabled) onPress();
+      }}
+      className={
+        "inline-flex min-h-14 items-center justify-center gap-1.5 rounded-lg border px-2 text-center font-mono text-lg transition-colors disabled:cursor-not-allowed disabled:opacity-35 " +
+        (active
+          ? "border-primary bg-primary/18 text-primary shadow-[0_0_18px_hsl(var(--primary)/0.14)]"
+          : "border-border bg-background/45 text-muted-foreground hover:border-primary/70 hover:text-primary")
+      }
+    >
+      {children}
+    </button>
+  );
+}
+
+function StageAccentTile({ label, symbol, active, disabled, onPress }: { label: string; symbol: string; active: boolean; disabled?: boolean; onPress: () => void }) {
+  return (
+    <StageTile label={label} active={active} disabled={disabled} onPress={onPress}>
+      <span className="font-serif text-3xl leading-none">{symbol}</span>
+    </StageTile>
+  );
+}
+
+function StageVerticalSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  disabled,
+  onChange,
+  onReset,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  disabled?: boolean;
+  onChange: (value: number) => void;
+  onReset?: () => void;
+}) {
+  return (
+    <label className="grid min-h-28 grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-3 rounded-lg border border-border/70 bg-background/35 p-3">
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(Number(event.target.value))}
+        onDoubleClick={onReset}
+        className="h-24 w-8 accent-primary disabled:opacity-35"
+        style={{ writingMode: "vertical-lr", direction: "rtl" }}
+        aria-label={`Stage ${label.toLowerCase()}`}
+        title={onReset ? "Double-click to reset" : label}
+      />
+      <span>
+        <span className="tiny-caps block text-[10px] text-muted-foreground">{label}</span>
+        <span className="font-mono text-lg text-foreground">{value}</span>
+      </span>
+    </label>
+  );
+}
+
+function StageRhythmAssist({
+  dottedMode,
+  tripletMode,
+  jazzMode,
+  disabled,
+  onDottedMode,
+  onTripletMode,
+  onJazzMode,
+}: {
+  dottedMode: DottedPlaybackMode;
+  tripletMode: TripletAssistMode;
+  jazzMode: JazzAssistMode;
+  disabled?: boolean;
+  onDottedMode: (mode: DottedPlaybackMode) => void;
+  onTripletMode: (mode: TripletAssistMode) => void;
+  onJazzMode: (mode: JazzAssistMode) => void;
+}) {
+  const toggleDotted = (mode: DottedPlaybackMode) => onDottedMode(dottedMode === mode ? "off" : mode);
+  const toggleTriplet = (mode: TripletAssistMode) => onTripletMode(tripletMode === mode ? "off" : mode);
+  const toggleJazz = (mode: JazzAssistMode) => onJazzMode(jazzMode === mode ? "off" : mode);
+
+  return (
+    <div className="grid grid-cols-4 gap-2">
+      <StageTile label="Dotted quarter" active={dottedMode === "quarter"} disabled={disabled} onPress={() => toggleDotted("quarter")}>♩.</StageTile>
+      <StageTile label="Dotted eighth" active={dottedMode === "eighth"} disabled={disabled} onPress={() => toggleDotted("eighth")}>♪.</StageTile>
+      <StageTile label="Dotted sixteenth" active={dottedMode === "sixteenth"} disabled={disabled} onPress={() => toggleDotted("sixteenth")}>♬.</StageTile>
+      <StageTile label="Half triplet" active={tripletMode === "half"} disabled={disabled} onPress={() => toggleTriplet("half")}>𝅗𝅥³</StageTile>
+      <StageTile label="Quarter triplet" active={tripletMode === "quarter"} disabled={disabled} onPress={() => toggleTriplet("quarter")}>♩³</StageTile>
+      <StageTile label="Eighth triplet" active={tripletMode === "eighth"} disabled={disabled} onPress={() => toggleTriplet("eighth")}>♪³</StageTile>
+      <StageTile label="Sextuplet" active={tripletMode === "sextuplet"} disabled={disabled} onPress={() => toggleTriplet("sextuplet")}>♬⁶</StageTile>
+      <StageTile label="Jazz 2 and 4" active={jazzMode === "twoFour"} disabled={disabled} onPress={() => toggleJazz("twoFour")}>2·4</StageTile>
+      <StageTile label="Jazz ands" active={jazzMode === "ands"} disabled={disabled} onPress={() => toggleJazz("ands")}>{"&"}</StageTile>
+      <StageTile label="Jazz 2 and 4 plus ands" active={jazzMode === "twoFourAnds"} disabled={disabled} onPress={() => toggleJazz("twoFourAnds")}>{"2&4"}</StageTile>
+      <StageTile label="Charleston" active={jazzMode === "charleston"} disabled={disabled} onPress={() => toggleJazz("charleston")}>{"1&"}</StageTile>
+      <StageTile label="Rhythm assist off" active={dottedMode === "off" && tripletMode === "off" && jazzMode === "off"} disabled={disabled} onPress={() => {
+        onDottedMode("off");
+        onTripletMode("off");
+        onJazzMode("off");
+      }}>0</StageTile>
+    </div>
+  );
+}
+
+function TapPreview({ preview, onTap, onSetBpm, disabled = false }: { preview: { count: number; bpm: number | null }; onTap: () => void; onSetBpm: (bpm: number) => void; disabled?: boolean }) {
   return (
     <div>
       <button
         type="button"
-        onPointerDown={(event) => { event.preventDefault(); onTap(); }}
-        className="min-h-16 w-full rounded-lg border border-primary/60 bg-primary/10 font-serif text-3xl text-primary transition-colors hover:bg-primary/15"
+        disabled={disabled}
+        onPointerDown={(event) => {
+          event.preventDefault();
+          if (!disabled) onTap();
+        }}
+        className="min-h-28 w-full rounded-lg border border-primary/60 bg-primary/10 font-serif text-5xl text-primary transition-colors hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-35"
       >
         Tap
       </button>
@@ -586,7 +754,7 @@ function TapPreview({ preview, onTap, onSetBpm }: { preview: { count: number; bp
           <span className="block font-mono text-3xl tabular">{preview.bpm ?? "—"}</span>
           <span className="tiny-caps text-[10px] text-muted-foreground">{preview.count} taps · preview</span>
         </div>
-        <Button disabled={!preview.bpm} onClick={() => preview.bpm && onSetBpm(preview.bpm)}>
+        <Button disabled={!preview.bpm || disabled} onClick={() => preview.bpm && onSetBpm(preview.bpm)}>
           Use BPM
         </Button>
       </div>
@@ -686,6 +854,24 @@ function dominantSubdivision(pattern: BeatPattern[]): SubdivisionCount | null {
   if (pattern.length === 0) return null;
   const first = pattern[0]?.pulses;
   return first && pattern.every((beat) => beat.pulses === first) ? first : null;
+}
+
+function buildNeutralPattern(numerator: number, pulses: SubdivisionCount): BeatPattern[] {
+  return Array.from({ length: clamp(Math.round(numerator || 4), 1, 16) }, () => ({
+    pulses,
+    accents: Array.from({ length: pulses }, () => "normal" as PulseAccent),
+  }));
+}
+
+function allPulsesAre(pattern: BeatPattern[], accent: PulseAccent): boolean {
+  return pattern.length > 0 && pattern.every((beat) => beat.accents.length > 0 && beat.accents.every((pulse) => pulse === accent));
+}
+
+function stageAssistSummary(polyrhythm: PolyrhythmConfig): string {
+  if (polyrhythm.dottedMode !== "off") return DOTTED_PLAYBACK_LABELS[polyrhythm.dottedMode];
+  if (polyrhythm.tripletMode !== "off") return TRIPLET_ASSIST_LABELS[polyrhythm.tripletMode];
+  if (polyrhythm.jazzMode !== "off") return JAZZ_ASSIST_LABELS[polyrhythm.jazzMode];
+  return "0";
 }
 
 function safeFileName(value: string): string {

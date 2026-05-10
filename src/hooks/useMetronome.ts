@@ -830,6 +830,24 @@ export function useMetronome() {
   const setPolyrhythm = useCallback((cfg: Partial<PolyrhythmConfig>) => {
     setPolyrhythmState((prev) => {
       const next = { ...prev, ...cfg };
+      if (cfg.dottedMode !== undefined && cfg.dottedMode !== "off") {
+        next.tripletMode = "off";
+        next.jazzMode = "off";
+        next.enabled = false;
+        next.polymeterEnabled = false;
+      }
+      if (cfg.tripletMode !== undefined && cfg.tripletMode !== "off") {
+        next.dottedMode = "off";
+        next.jazzMode = "off";
+        next.enabled = false;
+        next.polymeterEnabled = false;
+      }
+      if (cfg.jazzMode !== undefined && cfg.jazzMode !== "off") {
+        next.dottedMode = "off";
+        next.tripletMode = "off";
+        next.enabled = false;
+        next.polymeterEnabled = false;
+      }
       if (cfg.against !== undefined && cfg.voices === undefined) {
         next.voices = [cfg.against, ...prev.voices.slice(1)].slice(0, 3);
       }
