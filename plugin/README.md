@@ -38,6 +38,31 @@ Recommended track setup:
 - Gain: start at -8 dB
 - Sound: Marimba first, Wood or Clave for denser sessions
 
+## Local Install Notes
+
+The Release build copies AU and VST3 bundles to the current user's standard plugin folders:
+
+- `~/Library/Audio/Plug-Ins/Components/Groove Metronome.component`
+- `~/Library/Audio/Plug-Ins/VST3/Groove Metronome.vst3`
+
+For Reaper on this Mac, run the installer script to create a ready-made click track and track template:
+
+```bash
+/Applications/REAPER.app/Contents/MacOS/REAPER -nonewinst scripts/reaper-install-groove-click.lua
+```
+
+That saves:
+
+- `~/Library/Application Support/REAPER/TrackTemplates/Groove Click - Groove Metronome.RTrackTemplate`
+
+For Logic Pro, the AU component is the correct install target. Validate it with:
+
+```bash
+auval -v aufx Gmtr Nsmg
+```
+
+Logic should list it under Audio FX > Audio Units > Nathaniel School of Music > Groove Metronome after its Audio Unit scan.
+
 ## Rendering / Printing To Audio
 
 Plugins cannot create new tracks or force a bounce in every DAW. The reliable cross-DAW standard is: the plugin outputs audio, and the host records, freezes, bounces, or renders that output.
