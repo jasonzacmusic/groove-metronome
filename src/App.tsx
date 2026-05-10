@@ -3,6 +3,7 @@ import { AudioWaveform, Check, Copy, Gauge, ListMusic, MessageCircle, Share2 } f
 
 import { useMetronome } from "@/hooks/useMetronome";
 import { MetronomePage } from "@/pages/MetronomePage";
+import { LandingPage } from "@/pages/LandingPage";
 import { buildDefaultPattern, type MeterDenominator, type TimeSignature } from "@/lib/metronome-types";
 
 type Tab = "metronome" | "analyzer" | "setlist";
@@ -15,9 +16,9 @@ const SHARE_TITLE = "Groove Metronome";
 const SHARE_TEXT = "Groove Metronome is a serious online metronome for musicians: beat maps, polyrhythm, polymeter, practice tools, and audio/MIDI analysis.";
 const THEMES: Array<{ id: ThemeId; label: string; colors: [string, string, string] }> = [
   { id: "midnight", label: "Midnight", colors: ["#101525", "#facc15", "#4deee0"] },
-  { id: "concert", label: "Concert", colors: ["#120b1f", "#ff4f8b", "#45d483"] },
+  { id: "concert", label: "Pulse Green", colors: ["#071b14", "#48e48a", "#f4729b"] },
   { id: "aqua", label: "Aqua", colors: ["#062326", "#62f4c8", "#ffd166"] },
-  { id: "graphite", label: "Graphite", colors: ["#111315", "#d9e2ec", "#f5b642"] },
+  { id: "graphite", label: "Vintage Graphite", colors: ["#e6dbc4", "#4f382b", "#ad5f30"] },
   { id: "contrast", label: "Contrast", colors: ["#020617", "#ffffff", "#39ff14"] },
 ];
 
@@ -37,9 +38,9 @@ const AnalyzerPage = lazy(() => import("@/pages/AnalyzerPage").then((module) => 
 const SetlistPage = lazy(() => import("@/pages/SetlistPage").then((module) => ({ default: module.SetlistPage })));
 
 function readStoredTheme(): ThemeId {
-  if (typeof window === "undefined") return "midnight";
+  if (typeof window === "undefined") return "graphite";
   const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  return THEMES.some((theme) => theme.id === stored) ? (stored as ThemeId) : "midnight";
+  return THEMES.some((theme) => theme.id === stored) ? (stored as ThemeId) : "graphite";
 }
 
 function readInitialTab(): Tab {
@@ -52,6 +53,10 @@ function readInitialTab(): Tab {
 }
 
 export default function App() {
+  if (typeof window !== "undefined" && window.location.pathname.replace(/\/+$/, "") === "/landing") {
+    return <LandingPage />;
+  }
+
   const metronome = useMetronome();
   const [tab, setTab] = useState<Tab>(readInitialTab);
   const [view, setView] = useState<MetronomeView>("beatmap");
@@ -118,9 +123,9 @@ export default function App() {
           <div className="grid gap-4 xl:grid-cols-[minmax(380px,1fr)_minmax(500px,1.38fr)_auto] xl:items-center">
             <div className="brand-lockup flex min-w-0 items-center gap-3 xl:min-w-[380px]">
               <img
-                src="/brand/nsm-white.png"
-                alt="Nathaniel School of Music"
-                className="h-9 w-auto shrink-0 object-contain md:h-11"
+                src="/brand/groove-mark.svg"
+                alt=""
+                className="h-10 w-10 shrink-0 object-contain md:h-11 md:w-11"
               />
               <div className="min-w-0 border-l border-border/70 pl-3">
                 <h1 className="whitespace-nowrap font-serif text-xl leading-none tracking-tight text-foreground md:text-2xl">

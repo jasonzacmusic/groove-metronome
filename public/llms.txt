@@ -1,6 +1,7 @@
 # Groove Metronome
 
 Canonical URL: https://metronome.nathanielschool.com/
+Landing page: https://metronome.nathanielschool.com/landing
 
 Groove Metronome is a free online music practice app by Nathaniel School of Music. It is built for musicians, music teachers, bands, ensembles, and students who need a precise metronome with musical practice tools.
 
@@ -12,6 +13,9 @@ Core features:
 - Polymeter tools for layered meters such as 4/4 against 4/8 or 4/16.
 - Practice ramp, mute trainer, timer, haptics on supported devices, and setlists.
 - Audio and MIDI analyzer for tempo detection, meter clues, waveforms, markers, MIDI sections, and musical inspection.
+- Setlist Studio for concert setlists, .groove-setlist backup files, share links, CSV import, stage clocks, and panic recovery.
+- Mobile shells exist for iOS, iPadOS, and Android through Capacitor; App Store / Play Store packaging is a release step.
+- DAW plugin scaffold exists for AU and VST3; AAX is planned later after Avid SDK/signing work.
 
 Useful search descriptions:
 - Best online metronome for serious musicians.

@@ -1,42 +1,46 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
-  <title id="title">Groove Metronome</title>
-  <desc id="desc">Online metronome for beat maps, polyrhythm, polymeter, practice tools, and audio MIDI analysis.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <defs>
-    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0" stop-color="#080b17"/>
-      <stop offset="0.58" stop-color="#11182d"/>
-      <stop offset="1" stop-color="#062326"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#efe5cf"/>
+      <stop offset="1" stop-color="#d7c4a8"/>
     </linearGradient>
-    <radialGradient id="glow" cx="50%" cy="43%" r="53%">
-      <stop offset="0" stop-color="#4deee0" stop-opacity="0.26"/>
-      <stop offset="0.72" stop-color="#4deee0" stop-opacity="0"/>
-    </radialGradient>
-    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="8"/>
+    <linearGradient id="brass" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#d99543"/>
+      <stop offset="1" stop-color="#8b3f25"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="22" stdDeviation="24" flood-color="#251d18" flood-opacity="0.22"/>
     </filter>
   </defs>
   <rect width="1200" height="630" fill="url(#bg)"/>
-  <rect width="1200" height="630" fill="url(#glow)"/>
-  <g opacity="0.14">
-    <path d="M0 96H1200M0 192H1200M0 288H1200M0 384H1200M0 480H1200M0 576H1200" stroke="#b7c1ff" stroke-width="1"/>
-    <path d="M96 0V630M192 0V630M288 0V630M384 0V630M480 0V630M576 0V630M672 0V630M768 0V630M864 0V630M960 0V630M1056 0V630" stroke="#b7c1ff" stroke-width="1"/>
+  <g opacity="0.18" stroke="#8f765e" stroke-width="1">
+    <path d="M80 0v630M200 0v630M320 0v630M440 0v630M560 0v630M680 0v630M800 0v630M920 0v630M1040 0v630M1160 0v630"/>
   </g>
-  <g transform="translate(756 118)">
-    <circle cx="180" cy="180" r="162" fill="#101525" stroke="#d8dcff" stroke-opacity="0.38" stroke-width="3"/>
-    <path d="M180 18A162 162 0 0 1 342 180H180Z" fill="#facc15" opacity="0.82"/>
-    <path d="M342 180A162 162 0 0 1 180 342V180Z" fill="#45d483" opacity="0.78"/>
-    <path d="M180 342A162 162 0 0 1 18 180H180Z" fill="#ff4f8b" opacity="0.78"/>
-    <path d="M18 180A162 162 0 0 1 180 18V180Z" fill="#4deee0" opacity="0.2"/>
-    <circle cx="180" cy="180" r="76" fill="#080b17" stroke="#d8dcff" stroke-opacity="0.32"/>
-    <line x1="180" y1="180" x2="180" y2="36" stroke="#facc15" stroke-width="5" stroke-linecap="round" filter="url(#soft)"/>
-    <line x1="180" y1="180" x2="180" y2="36" stroke="#facc15" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="1000" cy="128" r="220" fill="#ad5f30" opacity="0.10"/>
+  <circle cx="140" cy="520" r="260" fill="#4f382b" opacity="0.08"/>
+  <g transform="translate(80 76)">
+    <g filter="url(#shadow)">
+      <rect width="112" height="112" rx="26" fill="#251d18"/>
+      <circle cx="56" cy="56" r="40" fill="#eadcc4" stroke="#6d5646" stroke-width="2"/>
+      <path d="M56 16a40 40 0 0 1 38 53L56 56Z" fill="#a85735"/>
+      <path d="M94 69A40 40 0 0 1 42 94L56 56Z" fill="#c88336"/>
+      <path d="M42 94A40 40 0 0 1 56 16v40Z" fill="#eadcc4"/>
+      <circle cx="56" cy="56" r="15" fill="#251d18" stroke="#d7c5a7" stroke-width="2"/>
+      <path d="M56 24 71 88H41Z" fill="none" stroke="url(#brass)" stroke-width="6" stroke-linejoin="round"/>
+      <line x1="56" y1="28" x2="78" y2="58" stroke="#f2e7d0" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="78" cy="58" r="6" fill="#48e48a" stroke="#251d18" stroke-width="2"/>
+      <circle cx="56" cy="56" r="4" fill="#f2e7d0"/>
+    </g>
+    <text x="144" y="45" font-family="Georgia, serif" font-size="44" fill="#251d18">Groove Metronome</text>
+    <text x="146" y="82" font-family="Menlo, monospace" font-size="15" letter-spacing="5" fill="#7a6653">NATHANIEL SCHOOL OF MUSIC</text>
   </g>
-  <g transform="translate(78 102)">
-    <text x="0" y="0" fill="#f7f0d2" font-family="Georgia, 'Times New Roman', serif" font-size="78" font-weight="700">Groove</text>
-    <text x="0" y="84" fill="#f7f0d2" font-family="Georgia, 'Times New Roman', serif" font-size="78" font-weight="700">Metronome</text>
-    <text x="2" y="158" fill="#4deee0" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700" letter-spacing="3">BEAT MAPS · POLYRHYTHM · POLYMETER</text>
-    <text x="2" y="216" fill="#d8dcff" font-family="Arial, Helvetica, sans-serif" font-size="31">A precise online metronome for serious practice,</text>
-    <text x="2" y="256" fill="#d8dcff" font-family="Arial, Helvetica, sans-serif" font-size="31">setlists, audio tempo, and MIDI analysis.</text>
-    <text x="2" y="370" fill="#facc15" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="700">metronome.nathanielschool.com</text>
+  <text x="82" y="276" font-family="Georgia, serif" font-size="94" fill="#251d18">See it. Count it.</text>
+  <text x="82" y="370" font-family="Georgia, serif" font-size="94" fill="#ad5f30">Lock it in.</text>
+  <text x="86" y="432" font-family="Arial, sans-serif" font-size="29" fill="#6b5a49">Visual metronome for practice, stage, studio, and teaching.</text>
+  <g transform="translate(86 488)" font-family="Menlo, monospace" font-size="18" letter-spacing="2" fill="#251d18">
+    <text>BEAT MAPS  ·  POLYRHYTHM  ·  POLYMETER  ·  SETLISTS  ·  AUDIO &amp; MIDI</text>
   </g>
+  <rect x="860" y="350" width="248" height="92" rx="18" fill="#ad5f30"/>
+  <text x="984" y="407" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#f7ead6">Try free</text>
+  <text x="984" y="548" text-anchor="middle" font-family="Menlo, monospace" font-size="17" letter-spacing="2.5" fill="#6b5a49">METRONOME.NATHANIELSCHOOL.COM</text>
 </svg>
