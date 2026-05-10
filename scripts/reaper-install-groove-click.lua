@@ -1,8 +1,8 @@
 -- Usage:
 --   /Applications/REAPER.app/Contents/MacOS/REAPER -nonewinst scripts/reaper-install-groove-click.lua
 --
--- Creates or refreshes a dedicated Groove Metronome click track in the current
--- REAPER project and saves it as a reusable track template.
+-- Creates or refreshes a dedicated VST3 Groove Metronome click track in the
+-- current REAPER project and saves it as a reusable track template.
 
 local track_name = "Groove Click - Groove Metronome"
 local template_name = "Groove Click - Groove Metronome.RTrackTemplate"
@@ -34,37 +34,34 @@ local function ensure_track()
   return track
 end
 
-local function has_groove_fx(track)
-  for i = 0, reaper.TrackFX_GetCount(track) - 1 do
-    local _, fx_name = reaper.TrackFX_GetFXName(track, i, "")
-    if fx_name:find("Groove Metronome", 1, true) then
-      return i
-    end
+local function clear_fx(track)
+  for i = reaper.TrackFX_GetCount(track) - 1, 0, -1 do
+    reaper.TrackFX_Delete(track, i)
   end
-  return -1
 end
 
 local function add_groove_fx(track)
-  local existing = has_groove_fx(track)
-  if existing >= 0 then
-    return existing
-  end
+  clear_fx(track)
 
   local candidates = {
-    "AU: Groove Metronome (Nathaniel School of Music)",
+    "VST3: Groove Metronome (Nathaniel School of Music)",
+    "VST3: Groove Metronome",
     "Nathaniel School of Music: Groove Metronome",
-    "AU: Nathaniel School of Music: Groove Metronome",
     "Groove Metronome"
   }
 
   for _, name in ipairs(candidates) do
     local fx = reaper.TrackFX_AddByName(track, name, false, 1)
     if fx >= 0 then
-      return fx
+      local _, fx_name = reaper.TrackFX_GetFXName(track, fx, "")
+      if fx_name:find("VST3:", 1, true) then
+        return fx, fx_name
+      end
+      reaper.TrackFX_Delete(track, fx)
     end
   end
 
-  return -1
+  return -1, ""
 end
 
 local function save_track_template(track)
@@ -87,7 +84,7 @@ end
 reaper.Undo_BeginBlock()
 local track = ensure_track()
 reaper.SetOnlyTrackSelected(track)
-local fx = add_groove_fx(track)
+local fx, fx_name = add_groove_fx(track)
 
 if fx >= 0 then
   reaper.TrackFX_SetEnabled(track, fx, true)
@@ -96,7 +93,7 @@ if fx >= 0 then
   reaper.UpdateArrange()
   reaper.Undo_EndBlock("Install Groove Metronome click track", -1)
 
-  local message = "Groove Metronome track is ready."
+  local message = "Groove Metronome VST3 track is ready:\n" .. fx_name
   if saved then
     message = message .. "\nSaved track template:\n" .. detail
   else
@@ -106,7 +103,7 @@ if fx >= 0 then
 else
   reaper.Undo_EndBlock("Install Groove Metronome click track failed", -1)
   reaper.ShowMessageBox(
-    "Could not add Groove Metronome. Confirm the AU plugin exists at ~/Library/Audio/Plug-Ins/Components/Groove Metronome.component, then rescan Audio Units in REAPER.",
+    "Could not add the Groove Metronome VST3. Confirm it exists at /Library/Audio/Plug-Ins/VST3/Groove Metronome.vst3 or ~/Library/Audio/Plug-Ins/VST3/Groove Metronome.vst3, then run REAPER Preferences > Plug-ins > VST > Re-scan.",
     "Groove Metronome",
     0
   )

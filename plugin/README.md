@@ -45,13 +45,15 @@ The Release build copies AU and VST3 bundles to the current user's standard plug
 - `~/Library/Audio/Plug-Ins/Components/Groove Metronome.component`
 - `~/Library/Audio/Plug-Ins/VST3/Groove Metronome.vst3`
 
-For Reaper on this Mac, run the installer script to create a ready-made click track and track template:
+Logic uses the AU. Reaper should use the VST3. If Reaper only scans system VST3 paths, copy the VST3 bundle to `/Library/Audio/Plug-Ins/VST3/Groove Metronome.vst3` or add `~/Library/Audio/Plug-Ins/VST3` to Reaper's VST paths, then run a VST re-scan.
+
+For Reaper on this Mac, run the installer script to create a ready-made VST3 click track and track template:
 
 ```bash
 /Applications/REAPER.app/Contents/MacOS/REAPER -nonewinst scripts/reaper-install-groove-click.lua
 ```
 
-That saves:
+The script intentionally refuses to fall back to the AU, so the template remains a normal Reaper VST3 setup. It saves:
 
 - `~/Library/Application Support/REAPER/TrackTemplates/Groove Click - Groove Metronome.RTrackTemplate`
 
