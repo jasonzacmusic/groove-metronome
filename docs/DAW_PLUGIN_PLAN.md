@@ -2,9 +2,9 @@
 
 ## Goal
 
-Build a lean plugin version of Groove Metronome for Logic, Reaper, Ableton, Cubase, Studio One, and Pro Tools.
+Build a DAW plugin version of Groove Metronome for Logic, Reaper, Ableton, Cubase, Studio One, and Pro Tools.
 
-The plugin should not clone the full web app. It should be a reliable studio click instrument that follows the DAW timeline and uses Groove's strongest assets: musical sound choices, subdivisions, accents, voice count-ins, and simple rhythm overlays.
+The plugin should feel like the same Groove Metronome app inside a DAW: same visual language, same sound families, same rhythm model, and the same Beat Map, Levels, Polyrhythm, and Polymeter thinking. The DAW-only additions are host tempo sync, transport sync, routing, and print/render workflows.
 
 ## Format Targets
 
@@ -25,6 +25,9 @@ Use JUCE as the plugin shell because it can build AU, VST3, and later AAX from o
 - Subdivision selector
 - Swing
 - Sound family selector: Marimba, Wood, Clave, Tabla, Shaker, Tight
+- Embedded Reapertips sample families, normalized on load for consistent perceived level
+- Branded Vintage Graphite plugin interface
+- Beat Map, Levels, Polyrhythm, and Polymeter sections visible in the plugin
 - Voice count-in slot, once studio-recorded male/female samples are ready
 - Tap-free mode by default, because the DAW provides tempo
 - Optional manual BPM override for standalone/plugin test use
@@ -33,9 +36,9 @@ Use JUCE as the plugin shell because it can build AU, VST3, and later AAX from o
 
 - Analyzer
 - Setlist Studio
-- Polymeter composer
-- Full notation
 - Accounts, sharing, and practice history
+- Full notation editing
+- Universal one-click print-to-track from inside the plugin binary alone
 
 ## Audio Rules
 
@@ -49,12 +52,13 @@ Use JUCE as the plugin shell because it can build AU, VST3, and later AAX from o
 ## Build Order
 
 1. Create JUCE plugin shell.
-2. Port the shared rhythm model: time signature, beat pattern, accents, subdivisions.
-3. Add DAW host tempo and position sync.
-4. Load normalized WAV sample families.
-5. Add compact plugin UI.
-6. Test AU in Logic and VST3 in Reaper.
-7. Only after AU/VST3 are stable, start AAX packaging.
+2. Add DAW host tempo and position sync.
+3. Load normalized WAV sample families.
+4. Add branded Vintage Graphite plugin UI.
+5. Port the shared rhythm model: time signature, beat pattern, accents, subdivisions, Beat Map, Levels, Polyrhythm, and Polymeter.
+6. Add host-specific print companions.
+7. Test AU in Logic and VST3 in Reaper.
+8. Only after AU/VST3 are stable, start AAX packaging.
 
 ## Track Workflow
 
@@ -90,6 +94,13 @@ DAW workflows:
 - Cubase: use Render In Place.
 - Studio One: use Transform To Audio or bounce the event/track.
 - Pro Tools: later AAX build, then commit/freeze/record to audio track.
+
+Product target:
+
+- `Print current track`: render or record the plugin output onto the hosting click track where the DAW allows it.
+- `Print new track`: create or render to a separate printed click track where the DAW exposes a safe scripting/API path.
+
+The plugin UI can expose both buttons, but the actual action should be implemented as a companion per DAW, not as a fake universal promise inside the plugin.
 
 ## DAW-Only Feature Ideas
 

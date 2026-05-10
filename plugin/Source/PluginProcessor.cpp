@@ -1,4 +1,8 @@
 #include "PluginProcessor.h"
+#include "PluginEditor.h"
+#include "BinaryData.h"
+
+#include <juce_audio_formats/juce_audio_formats.h>
 
 #include <cmath>
 
@@ -44,6 +48,7 @@ GrooveMetronomeAudioProcessor::GrooveMetronomeAudioProcessor()
           .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       parameters(*this, nullptr, "PARAMETERS", createParameterLayout())
 {
+    loadEmbeddedSamples();
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout GrooveMetronomeAudioProcessor::createParameterLayout()
@@ -88,6 +93,81 @@ void GrooveMetronomeAudioProcessor::releaseResources()
 {
     for (auto& voice : voices)
         voice = {};
+}
+
+void GrooveMetronomeAudioProcessor::loadEmbeddedSamples()
+{
+    loadEmbeddedSample(sampleFamilies[static_cast<int>(SoundFamily::marimba)].accent, BinaryData::marimbaaccent_wav, BinaryData::marimbaaccent_wavSize);
+    loadEmbeddedSample(sampleFamilies[static_cast<int>(SoundFamily::marimba)].normal, BinaryData::marimbanormal_wav, BinaryData::marimbanormal_wavSize);
+    loadEmbeddedSample(sampleFamilies[static_cast<int>(SoundFamily::marimba)].sub, BinaryData::marimbasub_wav, BinaryData::marimbasub_wavSize);
+
+    loadEmbeddedSample(sampleFamilies[static_cast<int>(SoundFamily::wood)].accent, BinaryData::rimaccent_wav, BinaryData::rimaccent_wavSize);
+    loadEmbeddedSample(sampleFamilies[static_cast<int>(SoundFamily::wood)].normal, BinaryData::rimnormal_wav, BinaryData::rimnormal_wavSize);
+    loadEmbeddedSample(sampleFamilies[static_cast<int>(SoundFamily::wood)].sub, BinaryData::rimsub_wav, BinaryData::rimsub_wavSize);
+
+    loadEmbeddedSample(sampleFamilies[static_cast<int>(SoundFamily::clave)].accent, BinaryData::claveaccent_wav, BinaryData::claveaccent_wavSize);
+    loadEmbeddedSample(sampleFamilies[static_cast<int>(SoundFamily::clave)].normal, BinaryData::clavenormal_wav, BinaryData::clavenormal_wavSize);
+    loadEmbeddedSample(sampleFamilies[static_cast<int>(SoundFamily::clave)].sub, BinaryData::clavesub_wav, BinaryData::clavesub_wavSize);
+
+    loadEmbeddedSample(sampleFamilies[static_cast<int>(SoundFamily::tabla)].accent, BinaryData::tablaaccent_wav, BinaryData::tablaaccent_wavSize);
+    loadEmbeddedSample(sampleFamilies[static_cast<int>(SoundFamily::tabla)].normal, BinaryData::tablanormal_wav, BinaryData::tablanormal_wavSize);
+    loadEmbeddedSample(sampleFamilies[static_cast<int>(SoundFamily::tabla)].sub, BinaryData::tablasub_wav, BinaryData::tablasub_wavSize);
+
+    loadEmbeddedSample(sampleFamilies[static_cast<int>(SoundFamily::shaker)].accent, BinaryData::shakeraccent_wav, BinaryData::shakeraccent_wavSize);
+    loadEmbeddedSample(sampleFamilies[static_cast<int>(SoundFamily::shaker)].normal, BinaryData::shakernormal_wav, BinaryData::shakernormal_wavSize);
+    loadEmbeddedSample(sampleFamilies[static_cast<int>(SoundFamily::shaker)].sub, BinaryData::shakersub_wav, BinaryData::shakersub_wavSize);
+
+    loadEmbeddedSample(sampleFamilies[static_cast<int>(SoundFamily::tight)].accent, BinaryData::tightaccent_wav, BinaryData::tightaccent_wavSize);
+    loadEmbeddedSample(sampleFamilies[static_cast<int>(SoundFamily::tight)].normal, BinaryData::tightnormal_wav, BinaryData::tightnormal_wavSize);
+    loadEmbeddedSample(sampleFamilies[static_cast<int>(SoundFamily::tight)].sub, BinaryData::tightsub_wav, BinaryData::tightsub_wavSize);
+}
+
+void GrooveMetronomeAudioProcessor::loadEmbeddedSample(SampleSlot& slot, const void* data, int dataSize)
+{
+    slot = {};
+
+    if (data == nullptr || dataSize <= 0)
+        return;
+
+    juce::MemoryInputStream stream(data, static_cast<size_t>(dataSize), false);
+    juce::WavAudioFormat wavFormat;
+    std::unique_ptr<juce::AudioFormatReader> reader(wavFormat.createReaderFor(&stream, false));
+    if (reader == nullptr || reader->lengthInSamples <= 0)
+        return;
+
+    const auto frames = static_cast<int>(juce::jmin<juce::int64>(reader->lengthInSamples, 44100));
+    juce::AudioBuffer<float> temp(static_cast<int>(reader->numChannels), frames);
+    reader->read(&temp, 0, frames, 0, true, true);
+
+    slot.data.resize(static_cast<size_t>(frames), 0.0f);
+    auto peak = 0.0f;
+    for (int sample = 0; sample < frames; ++sample)
+    {
+        auto value = 0.0f;
+        for (int channel = 0; channel < temp.getNumChannels(); ++channel)
+            value += temp.getSample(channel, sample);
+
+        value /= static_cast<float>(juce::jmax(1, temp.getNumChannels()));
+        slot.data[static_cast<size_t>(sample)] = value;
+        peak = juce::jmax(peak, std::abs(value));
+    }
+
+    if (peak > 0.0001f)
+    {
+        const auto normalise = 0.82f / peak;
+        for (auto& sample : slot.data)
+            sample *= normalise;
+    }
+
+    slot.sourceRate = reader->sampleRate > 0.0 ? reader->sampleRate : 44100.0;
+}
+
+const GrooveMetronomeAudioProcessor::SampleSlot* GrooveMetronomeAudioProcessor::selectSample(SoundFamily sound, bool accented, bool beatPulse) const
+{
+    const auto familyIndex = juce::jlimit(0, static_cast<int>(sampleFamilies.size()) - 1, static_cast<int>(sound));
+    const auto& family = sampleFamilies[static_cast<size_t>(familyIndex)];
+    const auto& slot = accented ? family.accent : beatPulse ? family.normal : family.sub;
+    return slot.data.empty() ? nullptr : &slot;
 }
 
 bool GrooveMetronomeAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
@@ -203,6 +283,10 @@ void GrooveMetronomeAudioProcessor::triggerClick(int beatIndex, int pulseIndex, 
 
     selected->active = true;
     selected->sound = sound;
+    selected->sample = selectSample(sound, accented, beatPulse);
+    selected->samplePosition = 0.0;
+    selected->sampleRateRatio = selected->sample != nullptr ? selected->sample->sourceRate / currentSampleRate : 1.0;
+    selected->sampleGain = static_cast<float>(pulseGain * bpmTrim);
     selected->phase = 0.0;
     selected->envelope = pulseGain * bpmTrim;
     selected->noise = 0.0;
@@ -258,6 +342,23 @@ float GrooveMetronomeAudioProcessor::renderVoice(ClickVoice& voice)
         return 0.0f;
     }
 
+    if (voice.sample != nullptr && !voice.sample->data.empty())
+    {
+        const auto index = static_cast<int>(voice.samplePosition);
+        if (index >= static_cast<int>(voice.sample->data.size()) - 1)
+        {
+            voice.active = false;
+            return 0.0f;
+        }
+
+        const auto fraction = static_cast<float>(voice.samplePosition - static_cast<double>(index));
+        const auto a = voice.sample->data[static_cast<size_t>(index)];
+        const auto b = voice.sample->data[static_cast<size_t>(index + 1)];
+        voice.samplePosition += voice.sampleRateRatio;
+        --voice.samplesLeft;
+        return (a + (b - a) * fraction) * voice.sampleGain;
+    }
+
     const auto phaseInc = juce::MathConstants<double>::twoPi * voice.frequency / currentSampleRate;
     voice.phase += phaseInc;
     if (voice.phase > juce::MathConstants<double>::twoPi)
@@ -298,7 +399,7 @@ bool GrooveMetronomeAudioProcessor::getBoolParam(const juce::String& id) const
 
 juce::AudioProcessorEditor* GrooveMetronomeAudioProcessor::createEditor()
 {
-    return new juce::GenericAudioProcessorEditor(*this);
+    return new GrooveMetronomeAudioProcessorEditor(*this);
 }
 
 void GrooveMetronomeAudioProcessor::getStateInformation(juce::MemoryBlock& destData)

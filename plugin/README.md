@@ -1,6 +1,8 @@
 # Groove Metronome Plugin
 
-This is the first DAW-plugin scaffold for Groove Metronome. It is intentionally lean: the plugin follows DAW transport and tempo, outputs a musical click, and can be printed/bounced like any other audio-generating plugin track.
+This is the DAW-plugin build of Groove Metronome. The goal is web-app parity: the same visual language, the same Reapertips click families, and the same Beat Map, Levels, Polyrhythm, and Polymeter workflow, adapted for DAW tempo sync and rendering.
+
+The current build replaces the generic JUCE editor with a branded Vintage Graphite interface and embeds the same click sample families used by the web app. Full rhythm-model parity is being moved in stages so the browser, mobile, and DAW builds stay consistent instead of drifting.
 
 ## Current Formats
 
@@ -9,6 +11,28 @@ This is the first DAW-plugin scaffold for Groove Metronome. It is intentionally 
 - Standalone for quick engine testing
 
 AAX is not part of this first scaffold because it requires the Avid AAX SDK and separate signing/distribution work.
+
+## Installer / Buyer Package
+
+Use the guide and installer scripts in this folder:
+
+- `GUIDE.md`
+- `installers/install-mac.command`
+- `installers/install-windows.ps1`
+
+Recommended download layout:
+
+```text
+Groove Metronome Plugin/
+  GUIDE.md
+  Install Groove Metronome.command
+  Install-Groove-Metronome-Windows.ps1
+  Mac/
+    Groove Metronome.component
+    Groove Metronome.vst3
+  Windows/
+    Groove Metronome.vst3
+```
 
 ## Build
 
@@ -69,6 +93,8 @@ Logic should list it under Audio FX > Audio Units > Nathaniel School of Music > 
 
 Plugins cannot create new tracks or force a bounce in every DAW. The reliable cross-DAW standard is: the plugin outputs audio, and the host records, freezes, bounces, or renders that output.
 
+The UI includes `Print current track` and `Print new track` as the product targets. The safe implementation path is host-specific companion workflows: Reaper scripts, Logic bounce/bus workflows or helper automation, and each DAW's own render/freeze tools. This avoids fragile behavior on stage or in paid studio sessions.
+
 ### Reaper
 
 1. Create a track named `Groove Click`.
@@ -100,6 +126,8 @@ Plugins cannot create new tracks or force a bounce in every DAW. The reliable cr
 
 ## DAW-Only Features To Build Next
 
+- Shared rhythm engine parity with the web app: Beat Map, Levels, Polyrhythm, and Polymeter
+- Host-aware print buttons for current track and new track
 - Print length selector: 4 bars, 8 bars, whole song region
 - Count-in-only mode
 - Click follows arrangement markers

@@ -16,6 +16,28 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(JUCE)
 
+juce_add_binary_data(GrooveMetronomeSamples
+  SOURCES
+    ../public/metronome-sounds/reapertips/marimba-accent.wav
+    ../public/metronome-sounds/reapertips/marimba-normal.wav
+    ../public/metronome-sounds/reapertips/marimba-sub.wav
+    ../public/metronome-sounds/reapertips/rim-accent.wav
+    ../public/metronome-sounds/reapertips/rim-normal.wav
+    ../public/metronome-sounds/reapertips/rim-sub.wav
+    ../public/metronome-sounds/reapertips/clave-accent.wav
+    ../public/metronome-sounds/reapertips/clave-normal.wav
+    ../public/metronome-sounds/reapertips/clave-sub.wav
+    ../public/metronome-sounds/reapertips/tabla-accent.wav
+    ../public/metronome-sounds/reapertips/tabla-normal.wav
+    ../public/metronome-sounds/reapertips/tabla-sub.wav
+    ../public/metronome-sounds/reapertips/shaker-accent.wav
+    ../public/metronome-sounds/reapertips/shaker-normal.wav
+    ../public/metronome-sounds/reapertips/shaker-sub.wav
+    ../public/metronome-sounds/reapertips/tight-accent.wav
+    ../public/metronome-sounds/reapertips/tight-normal.wav
+    ../public/metronome-sounds/reapertips/tight-sub.wav
+)
+
 juce_add_plugin(GrooveMetronomePlugin
   COMPANY_NAME "Nathaniel School of Music"
   BUNDLE_ID "com.nathanielschool.groovemetronome.plugin"
@@ -34,6 +56,7 @@ juce_add_plugin(GrooveMetronomePlugin
 target_sources(GrooveMetronomePlugin
   PRIVATE
     Source/PluginProcessor.cpp
+    Source/PluginEditor.cpp
 )
 
 target_include_directories(GrooveMetronomePlugin
@@ -52,6 +75,7 @@ target_compile_definitions(GrooveMetronomePlugin
 
 target_link_libraries(GrooveMetronomePlugin
   PRIVATE
+    GrooveMetronomeSamples
     juce::juce_audio_utils
   PUBLIC
     juce::juce_recommended_config_flags
