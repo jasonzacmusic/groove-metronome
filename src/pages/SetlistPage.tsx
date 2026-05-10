@@ -210,18 +210,18 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
 
   return (
     <div className="space-y-5 pb-12">
-      <section className="rounded-lg border border-primary/35 bg-card/80 p-4 md:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0">
+      <section className="rounded-lg border border-primary/35 bg-card/80 p-3 md:p-4">
+        <div className="flex flex-wrap items-end gap-3 md:gap-4">
+          <div className="w-full max-w-xl md:w-[24rem]">
             <span className="tiny-caps text-[10px] text-primary">Setlist Studio</span>
             <input
               value={setlist.name}
               onChange={(event) => setSetlist((prev) => ({ ...prev, name: event.target.value }))}
-              className="mt-1 block w-full min-w-0 bg-transparent font-serif text-3xl outline-none focus:text-primary md:text-4xl"
+              className="mt-1 block w-full min-w-0 bg-transparent font-serif text-3xl leading-none outline-none focus:text-primary md:text-4xl"
               aria-label="Setlist name"
             />
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 pb-0.5">
             <StageAction label="Share" icon={<Share2 className="size-4" />} onClick={() => void shareSetlist()} />
             <StageAction label="Back up" icon={<Download className="size-4" />} onClick={exportSetlist} />
             <StageAction label="Restore" icon={<Upload className="size-4" />} onClick={() => importRef.current?.click()} />
@@ -515,19 +515,19 @@ function ConcertDeck({
           </div>
         </div>
 
+        <StageClockStrip
+          nowMs={nowMs}
+          concertElapsedMs={concertElapsedMs}
+          songElapsedMs={songElapsedMs}
+          songLogs={songLogs}
+        />
+
         <StageTopPerformanceControls
           timeSignature={state.timeSignature}
           pattern={state.pattern}
           controlsLocked={controlsLocked}
           onSetMeter={setMeter}
           onSetAllAccents={onSetAllAccents}
-        />
-
-        <StageClockStrip
-          nowMs={nowMs}
-          concertElapsedMs={concertElapsedMs}
-          songElapsedMs={songElapsedMs}
-          songLogs={songLogs}
         />
 
         <div className="rounded-lg border border-primary/30 bg-[linear-gradient(145deg,hsl(var(--primary)/0.10),hsl(var(--background)/0.50))] p-3 md:p-5">
@@ -627,37 +627,84 @@ function StageClockStrip({
   songElapsedMs: number;
   songLogs: SongDurationLog[];
 }) {
+  const localTimeZone = getLocalTimeZone();
+  const localLabel = getTimeZoneLabel(nowMs, localTimeZone);
   return (
-    <div className="grid gap-3 md:grid-cols-[0.8fr_0.8fr_1.4fr]">
-      <StageClockTile label="IST" value={formatIstTime(nowMs)} />
-      <StageClockTile label="Concert" value={formatStageDuration(concertElapsedMs)} />
-      <div className="rounded-lg border border-border bg-background/35 p-3">
-        <div className="flex items-center justify-between gap-3">
-          <span className="tiny-caps text-[10px] text-muted-foreground">Song time</span>
-          <span className="font-mono text-lg tabular text-primary">{formatStageDuration(songElapsedMs)}</span>
-        </div>
-        <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-          {songLogs.slice(0, 5).map((log) => (
-            <span key={log.name} className="shrink-0 rounded-full border border-border bg-card/60 px-3 py-1 font-mono text-[11px] text-muted-foreground">
-              {log.name}: {formatStageDuration(log.ms)}
-            </span>
-          ))}
-          {songLogs.length === 0 && (
-            <span className="font-mono text-xs text-muted-foreground">Song lengths are saved for this browser session.</span>
-          )}
-        </div>
+    <div className="rounded-lg border border-border bg-background/35 p-2.5">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <StageClockTile label={`Geo ${localLabel}`} value={formatZoneTime(nowMs, localTimeZone)} tone="cyan" />
+        <StageClockTile label="IST" value={formatZoneTime(nowMs, "Asia/Kolkata")} tone="gold" />
+        <StageClockTile label="Concert" value={formatStageDuration(concertElapsedMs)} tone="green" />
+        <StageClockTile label="Song" value={formatStageDuration(songElapsedMs)} tone="rose" />
+      </div>
+      <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+        {songLogs.slice(0, 5).map((log) => (
+          <span key={log.name} className="shrink-0 rounded-full border border-border bg-card/60 px-3 py-1 font-mono text-[11px] text-muted-foreground">
+            {log.name}: {formatStageDuration(log.ms)}
+          </span>
+        ))}
+        {songLogs.length === 0 && (
+          <span className="font-mono text-xs text-muted-foreground">Song lengths are saved for this browser session.</span>
+        )}
       </div>
     </div>
   );
 }
 
-function StageClockTile({ label, value }: { label: string; value: string }) {
+function StageClockTile({ label, value, tone }: { label: string; value: string; tone: "cyan" | "gold" | "green" | "rose" }) {
+  const toneClass = {
+    cyan: "border-accent/45 bg-accent/8 text-accent",
+    gold: "border-primary/45 bg-primary/10 text-primary",
+    green: "border-emerald-400/35 bg-emerald-400/10 text-emerald-200",
+    rose: "border-rose-400/35 bg-rose-400/10 text-rose-200",
+  }[tone];
   return (
-    <div className="rounded-lg border border-border bg-background/35 p-3">
-      <span className="tiny-caps block text-[10px] text-muted-foreground">{label}</span>
-      <span className="mt-1 block font-mono text-3xl tabular text-foreground">{value}</span>
+    <div className={`rounded-md border px-3 py-2 ${toneClass}`}>
+      <span className="tiny-caps block text-[9px] opacity-75">{label}</span>
+      <span className="mt-0.5 block font-mono text-2xl font-semibold tabular leading-none tracking-wide">
+        {value}
+      </span>
     </div>
   );
+}
+
+function getLocalTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
+  } catch {
+    return "Asia/Kolkata";
+  }
+}
+
+function getTimeZoneLabel(ms: number, timeZone: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour: "numeric",
+      timeZoneName: "short",
+    }).formatToParts(new Date(ms));
+    return parts.find((part) => part.type === "timeZoneName")?.value ?? shortTimeZoneName(timeZone);
+  } catch {
+    return shortTimeZoneName(timeZone);
+  }
+}
+
+function shortTimeZoneName(timeZone: string): string {
+  const parts = timeZone.split("/");
+  return (parts[parts.length - 1] ?? "Local").replace(/_/g, " ");
+}
+
+function formatZoneTime(ms: number, timeZone: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone,
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(new Date(ms)).toLowerCase();
+  } catch {
+    return formatIstTime(ms);
+  }
 }
 
 function StageTempoNudges({ disabled, onAdjustBpm }: { disabled?: boolean; onAdjustBpm: (delta: number) => void }) {
