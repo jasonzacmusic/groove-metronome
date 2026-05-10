@@ -45,6 +45,7 @@ import {
   JAZZ_ASSIST_LABELS,
   METRONOME_PRESETS,
   pitchLabel,
+  PULSE_ACCENT_VOLUME,
   SUBDIVISION_NOTATION,
   subdivisionShortcutForKey,
   TRIPLET_ASSIST_LABELS,
@@ -113,6 +114,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
     setRampEnabled,
     setRampConfig,
     setHapticsEnabled,
+    setAccentVolume,
     setPolyrhythm,
     toggle,
     tap,
@@ -380,6 +382,10 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
             currentPulse={state.currentPulse}
             currentPoly={state.currentPoly}
             onCycleBeatSubdivision={cycleBeatSubdivision}
+            onSetBeatSubdivision={(beatIndex, pulses) => applyPatternToBeat(beatIndex, {
+              pulses,
+              accents: Array.from({ length: pulses }, (_, pulseIndex) => state.pattern[beatIndex]?.accents[pulseIndex] ?? "normal"),
+            })}
             onCyclePulseAccent={cyclePulse}
             onTap={tap}
           />
@@ -473,6 +479,8 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
             onPresetChange={loadPreset}
             onResetAccents={resetAccents}
             onSetAllPulseAccents={setAllPulseAccents}
+            accentVolumes={state.accentVolumes}
+            onSetAccentVolume={setAccentVolume}
           />
         </div>
       </section>
@@ -736,6 +744,7 @@ function WheelStage({
   currentPulse,
   currentPoly,
   onCycleBeatSubdivision,
+  onSetBeatSubdivision,
   onCyclePulseAccent,
   onTap,
 }: {
@@ -748,6 +757,7 @@ function WheelStage({
   currentPulse: number;
   currentPoly: number;
   onCycleBeatSubdivision: (beatIndex: number) => void;
+  onSetBeatSubdivision: (beatIndex: number, pulses: SubdivisionCount) => void;
   onCyclePulseAccent: (beatIndex: number, pulseIndex: number) => void;
   onTap: () => void;
 }) {
@@ -781,6 +791,7 @@ function WheelStage({
           currentBeat={currentBeat}
           currentPulse={currentPulse}
           onCycleBeatSubdivision={onCycleBeatSubdivision}
+          onSetBeatSubdivision={onSetBeatSubdivision}
           onCyclePulseAccent={onCyclePulseAccent}
           onTapTempo={onTap}
         />
@@ -1386,6 +1397,8 @@ function QuickSetup({
   onPresetChange,
   onResetAccents,
   onSetAllPulseAccents,
+  accentVolumes,
+  onSetAccentVolume,
 }: {
   status: string;
   beatSound: UseMetronomeReturn["state"]["beatSound"];
@@ -1393,6 +1406,8 @@ function QuickSetup({
   onPresetChange: (idx: number) => void;
   onResetAccents: () => void;
   onSetAllPulseAccents: (accent: PulseAccent) => void;
+  accentVolumes: Record<PulseAccent, number>;
+  onSetAccentVolume: (accent: Exclude<PulseAccent, "mute">, volume: number) => void;
 }) {
   return (
     <div className="rounded-lg border border-border/70 bg-card/80 p-4 md:p-5 shadow-[0_1px_0_hsl(var(--accent)/0.08)]">
@@ -1440,12 +1455,14 @@ function QuickSetup({
       </div>
       <div className="mt-3 rounded-md border border-border/60 bg-background/30 p-2">
         <div className="mb-2 tiny-caps text-[10px] text-muted-foreground">Make every pulse</div>
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className="grid grid-cols-4 gap-1.5">
           <UniformAccentButton label="Loud" onClick={() => onSetAllPulseAccents("accent")} />
           <UniformAccentButton label="Soft" onClick={() => onSetAllPulseAccents("normal")} />
           <UniformAccentButton label="Softer" onClick={() => onSetAllPulseAccents("ghost")} />
+          <UniformAccentButton label="Off" onClick={() => onSetAllPulseAccents("mute")} />
         </div>
       </div>
+      <AccentVolumeControls accentVolumes={accentVolumes} onSetAccentVolume={onSetAccentVolume} />
       <button
         type="button"
         onPointerDown={(e) => { e.preventDefault(); onResetAccents(); }}
@@ -1453,6 +1470,39 @@ function QuickSetup({
       >
         Reset accents
       </button>
+    </div>
+  );
+}
+
+function AccentVolumeControls({
+  accentVolumes,
+  onSetAccentVolume,
+}: {
+  accentVolumes: Record<PulseAccent, number>;
+  onSetAccentVolume: (accent: Exclude<PulseAccent, "mute">, volume: number) => void;
+}) {
+  return (
+    <div className="mt-3 rounded-md border border-border/60 bg-background/30 p-2">
+      <div className="mb-2 tiny-caps text-[10px] text-muted-foreground">Live level trim</div>
+      {([
+        ["accent", "Loud"],
+        ["normal", "Soft"],
+        ["ghost", "Softer"],
+      ] as Array<[Exclude<PulseAccent, "mute">, string]>).map(([accent, label]) => (
+        <label key={accent} className="mt-2 grid grid-cols-[4.6rem_minmax(0,1fr)_3rem] items-center gap-2">
+          <span className="tiny-caps text-[9px] text-muted-foreground">{label}</span>
+          <Slider
+            value={[accentVolumes[accent]]}
+            min={-30}
+            max={0}
+            step={1}
+            onValueChange={([value]) => onSetAccentVolume(accent, value)}
+            onDoubleClick={() => onSetAccentVolume(accent, PULSE_ACCENT_VOLUME[accent])}
+            title={`Double-click to reset ${label.toLowerCase()} level`}
+          />
+          <span className="font-mono text-[10px] text-muted-foreground tabular">{accentVolumes[accent]} dB</span>
+        </label>
+      ))}
     </div>
   );
 }

@@ -1,9 +1,11 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import {
   PULSE_ACCENT_HEIGHT,
+  subdivisionShortcutForKey,
   type BeatPattern,
   type PulseAccent,
+  type SubdivisionCount,
 } from "@/lib/metronome-types";
 import { getTempoMarking } from "@/lib/utils";
 
@@ -14,6 +16,7 @@ interface PolyrhythmWheelProps {
   currentBeat: number;
   currentPulse: number;
   onCycleBeatSubdivision: (beatIndex: number) => void;
+  onSetBeatSubdivision?: (beatIndex: number, pulses: SubdivisionCount) => void;
   onCyclePulseAccent: (beatIndex: number, pulseIndex: number) => void;
   onTapTempo: () => void;
 }
@@ -69,11 +72,36 @@ export function PolyrhythmWheel({
   currentBeat,
   currentPulse,
   onCycleBeatSubdivision,
+  onSetBeatSubdivision,
   onCyclePulseAccent,
   onTapTempo,
 }: PolyrhythmWheelProps) {
   const numerator = pattern.length;
   const beatSpan = (2 * Math.PI) / Math.max(1, numerator);
+  const heldSubdivisionRef = useRef<SubdivisionCount | null>(null);
+
+  useEffect(() => {
+    const isEditableTarget = (target: EventTarget | null) =>
+      target instanceof HTMLInputElement
+      || target instanceof HTMLSelectElement
+      || target instanceof HTMLTextAreaElement
+      || (target instanceof HTMLElement && target.isContentEditable);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isEditableTarget(event.target)) return;
+      const shortcut = subdivisionShortcutForKey(event.key, bpm);
+      if (shortcut) heldSubdivisionRef.current = shortcut;
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      const shortcut = subdivisionShortcutForKey(event.key, bpm);
+      if (shortcut && heldSubdivisionRef.current === shortcut) heldSubdivisionRef.current = null;
+    };
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    window.addEventListener("keyup", onKeyUp, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, { capture: true });
+      window.removeEventListener("keyup", onKeyUp, { capture: true });
+    };
+  }, [bpm]);
 
   const handAngle = useMemo(() => {
     if (!isPlaying) return null;
@@ -173,8 +201,12 @@ export function PolyrhythmWheel({
             <g
               key={`lbl-${i}`}
               style={{ cursor: "pointer" }}
-              onClick={() => onCycleBeatSubdivision(i)}
-              aria-label={`Beat ${i + 1}, ${beat.pulses} pulse${beat.pulses > 1 ? "s" : ""}. Click to cycle subdivision.`}
+              onClick={() => {
+                const heldSubdivision = heldSubdivisionRef.current;
+                if (heldSubdivision && onSetBeatSubdivision) onSetBeatSubdivision(i, heldSubdivision);
+                else onCycleBeatSubdivision(i);
+              }}
+              aria-label={`Beat ${i + 1}, ${beat.pulses} pulse${beat.pulses > 1 ? "s" : ""}. Click to cycle subdivision, or hold a number while clicking to set it directly.`}
             >
               <circle
                 cx={pos.x}

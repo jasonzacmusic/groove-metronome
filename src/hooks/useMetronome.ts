@@ -8,7 +8,6 @@ import {
   JAZZ_ASSIST_LABELS,
   LEVEL_TO_ACCENT,
   pitchToMultiplier,
-  PULSE_ACCENT_LEVEL,
   PULSE_ACCENT_VOLUME,
   SAMPLE_SOUND_SETS,
   SOUND_ENVELOPES,
@@ -66,6 +65,11 @@ export interface MetronomeState {
   practiceSeconds: number;
   toneStarted: boolean;
   tapInfo: { count: number; avgBpm: number | null };
+  accentVolumes: Record<PulseAccent, number>;
+}
+
+function nextPulseTapAccent(accent: PulseAccent): PulseAccent {
+  return accent === "normal" ? "mute" : "normal";
 }
 
 type ClickRole = "accent" | "normal" | "sub";
@@ -222,6 +226,7 @@ export function useMetronome() {
   const [beatSound, setBeatSound] = useState<BeatSound>("tone");
   const [pitch, setPitch] = useState(50);
   const [pattern, setPattern] = useState<BeatPattern[]>(() => buildDefaultPattern(4, 1));
+  const [accentVolumes, setAccentVolumes] = useState<Record<PulseAccent, number>>({ ...PULSE_ACCENT_VOLUME });
   const [swing, setSwing] = useState(0);
   const [barCount, setBarCount] = useState(0);
   const [polyrhythm, setPolyrhythmState] = useState<PolyrhythmConfig>({
@@ -263,6 +268,7 @@ export function useMetronome() {
   const practiceIntervalRef = useRef<number | null>(null);
 
   const patternRef = useRef(pattern);
+  const accentVolumesRef = useRef(accentVolumes);
   const swingRef = useRef(swing);
   const polyrhythmRef = useRef(polyrhythm);
   const beatSoundRef = useRef(beatSound);
@@ -276,6 +282,7 @@ export function useMetronome() {
   const hapticsEnabledRef = useRef(hapticsEnabled);
 
   useEffect(() => { patternRef.current = pattern; }, [pattern]);
+  useEffect(() => { accentVolumesRef.current = accentVolumes; }, [accentVolumes]);
   useEffect(() => { swingRef.current = swing; }, [swing]);
   useEffect(() => { polyrhythmRef.current = polyrhythm; }, [polyrhythm]);
   useEffect(() => { beatSoundRef.current = beatSound; }, [beatSound]);
@@ -463,9 +470,10 @@ export function useMetronome() {
         const sampleSet = SAMPLE_SOUND_SETS[sound];
         const voiceToken = sampleSet?.beatNumbered ? voiceSubdivisionKey(pulses, p) : null;
         const voiceSubdivisionAllowed = !sampleSet?.beatNumbered || isFirstPulse || Boolean(voiceToken);
+        const accentVolume = accentVolumesRef.current[accent];
         const vol = sampleSet?.beatNumbered
           ? (isFirstPulse || voiceToken ? VOICE_ACCENT_VOLUME[accent] : -Infinity)
-          : PULSE_ACCENT_VOLUME[accent];
+          : accentVolume;
         const role: ClickRole = isFirstPulse ? (accent === "accent" ? "accent" : "normal") : "sub";
         if (!muted && !jazzAssistActive && !poly.enabled && !poly.polymeterEnabled && voiceSubdivisionAllowed) playClick(time + offset, freq, vol, role, beatIdx + 1, voiceToken);
         if (!muted && !jazzAssistActive && !poly.enabled && !poly.polymeterEnabled && isFirstPulse && hapticsEnabledRef.current) {
@@ -484,7 +492,7 @@ export function useMetronome() {
         jazzAssistEvents(poly.jazzMode, ts.numerator, beatDuration).forEach((event) => {
           const role: ClickRole = event.downbeat ? "normal" : "sub";
           const freq = event.downbeat ? freqs.normal : freqs.sub;
-          const vol = event.downbeat ? PULSE_ACCENT_VOLUME.normal : Math.max(PULSE_ACCENT_VOLUME.ghost, -14);
+          const vol = event.downbeat ? accentVolumesRef.current.normal : Math.max(accentVolumesRef.current.ghost, -14);
           playClick(time + event.offset, freq, vol, role, event.beatNumber);
           if (hapticsEnabledRef.current && event.downbeat) {
             Tone.Draw.schedule(() => {
@@ -559,7 +567,7 @@ export function useMetronome() {
           const offset = (tick - windowStartTicks) * sixteenthDuration;
           const role: ClickRole = step.downbeat ? "accent" : "normal";
           const freq = step.downbeat ? freqs.accent : freqs.normal;
-          const vol = step.downbeat ? PULSE_ACCENT_VOLUME.accent : PULSE_ACCENT_VOLUME.normal;
+          const vol = step.downbeat ? accentVolumesRef.current.accent : accentVolumesRef.current.normal;
           playClick(time + offset, freq, vol, role, step.beatIndex + 1);
           if (hapticsEnabledRef.current) {
             Tone.Draw.schedule(() => {
@@ -810,6 +818,14 @@ export function useMetronome() {
     setBpm((b) => clamp(Math.round((b + delta) * 10) / 10, 20, 300));
   }, []);
 
+  const setAccentVolume = useCallback((accent: Exclude<PulseAccent, "mute">, volume: number) => {
+    setAccentVolumes((prev) => ({
+      ...prev,
+      [accent]: clamp(Math.round(volume), -30, 0),
+      mute: -Infinity,
+    }));
+  }, []);
+
   const setBeatSubdivision = useCallback((beatIndex: number, pulses: SubdivisionCount) => {
     setPattern((prev) => {
       if (beatIndex < 0 || beatIndex >= prev.length) return prev;
@@ -838,8 +854,7 @@ export function useMetronome() {
       const beat = prev[beatIndex];
       if (pulseIndex < 0 || pulseIndex >= beat.accents.length) return prev;
       const accents = [...beat.accents];
-      const cur = accents[pulseIndex];
-      accents[pulseIndex] = cur === "normal" ? "accent" : "normal";
+      accents[pulseIndex] = nextPulseTapAccent(accents[pulseIndex]);
       const next = [...prev];
       next[beatIndex] = { ...beat, accents };
       return next;
@@ -866,13 +881,7 @@ export function useMetronome() {
       const beat = prev[beatIndex];
       if (pulseIndex < 0 || pulseIndex >= beat.accents.length) return prev;
       const accents = [...beat.accents];
-      const cur = accents[pulseIndex];
-      if (cur === "mute") {
-        accents[pulseIndex] = "normal";
-      } else {
-        const lvl = (PULSE_ACCENT_LEVEL[cur] + 1) % 4;
-        accents[pulseIndex] = LEVEL_TO_ACCENT[lvl];
-      }
+      accents[pulseIndex] = nextPulseTapAccent(accents[pulseIndex]);
       const next = [...prev];
       next[beatIndex] = { ...beat, accents };
       return next;
@@ -982,6 +991,7 @@ export function useMetronome() {
       practiceSeconds,
       toneStarted,
       tapInfo,
+      accentVolumes,
     } as MetronomeState,
     setBpm,
     setTimeSignature,
@@ -999,6 +1009,7 @@ export function useMetronome() {
     toggle,
     tap,
     adjustBpm,
+    setAccentVolume,
     setBeatSubdivision,
     cycleBeatSubdivision,
     cyclePulse,

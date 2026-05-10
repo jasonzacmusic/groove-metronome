@@ -64,7 +64,7 @@ interface SetlistPageProps {
 }
 
 export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
-  const { state, setBpm, setTimeSignature, setBeatSound, setPitch, setPattern, setSwing, setGlobalSubdivision, setPolyrhythm, setTrainerEnabled, setRampEnabled, toggle, adjustBpm, cycleBeatSubdivision, cyclePulseLevel } = metronome;
+  const { state, setBpm, setTimeSignature, setBeatSound, setPitch, setPattern, setSwing, setGlobalSubdivision, setPolyrhythm, setTrainerEnabled, setRampEnabled, setAccentVolume, toggle, adjustBpm, cycleBeatSubdivision, cyclePulseLevel } = metronome;
   const [setlist, setSetlist] = useState<SetlistState>(() => readSetlist());
   const [songName, setSongName] = useState("New song");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -321,6 +321,14 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
           }}
           onSetSubdivision={setGlobalSubdivision}
           onCycleBeatSubdivision={cycleBeatSubdivision}
+          onSetBeatSubdivision={(beatIndex, pulses) => {
+            setPattern(state.pattern.map((beat, index) => index === beatIndex
+              ? {
+                pulses,
+                accents: Array.from({ length: pulses }, (_, pulseIndex) => beat.accents[pulseIndex] ?? "normal"),
+              }
+              : beat));
+          }}
           onCyclePulseAccent={cyclePulseLevel}
           onSetAllAccents={(accent) => {
             setPattern(state.pattern.map((beat) => ({ ...beat, accents: beat.accents.map(() => accent) })));
@@ -328,6 +336,7 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
           onSetBeatSound={setBeatSound}
           onSetPitch={setPitch}
           onSetSwing={setSwing}
+          onSetAccentVolume={setAccentVolume}
           onSetPolyrhythm={setPolyrhythm}
         />
       </div>
@@ -356,11 +365,13 @@ function ConcertDeck({
   onSetTimeSignature,
   onSetSubdivision,
   onCycleBeatSubdivision,
+  onSetBeatSubdivision,
   onCyclePulseAccent,
   onSetAllAccents,
   onSetBeatSound,
   onSetPitch,
   onSetSwing,
+  onSetAccentVolume,
   onSetPolyrhythm,
 }: {
   active: boolean;
@@ -383,11 +394,13 @@ function ConcertDeck({
   onSetTimeSignature: (timeSignature: TimeSignature) => void;
   onSetSubdivision: (subdivision: SubdivisionCount) => void;
   onCycleBeatSubdivision: (beatIndex: number) => void;
+  onSetBeatSubdivision: (beatIndex: number, pulses: SubdivisionCount) => void;
   onCyclePulseAccent: (beatIndex: number, pulseIndex: number) => void;
   onSetAllAccents: (accent: PulseAccent) => void;
   onSetBeatSound: (sound: BeatSound) => void;
   onSetPitch: (pitch: number) => void;
   onSetSwing: (swing: number) => void;
+  onSetAccentVolume: (accent: Exclude<PulseAccent, "mute">, volume: number) => void;
   onSetPolyrhythm: (config: Partial<PolyrhythmConfig>) => void;
 }) {
   const tapsRef = useRef<number[]>([]);
@@ -540,6 +553,9 @@ function ConcertDeck({
             onCycleBeatSubdivision={(beatIndex) => {
               if (!controlsLocked) onCycleBeatSubdivision(beatIndex);
             }}
+            onSetBeatSubdivision={(beatIndex, pulses) => {
+              if (!controlsLocked) onSetBeatSubdivision(beatIndex, pulses);
+            }}
             onCyclePulseAccent={(beatIndex, pulseIndex) => {
               if (!controlsLocked) onCyclePulseAccent(beatIndex, pulseIndex);
             }}
@@ -597,6 +613,11 @@ function ConcertDeck({
               <StageVerticalSlider label="Pitch" value={state.pitch} min={0} max={100} step={1} disabled={controlsLocked} onChange={onSetPitch} onReset={() => onSetPitch(50)} />
               <StageVerticalSlider label="Swing" value={clamp(state.swing, 0, 70)} min={0} max={70} step={5} disabled={controlsLocked} onChange={onSetSwing} />
             </div>
+            <StageAccentVolumeControls
+              accentVolumes={state.accentVolumes}
+              disabled={controlsLocked}
+              onSetAccentVolume={onSetAccentVolume}
+            />
           </StageSettingsPanel>
 
           <StageSettingsPanel title="Rhythm Assist" summary={activeAssist}>
@@ -931,6 +952,43 @@ function StageVerticalSlider({
         <span className="font-mono text-lg text-foreground">{value}</span>
       </span>
     </label>
+  );
+}
+
+function StageAccentVolumeControls({
+  accentVolumes,
+  disabled,
+  onSetAccentVolume,
+}: {
+  accentVolumes: Record<PulseAccent, number>;
+  disabled?: boolean;
+  onSetAccentVolume: (accent: Exclude<PulseAccent, "mute">, volume: number) => void;
+}) {
+  return (
+    <div className="mt-3 rounded-lg border border-border/70 bg-background/35 p-3">
+      <span className="tiny-caps block text-[10px] text-muted-foreground">Live levels</span>
+      {([
+        ["accent", "Loud"],
+        ["normal", "Soft"],
+        ["ghost", "Softer"],
+      ] as Array<[Exclude<PulseAccent, "mute">, string]>).map(([accent, label]) => (
+        <label key={accent} className="mt-2 grid grid-cols-[4.4rem_minmax(0,1fr)_3rem] items-center gap-2">
+          <span className="tiny-caps text-[9px] text-muted-foreground">{label}</span>
+          <input
+            type="range"
+            min={-30}
+            max={0}
+            step={1}
+            value={accentVolumes[accent]}
+            disabled={disabled}
+            onChange={(event) => onSetAccentVolume(accent, Number(event.target.value))}
+            className="accent-primary disabled:opacity-35"
+            aria-label={`Stage ${label.toLowerCase()} level`}
+          />
+          <span className="font-mono text-[10px] text-muted-foreground tabular">{accentVolumes[accent]} dB</span>
+        </label>
+      ))}
+    </div>
   );
 }
 
