@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Download, Plus, Share2, Shield, Trash2, Uplo
 
 import { Button } from "@/components/ui/button";
 import { PolyrhythmWheel } from "@/components/metronome/PolyrhythmWheel";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { UseMetronomeReturn } from "@/hooks/useMetronome";
 import { buildDefaultPattern, type BeatPattern, type MeterDenominator, type TimeSignature } from "@/lib/metronome-types";
 import { clamp, formatTime } from "@/lib/utils";
@@ -338,42 +339,22 @@ function ConcertDeck({
         </button>
       </div>
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_320px]">
-        <div className="space-y-4">
+      <div className="mt-5 space-y-4">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_17rem]">
           <div className="rounded-lg border border-border bg-background/35 p-4">
-            <span className="tiny-caps text-[10px] text-muted-foreground">Song</span>
-            <h2 className="mt-2 break-words font-serif text-4xl leading-none md:text-6xl">
-              {song?.name ?? "No song loaded"}
-            </h2>
-            <div className="mt-3 flex flex-wrap gap-2 font-mono text-sm text-muted-foreground">
-              <span>{songCount ? `${songIndex + 1}/${songCount}` : "0/0"}</span>
-              <span>·</span>
-              <span>{state.timeSignature.numerator}/{state.timeSignature.denominator}</span>
-              {nextSong && <span className="truncate">· Next: {nextSong.name}</span>}
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <span className="tiny-caps text-[10px] text-muted-foreground">Song</span>
+                <h2 className="mt-2 break-words font-serif text-4xl leading-none md:text-6xl">
+                  {song?.name ?? "No song loaded"}
+                </h2>
+              </div>
+              <div className="rounded-full border border-border bg-card/55 px-3 py-1.5 font-mono text-xs text-muted-foreground">
+                {songCount ? `${songIndex + 1}/${songCount}` : "0/0"} · {state.timeSignature.numerator}/{state.timeSignature.denominator}
+              </div>
             </div>
+            {nextSong && <div className="mt-3 truncate font-mono text-sm text-muted-foreground">Next: {nextSong.name}</div>}
           </div>
-
-          <div className="rounded-lg border border-primary/30 bg-[linear-gradient(145deg,hsl(var(--primary)/0.10),hsl(var(--background)/0.50))] p-3">
-            <PolyrhythmWheel
-              pattern={state.pattern}
-              bpm={state.bpm}
-              isPlaying={state.isPlaying}
-              currentBeat={state.currentBeat}
-              currentPulse={state.currentPulse}
-              onCycleBeatSubdivision={() => {}}
-              onCyclePulseAccent={() => {}}
-              onTapTempo={tap}
-            />
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-[1fr_1.45fr_1fr]">
-            <StageButton label="Previous" icon={<ChevronLeft className="size-6" />} disabled={stageLock || songIndex <= 0} onClick={onPrev} />
-            <StagePlayButton playing={state.isPlaying} onToggle={onToggle} />
-            <StageButton label="Next" icon={<ChevronRight className="size-6" />} disabled={stageLock || songIndex >= songCount - 1} onClick={onNext} />
-          </div>
-        </div>
-
-        <aside className="space-y-4">
           <div className="rounded-lg border border-border bg-background/35 p-4">
             <span className="tiny-caps text-[10px] text-muted-foreground">Tempo</span>
             <div className="mt-2 grid grid-cols-[minmax(0,1fr)_5.5rem] items-end gap-3">
@@ -396,16 +377,40 @@ function ConcertDeck({
                 aria-label="Stage tempo"
               />
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-primary/30 bg-[linear-gradient(145deg,hsl(var(--primary)/0.10),hsl(var(--background)/0.50))] p-3 md:p-5">
+          <PolyrhythmWheel
+            pattern={state.pattern}
+            bpm={state.bpm}
+            isPlaying={state.isPlaying}
+            currentBeat={state.currentBeat}
+            currentPulse={state.currentPulse}
+            onCycleBeatSubdivision={() => {}}
+            onCyclePulseAccent={() => {}}
+            onTapTempo={tap}
+          />
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-[1fr_1.45fr_1fr]">
+          <StageButton label="Previous" icon={<ChevronLeft className="size-6" />} disabled={stageLock || songIndex <= 0} onClick={onPrev} />
+          <StagePlayButton playing={state.isPlaying} onToggle={onToggle} />
+          <StageButton label="Next" icon={<ChevronRight className="size-6" />} disabled={stageLock || songIndex >= songCount - 1} onClick={onNext} />
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <StageSettingsPanel title="Tempo Nudges" summary="-1 / +1 / -5 / +5">
+            <div className="grid grid-cols-4 gap-2">
               <StageButton label="-1" onClick={() => onAdjustBpm(-1)} compact />
               <StageButton label="+1" onClick={() => onAdjustBpm(1)} compact />
               <StageButton label="-5" onClick={() => onAdjustBpm(-5)} compact />
               <StageButton label="+5" onClick={() => onAdjustBpm(5)} compact />
             </div>
-          </div>
-          <div className="rounded-lg border border-border bg-background/35 p-4">
-            <span className="tiny-caps text-[10px] text-muted-foreground">Meter</span>
-            <div className="mt-3 grid grid-cols-3 gap-2">
+          </StageSettingsPanel>
+
+          <StageSettingsPanel title="Meter & Swing" summary={`${state.timeSignature.numerator}/${state.timeSignature.denominator} · ${state.swing}% swing`}>
+            <div className="grid grid-cols-3 gap-2">
               <StageButton label="4/4" compact onClick={() => setMeter(4, 4)} />
               <StageButton label="3/4" compact onClick={() => setMeter(3, 4)} />
               <StageButton label="6/8" compact onClick={() => setMeter(6, 8)} />
@@ -423,26 +428,47 @@ function ConcertDeck({
                 aria-label="Stage swing"
               />
             </label>
-          </div>
-          <TapPreview preview={tapPreview} onTap={tap} onSetBpm={onSetBpm} />
-          <div className="rounded-lg border border-border bg-background/35 p-4">
-            <span className="tiny-caps text-[10px] text-muted-foreground">Timer</span>
-            <div className="mt-2 font-mono text-3xl tabular">{formatTime(state.practiceSeconds)}</div>
-          </div>
-        </aside>
+          </StageSettingsPanel>
+
+          <StageSettingsPanel title="Tap Preview" summary={tapPreview.bpm ? `${tapPreview.bpm} BPM` : "Preview only"}>
+            <TapPreview preview={tapPreview} onTap={tap} onSetBpm={onSetBpm} />
+          </StageSettingsPanel>
+
+          <StageSettingsPanel title="Timer" summary={formatTime(state.practiceSeconds)}>
+            <div className="font-mono text-3xl tabular">{formatTime(state.practiceSeconds)}</div>
+          </StageSettingsPanel>
+        </div>
       </div>
     </section>
   );
 }
 
+function StageSettingsPanel({ title, summary, defaultOpen = false, children }: { title: string; summary: string; defaultOpen?: boolean; children: ReactNode }) {
+  return (
+    <Collapsible defaultOpen={defaultOpen} className="rounded-lg border border-border bg-background/35">
+      <CollapsibleTrigger className="flex min-h-14 w-full items-center justify-between gap-3 px-4 text-left">
+        <span>
+          <span className="tiny-caps block text-[10px] text-muted-foreground">{title}</span>
+          <span className="mt-1 block truncate font-mono text-xs text-foreground/85">{summary}</span>
+        </span>
+        <span className="font-serif text-2xl leading-none text-primary">+</span>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="border-t border-border/70 p-4">
+          {children}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 function TapPreview({ preview, onTap, onSetBpm }: { preview: { count: number; bpm: number | null }; onTap: () => void; onSetBpm: (bpm: number) => void }) {
   return (
-    <div className="rounded-lg border border-border bg-background/35 p-4">
-      <span className="tiny-caps text-[10px] text-muted-foreground">Tap preview</span>
+    <div>
       <button
         type="button"
         onPointerDown={(event) => { event.preventDefault(); onTap(); }}
-        className="mt-2 min-h-24 w-full rounded-lg border border-primary/60 bg-primary/10 font-serif text-3xl text-primary transition-colors hover:bg-primary/15"
+        className="min-h-16 w-full rounded-lg border border-primary/60 bg-primary/10 font-serif text-3xl text-primary transition-colors hover:bg-primary/15"
       >
         Tap
       </button>
