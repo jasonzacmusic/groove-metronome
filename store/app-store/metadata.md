@@ -2,9 +2,9 @@
 
 ## App Information
 
-- App name: Groove Metronome
+- App name: NSM Groove Metronome
 - Subtitle: See it. Count it. Lock it in.
-- Bundle ID in current Xcode project: `com.groovelab.metronome`
+- Bundle ID in current Xcode project: `com.nathanielschool.groovemetronome`
 - SKU suggestion: `GROOVE-METRONOME-IOS-001`
 - Version: `1.0`
 - Build: `1`
