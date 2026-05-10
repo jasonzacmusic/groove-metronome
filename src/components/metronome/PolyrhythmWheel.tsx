@@ -17,7 +17,7 @@ interface PolyrhythmWheelProps {
   currentPulse: number;
   onToggleBeat: (beatIndex: number) => void;
   onSetBeatSubdivision?: (beatIndex: number, pulses: SubdivisionCount) => void;
-  onCyclePulseAccent: (beatIndex: number, pulseIndex: number) => void;
+  onCyclePulseStrength: (beatIndex: number, pulseIndex: number) => void;
   onTapTempo: () => void;
 }
 
@@ -73,12 +73,19 @@ export function PolyrhythmWheel({
   currentPulse,
   onToggleBeat,
   onSetBeatSubdivision,
-  onCyclePulseAccent,
+  onCyclePulseStrength,
   onTapTempo,
 }: PolyrhythmWheelProps) {
   const numerator = pattern.length;
   const beatSpan = (2 * Math.PI) / Math.max(1, numerator);
   const readSubdivisionShortcut = useSubdivisionShortcut(bpm);
+
+  const applySubdivisionShortcut = (beatIndex: number) => {
+    const shortcutSubdivision = readSubdivisionShortcut();
+    if (!shortcutSubdivision || !onSetBeatSubdivision) return false;
+    onSetBeatSubdivision(beatIndex, shortcutSubdivision);
+    return true;
+  };
 
   const handAngle = useMemo(() => {
     if (!isPlaying) return null;
@@ -129,6 +136,12 @@ export function PolyrhythmWheel({
               fill={isActiveBeat ? "hsl(var(--slate-cyan) / 0.10)" : "hsl(220 17% 8% / 0.78)"}
               stroke="hsl(var(--border))"
               strokeWidth="0.5"
+              style={{ cursor: "pointer" }}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                if (!applySubdivisionShortcut(i)) onCyclePulseStrength(i, 0);
+              }}
+              aria-label={`Beat ${i + 1}. Tap to cycle soft, normal, and accented. Hold a number while tapping to divide this beat.`}
             />
           );
         })}
@@ -159,11 +172,12 @@ export function PolyrhythmWheel({
                   transition: "fill 120ms linear, stroke 120ms linear",
                   filter: active ? "drop-shadow(0 0 6px hsla(36, 84%, 64%, 0.55))" : undefined,
                 }}
-                onClick={(e) => {
+                onPointerDown={(e) => {
+                  e.preventDefault();
                   e.stopPropagation();
-                  onCyclePulseAccent(i, p);
+                  if (!applySubdivisionShortcut(i)) onCyclePulseStrength(i, p);
                 }}
-                aria-label={`Beat ${i + 1} pulse ${p + 1} (${accent}). Click to cycle accent.`}
+                aria-label={`Beat ${i + 1} pulse ${p + 1} (${accent}). Tap to cycle soft, normal, and accented. Hold a number while tapping to divide this beat.`}
               />
             );
           });
@@ -181,9 +195,7 @@ export function PolyrhythmWheel({
               style={{ cursor: "pointer" }}
               onPointerDown={(event) => {
                 event.preventDefault();
-                const shortcutSubdivision = readSubdivisionShortcut();
-                if (shortcutSubdivision && onSetBeatSubdivision) onSetBeatSubdivision(i, shortcutSubdivision);
-                else onToggleBeat(i);
+                if (!applySubdivisionShortcut(i)) onToggleBeat(i);
               }}
               aria-label={`Beat ${i + 1}, ${beat.pulses} pulse${beat.pulses > 1 ? "s" : ""}. Tap to toggle beat on or off, or hold a number while tapping to set subdivision.`}
             >

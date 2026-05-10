@@ -7,6 +7,7 @@ import {
   DOTTED_PLAYBACK_LABELS,
   getSubdivisionOptionsForBpm,
   JAZZ_ASSIST_LABELS,
+  nextPulseStrengthAccent,
   nextPulseTapAccent,
   pitchToMultiplier,
   PULSE_ACCENT_VOLUME,
@@ -890,6 +891,19 @@ export function useMetronome() {
     });
   }, []);
 
+  const cyclePulseStrength = useCallback((beatIndex: number, pulseIndex: number) => {
+    setPattern((prev) => {
+      if (beatIndex < 0 || beatIndex >= prev.length) return prev;
+      const beat = prev[beatIndex];
+      if (pulseIndex < 0 || pulseIndex >= beat.accents.length) return prev;
+      const accents = [...beat.accents];
+      accents[pulseIndex] = nextPulseStrengthAccent(accents[pulseIndex]);
+      const next = [...prev];
+      next[beatIndex] = { ...beat, accents };
+      return next;
+    });
+  }, []);
+
   const setPulseLevel = useCallback((beatIndex: number, pulseIndex: number, level: number) => {
     setPattern((prev) => {
       if (beatIndex < 0 || beatIndex >= prev.length) return prev;
@@ -1042,6 +1056,7 @@ export function useMetronome() {
     toggleBeatEnabled,
     cycleBeatSubdivision,
     cyclePulse,
+    cyclePulseStrength,
     cyclePulseLevel,
     setPulseLevel,
     applyPatternToBeat,

@@ -124,6 +124,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
     toggleBeatEnabled,
     cycleBeatSubdivision,
     cyclePulse,
+    cyclePulseStrength,
     setPulseLevel,
     applyPatternToBeat,
     applyPatternToAll,
@@ -137,7 +138,13 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
   const [showHaptics, setShowHaptics] = useState(false);
   const [concertMode, setConcertMode] = useState(false);
   const [concertIndex, setConcertIndex] = useState(0);
+  const [wheelApplyAllSubdivision, setWheelApplyAllSubdivision] = useState<SubdivisionCount | null>(null);
   const setlistImportRef = useRef<HTMLInputElement | null>(null);
+
+  const setWheelBeatSubdivision = (beatIndex: number, pulses: SubdivisionCount) => {
+    setBeatSubdivision(beatIndex, pulses);
+    setWheelApplyAllSubdivision(pulses);
+  };
   const [setlist, setSetlist] = useState<SetlistState>(() => {
     try {
       const saved = window.localStorage.getItem(SETLIST_STORAGE_KEY);
@@ -361,7 +368,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
           />
         </div>
 
-        <div className="metronome-wheel-stage">
+        <div className="metronome-wheel-stage relative">
           <WheelStage
             view={view}
             pattern={state.pattern}
@@ -372,12 +379,17 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
             currentPulse={state.currentPulse}
             currentPoly={state.currentPoly}
             onToggleBeat={toggleBeatEnabled}
-            onSetBeatSubdivision={(beatIndex, pulses) => applyPatternToBeat(beatIndex, {
-              pulses,
-              accents: Array.from({ length: pulses }, (_, pulseIndex) => state.pattern[beatIndex]?.accents[pulseIndex] ?? "normal"),
-            })}
-            onCyclePulseAccent={cyclePulse}
+            onSetBeatSubdivision={setWheelBeatSubdivision}
+            onCyclePulseStrength={cyclePulseStrength}
             onTap={tap}
+          />
+          <SubdivisionApplyAllTool
+            subdivision={wheelApplyAllSubdivision}
+            onApply={() => {
+              if (wheelApplyAllSubdivision) setGlobalSubdivision(wheelApplyAllSubdivision);
+              setWheelApplyAllSubdivision(null);
+            }}
+            onClose={() => setWheelApplyAllSubdivision(null)}
           />
         </div>
 
@@ -744,7 +756,7 @@ function WheelStage({
   currentPoly,
   onToggleBeat,
   onSetBeatSubdivision,
-  onCyclePulseAccent,
+  onCyclePulseStrength,
   onTap,
 }: {
   view: MetronomeView;
@@ -757,7 +769,7 @@ function WheelStage({
   currentPoly: number;
   onToggleBeat: (beatIndex: number) => void;
   onSetBeatSubdivision: (beatIndex: number, pulses: SubdivisionCount) => void;
-  onCyclePulseAccent: (beatIndex: number, pulseIndex: number) => void;
+  onCyclePulseStrength: (beatIndex: number, pulseIndex: number) => void;
   onTap: () => void;
 }) {
   const activePolymeterLane = view === "polymeter" && polyrhythm.polymeterEnabled
@@ -791,7 +803,7 @@ function WheelStage({
           currentPulse={currentPulse}
           onToggleBeat={onToggleBeat}
           onSetBeatSubdivision={onSetBeatSubdivision}
-          onCyclePulseAccent={onCyclePulseAccent}
+          onCyclePulseStrength={onCyclePulseStrength}
           onTapTempo={onTap}
         />
       </div>
@@ -803,6 +815,47 @@ function WheelStage({
           currentPoly={currentPoly}
         />
       )}
+    </div>
+  );
+}
+
+function SubdivisionApplyAllTool({
+  subdivision,
+  onApply,
+  onClose,
+}: {
+  subdivision: SubdivisionCount | null;
+  onApply: () => void;
+  onClose: () => void;
+}) {
+  if (!subdivision) return null;
+  const notation = SUBDIVISION_NOTATION[subdivision];
+  return (
+    <div className="absolute right-3 top-3 z-20 w-[min(13rem,calc(100%-1.5rem))] rounded-lg border border-primary/45 bg-background/92 p-2.5 shadow-xl shadow-background/30 backdrop-blur">
+      <div className="flex items-start gap-2">
+        <div className="grid size-11 shrink-0 place-items-center rounded-md border border-primary/40 bg-primary/12 font-serif text-2xl text-primary">
+          {notation.glyph}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="tiny-caps text-[9px] text-muted-foreground">Divide by {subdivision}</div>
+          <div className="truncate text-sm font-semibold text-foreground">{notation.label}</div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="grid size-7 shrink-0 place-items-center rounded-md border border-border text-muted-foreground transition-colors hover:text-foreground"
+          aria-label="Close subdivision action"
+        >
+          <X className="size-3.5" aria-hidden />
+        </button>
+      </div>
+      <button
+        type="button"
+        onClick={onApply}
+        className="mt-2 min-h-9 w-full rounded-md border border-primary/55 bg-primary/15 px-3 tiny-caps text-[10px] text-primary transition-colors hover:bg-primary/22"
+      >
+        Apply to all beats
+      </button>
     </div>
   );
 }

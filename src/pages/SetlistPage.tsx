@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Download, Lock, Plus, RotateCcw, Share2, Trash2, Unlock, Upload, Volume2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Lock, Plus, RotateCcw, Share2, Trash2, Unlock, Upload, Volume2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { PolyrhythmWheel } from "@/components/metronome/PolyrhythmWheel";
@@ -63,7 +63,7 @@ interface SetlistPageProps {
 }
 
 export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
-  const { state, setBpm, setTimeSignature, setBeatSound, setPitch, setPattern, setSwing, setGlobalSubdivision, setPolyrhythm, setTrainerEnabled, setRampEnabled, setAccentVolume, toggle, adjustBpm, setBeatSubdivision, toggleBeatEnabled, cyclePulseLevel } = metronome;
+  const { state, setBpm, setTimeSignature, setBeatSound, setPitch, setPattern, setSwing, setGlobalSubdivision, setPolyrhythm, setTrainerEnabled, setRampEnabled, setAccentVolume, toggle, adjustBpm, setBeatSubdivision, toggleBeatEnabled, cyclePulseStrength } = metronome;
   const [setlist, setSetlist] = useState<SetlistState>(() => readSetlist());
   const [songName, setSongName] = useState("New song");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -321,7 +321,7 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
           onSetSubdivision={setGlobalSubdivision}
           onToggleBeat={toggleBeatEnabled}
           onSetBeatSubdivision={setBeatSubdivision}
-          onCyclePulseAccent={cyclePulseLevel}
+          onCyclePulseStrength={cyclePulseStrength}
           onSetAllAccents={(accent) => {
             setPattern(state.pattern.map((beat) => ({ ...beat, accents: beat.accents.map(() => accent) })));
           }}
@@ -358,7 +358,7 @@ function ConcertDeck({
   onSetSubdivision,
   onToggleBeat,
   onSetBeatSubdivision,
-  onCyclePulseAccent,
+  onCyclePulseStrength,
   onSetAllAccents,
   onSetBeatSound,
   onSetPitch,
@@ -387,7 +387,7 @@ function ConcertDeck({
   onSetSubdivision: (subdivision: SubdivisionCount) => void;
   onToggleBeat: (beatIndex: number) => void;
   onSetBeatSubdivision: (beatIndex: number, pulses: SubdivisionCount) => void;
-  onCyclePulseAccent: (beatIndex: number, pulseIndex: number) => void;
+  onCyclePulseStrength: (beatIndex: number, pulseIndex: number) => void;
   onSetAllAccents: (accent: PulseAccent) => void;
   onSetBeatSound: (sound: BeatSound) => void;
   onSetPitch: (pitch: number) => void;
@@ -399,6 +399,7 @@ function ConcertDeck({
   const bpmInputRef = useRef<HTMLInputElement | null>(null);
   const [tapPreview, setTapPreview] = useState<{ count: number; bpm: number | null }>({ count: 0, bpm: null });
   const [bpmDraft, setBpmDraft] = useState(String(Math.round(state.bpm)));
+  const [stageApplyAllSubdivision, setStageApplyAllSubdivision] = useState<SubdivisionCount | null>(null);
   const activeSubdivision = dominantSubdivision(state.pattern);
   const subdivisionOptions = getSubdivisionOptionsForBpm(state.bpm);
   const controlsLocked = stageLock;
@@ -529,7 +530,7 @@ function ConcertDeck({
           onSetAllAccents={onSetAllAccents}
         />
 
-        <div className="rounded-lg border border-primary/30 bg-[linear-gradient(145deg,hsl(var(--primary)/0.10),hsl(var(--background)/0.50))] p-3 md:p-5">
+        <div className="relative rounded-lg border border-primary/30 bg-[linear-gradient(145deg,hsl(var(--primary)/0.10),hsl(var(--background)/0.50))] p-3 md:p-5">
           <PolyrhythmWheel
             pattern={state.pattern}
             bpm={state.bpm}
@@ -540,12 +541,23 @@ function ConcertDeck({
               if (!controlsLocked) onToggleBeat(beatIndex);
             }}
             onSetBeatSubdivision={(beatIndex, pulses) => {
-              if (!controlsLocked) onSetBeatSubdivision(beatIndex, pulses);
+              if (!controlsLocked) {
+                onSetBeatSubdivision(beatIndex, pulses);
+                setStageApplyAllSubdivision(pulses);
+              }
             }}
-            onCyclePulseAccent={(beatIndex, pulseIndex) => {
-              if (!controlsLocked) onCyclePulseAccent(beatIndex, pulseIndex);
+            onCyclePulseStrength={(beatIndex, pulseIndex) => {
+              if (!controlsLocked) onCyclePulseStrength(beatIndex, pulseIndex);
             }}
             onTapTempo={tap}
+          />
+          <StageSubdivisionApplyAllTool
+            subdivision={controlsLocked ? null : stageApplyAllSubdivision}
+            onApply={() => {
+              if (!controlsLocked && stageApplyAllSubdivision) onSetSubdivision(stageApplyAllSubdivision);
+              setStageApplyAllSubdivision(null);
+            }}
+            onClose={() => setStageApplyAllSubdivision(null)}
           />
         </div>
 
@@ -620,6 +632,47 @@ function ConcertDeck({
         </div>
       </div>
     </section>
+  );
+}
+
+function StageSubdivisionApplyAllTool({
+  subdivision,
+  onApply,
+  onClose,
+}: {
+  subdivision: SubdivisionCount | null;
+  onApply: () => void;
+  onClose: () => void;
+}) {
+  if (!subdivision) return null;
+  const notation = SUBDIVISION_NOTATION[subdivision];
+  return (
+    <div className="absolute right-3 top-3 z-20 w-[min(13rem,calc(100%-1.5rem))] rounded-lg border border-primary/45 bg-background/95 p-2.5 shadow-xl shadow-background/30 backdrop-blur">
+      <div className="flex items-start gap-2">
+        <div className="grid size-11 shrink-0 place-items-center rounded-md border border-primary/40 bg-primary/15 font-serif text-2xl text-primary">
+          {notation.glyph}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="tiny-caps text-[9px] text-muted-foreground">Divide by {subdivision}</div>
+          <div className="truncate text-sm font-semibold text-foreground">{notation.label}</div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="grid size-7 shrink-0 place-items-center rounded-md border border-border text-muted-foreground transition-colors hover:text-foreground"
+          aria-label="Close subdivision action"
+        >
+          <X className="size-3.5" aria-hidden />
+        </button>
+      </div>
+      <button
+        type="button"
+        onClick={onApply}
+        className="mt-2 min-h-9 w-full rounded-md border border-primary/55 bg-primary/15 px-3 tiny-caps text-[10px] text-primary transition-colors hover:bg-primary/22"
+      >
+        Apply to all beats
+      </button>
+    </div>
   );
 }
 

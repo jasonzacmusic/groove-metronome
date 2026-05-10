@@ -170,6 +170,13 @@ export function nextPulseTapAccent(accent: PulseAccent): PulseAccent {
   return accent === "normal" ? "mute" : "normal";
 }
 
+export function nextPulseStrengthAccent(accent: PulseAccent): PulseAccent {
+  if (accent === "accent") return "ghost";
+  if (accent === "ghost") return "normal";
+  if (accent === "mute") return "normal";
+  return "accent";
+}
+
 export function accentForLevel(level: number): PulseAccent {
   const safeLevel = Math.max(0, Math.min(3, Math.round(level)));
   return LEVEL_TO_ACCENT[safeLevel] ?? "normal";
