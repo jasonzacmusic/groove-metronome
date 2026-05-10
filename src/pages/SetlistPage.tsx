@@ -9,9 +9,10 @@ import {
   BEAT_SOUND_OPTIONS,
   buildDefaultPattern,
   DOTTED_PLAYBACK_LABELS,
+  getSubdivisionOptionsForBpm,
   JAZZ_ASSIST_LABELS,
   SUBDIVISION_NOTATION,
-  SUBDIVISION_OPTIONS,
+  subdivisionShortcutForKey,
   TRIPLET_ASSIST_LABELS,
   type BeatPattern,
   type BeatSound,
@@ -394,6 +395,7 @@ function ConcertDeck({
   const [tapPreview, setTapPreview] = useState<{ count: number; bpm: number | null }>({ count: 0, bpm: null });
   const [bpmDraft, setBpmDraft] = useState(String(Math.round(state.bpm)));
   const activeSubdivision = dominantSubdivision(state.pattern);
+  const subdivisionOptions = getSubdivisionOptionsForBpm(state.bpm);
   const controlsLocked = stageLock;
   const activeAssist = stageAssistSummary(state.polyrhythm);
 
@@ -426,13 +428,20 @@ function ConcertDeck({
         || target instanceof HTMLSelectElement
         || target instanceof HTMLTextAreaElement
         || (target instanceof HTMLElement && target.isContentEditable);
-      if (editable || (event.key !== "t" && event.key !== "T")) return;
+      if (editable) return;
+      const shortcutSubdivision = subdivisionShortcutForKey(event.key, state.bpm);
+      if (shortcutSubdivision) {
+        event.preventDefault();
+        if (!controlsLocked) onSetSubdivision(shortcutSubdivision);
+        return;
+      }
+      if (event.key !== "t" && event.key !== "T") return;
       event.preventDefault();
       tap();
     };
     window.addEventListener("keydown", handler, { capture: true });
     return () => window.removeEventListener("keydown", handler, { capture: true });
-  });
+  }, [active, controlsLocked, onSetSubdivision, state.bpm]);
 
   const setMeter = (numerator: number, denominator: MeterDenominator) => {
     onSetTimeSignature({ numerator, denominator });
@@ -506,6 +515,14 @@ function ConcertDeck({
           </div>
         </div>
 
+        <StageTopPerformanceControls
+          timeSignature={state.timeSignature}
+          pattern={state.pattern}
+          controlsLocked={controlsLocked}
+          onSetMeter={setMeter}
+          onSetAllAccents={onSetAllAccents}
+        />
+
         <StageClockStrip
           nowMs={nowMs}
           concertElapsedMs={concertElapsedMs}
@@ -541,44 +558,12 @@ function ConcertDeck({
             <TapPreview preview={tapPreview} onTap={tap} onSetBpm={onSetBpm} disabled={controlsLocked} />
           </StageSettingsPanel>
 
-          <StageSettingsPanel title="Time Signature" summary={`${state.timeSignature.numerator}/${state.timeSignature.denominator}`}>
-            <div className="grid grid-cols-2 gap-3">
-              <StageStepper label="Beats" value={state.timeSignature.numerator} onMinus={() => setMeter(clamp(state.timeSignature.numerator - 1, 1, 16), state.timeSignature.denominator as MeterDenominator)} onPlus={() => setMeter(clamp(state.timeSignature.numerator + 1, 1, 16), state.timeSignature.denominator as MeterDenominator)} disabled={controlsLocked} />
-              <StageDenominatorPad value={state.timeSignature.denominator as MeterDenominator} onChange={(denominator) => setMeter(state.timeSignature.numerator, denominator)} disabled={controlsLocked} />
-            </div>
-            <div className="mt-3 grid grid-cols-4 gap-2">
-              {([3, 4, 5, 6, 7, 9, 11, 12] as const).map((numerator) => (
-                <StageTile
-                  key={numerator}
-                  label={`${numerator}/${state.timeSignature.denominator}`}
-                  active={state.timeSignature.numerator === numerator}
-                  disabled={controlsLocked}
-                  onPress={() => setMeter(numerator, state.timeSignature.denominator as MeterDenominator)}
-                >
-                  {numerator}
-                </StageTile>
-              ))}
-            </div>
-          </StageSettingsPanel>
-
-          <StageSettingsPanel title="Accents" summary="0 · ● ◆">
-            <div className="grid grid-cols-5 gap-2">
-              <StageAccentTile label="Mute all" symbol="0" active={allPulsesAre(state.pattern, "mute")} disabled={controlsLocked} onPress={() => onSetAllAccents("mute")} />
-              <StageAccentTile label="Ghost all" symbol="·" active={allPulsesAre(state.pattern, "ghost")} disabled={controlsLocked} onPress={() => onSetAllAccents("ghost")} />
-              <StageAccentTile label="Normal all" symbol="●" active={allPulsesAre(state.pattern, "normal")} disabled={controlsLocked} onPress={() => onSetAllAccents("normal")} />
-              <StageAccentTile label="Accent all" symbol="◆" active={allPulsesAre(state.pattern, "accent")} disabled={controlsLocked} onPress={() => onSetAllAccents("accent")} />
-              <StageTile label="Reset live accents" disabled={controlsLocked} onPress={() => onSetAllAccents("normal")}>
-                <RotateCcw className="size-5" />
-              </StageTile>
-            </div>
-          </StageSettingsPanel>
-
           <StageSettingsPanel
             title="Subdivision"
             summary={activeSubdivision ? SUBDIVISION_NOTATION[activeSubdivision].glyph : "Mix"}
           >
             <div className="grid grid-cols-4 gap-2">
-              {SUBDIVISION_OPTIONS.map((subdivision) => (
+              {subdivisionOptions.map((subdivision) => (
                 <StageTile
                   key={subdivision}
                   label={SUBDIVISION_NOTATION[subdivision].label}
@@ -706,6 +691,73 @@ function StageTempoNudges({ disabled, onAdjustBpm }: { disabled?: boolean; onAdj
           </button>
         </div>
       ))}
+    </div>
+  );
+}
+
+function StageTopPerformanceControls({
+  timeSignature,
+  pattern,
+  controlsLocked,
+  onSetMeter,
+  onSetAllAccents,
+}: {
+  timeSignature: TimeSignature;
+  pattern: BeatPattern[];
+  controlsLocked: boolean;
+  onSetMeter: (numerator: number, denominator: MeterDenominator) => void;
+  onSetAllAccents: (accent: PulseAccent) => void;
+}) {
+  return (
+    <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+      <StageSettingsPanel title="Time Signature" summary={`${timeSignature.numerator}/${timeSignature.denominator}`}>
+        <div className="grid grid-cols-2 gap-3">
+          <StageStepper
+            label="Beats"
+            value={timeSignature.numerator}
+            onMinus={() => onSetMeter(clamp(timeSignature.numerator - 1, 1, 16), timeSignature.denominator as MeterDenominator)}
+            onPlus={() => onSetMeter(clamp(timeSignature.numerator + 1, 1, 16), timeSignature.denominator as MeterDenominator)}
+            disabled={controlsLocked}
+          />
+          <StageDenominatorPad
+            value={timeSignature.denominator as MeterDenominator}
+            onChange={(denominator) => onSetMeter(timeSignature.numerator, denominator)}
+            disabled={controlsLocked}
+          />
+        </div>
+        <div className="mt-3 grid grid-cols-4 gap-2">
+          {([3, 4, 5, 6, 7, 9, 11, 12] as const).map((numerator) => (
+            <StageTile
+              key={numerator}
+              label={`${numerator}/${timeSignature.denominator}`}
+              active={timeSignature.numerator === numerator}
+              disabled={controlsLocked}
+              onPress={() => onSetMeter(numerator, timeSignature.denominator as MeterDenominator)}
+            >
+              {numerator}
+            </StageTile>
+          ))}
+        </div>
+      </StageSettingsPanel>
+
+      <div className="rounded-lg border border-border bg-background/35 p-3">
+        <div className="flex min-h-10 items-center justify-between gap-3">
+          <span>
+            <span className="tiny-caps block text-[10px] text-muted-foreground">Accents</span>
+            <span className="mt-1 block font-mono text-xs text-foreground/85">0 · ● ◆</span>
+          </span>
+          <RotateCcw className="size-4 text-primary" aria-hidden />
+        </div>
+        <div className="mt-3 grid grid-cols-5 gap-2">
+          <StageAccentTile label="Mute all" symbol="0" active={allPulsesAre(pattern, "mute")} disabled={controlsLocked} onPress={() => onSetAllAccents("mute")} />
+          <StageAccentTile label="Ghost all" symbol="·" active={allPulsesAre(pattern, "ghost")} disabled={controlsLocked} onPress={() => onSetAllAccents("ghost")} />
+          <StageAccentTile label="Normal all" symbol="●" active={allPulsesAre(pattern, "normal")} disabled={controlsLocked} onPress={() => onSetAllAccents("normal")} />
+          <StageAccentTile label="Accent all" symbol="◆" active={allPulsesAre(pattern, "accent")} disabled={controlsLocked} onPress={() => onSetAllAccents("accent")} />
+          <StageTile label="Reset live accents" disabled={controlsLocked} onPress={() => onSetAllAccents("normal")}>
+            <RotateCcw className="size-5" />
+          </StageTile>
+        </div>
+      </div>
     </div>
   );
 }

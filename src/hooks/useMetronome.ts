@@ -4,9 +4,9 @@ import * as Tone from "tone";
 import {
   buildDefaultPattern,
   DOTTED_PLAYBACK_LABELS,
+  getSubdivisionOptionsForBpm,
   JAZZ_ASSIST_LABELS,
   LEVEL_TO_ACCENT,
-  nextSubdivision,
   pitchToMultiplier,
   PULSE_ACCENT_LEVEL,
   PULSE_ACCENT_VOLUME,
@@ -824,10 +824,13 @@ export function useMetronome() {
       if (beatIndex < 0 || beatIndex >= prev.length) return prev;
       const next = [...prev];
       const cur = prev[beatIndex];
-      next[beatIndex] = withSubdivision(cur, nextSubdivision(cur.pulses));
+      const options = getSubdivisionOptionsForBpm(bpm);
+      const currentIndex = options.indexOf(cur.pulses);
+      const nextPulses = options[(currentIndex + 1) % options.length] ?? options[0] ?? 1;
+      next[beatIndex] = withSubdivision(cur, nextPulses);
       return next;
     });
-  }, []);
+  }, [bpm]);
 
   const cyclePulse = useCallback((beatIndex: number, pulseIndex: number) => {
     setPattern((prev) => {
@@ -864,8 +867,12 @@ export function useMetronome() {
       if (pulseIndex < 0 || pulseIndex >= beat.accents.length) return prev;
       const accents = [...beat.accents];
       const cur = accents[pulseIndex];
-      const lvl = (PULSE_ACCENT_LEVEL[cur] + 1) % 4;
-      accents[pulseIndex] = LEVEL_TO_ACCENT[lvl];
+      if (cur === "mute") {
+        accents[pulseIndex] = "normal";
+      } else {
+        const lvl = (PULSE_ACCENT_LEVEL[cur] + 1) % 4;
+        accents[pulseIndex] = LEVEL_TO_ACCENT[lvl];
+      }
       const next = [...prev];
       next[beatIndex] = { ...beat, accents };
       return next;

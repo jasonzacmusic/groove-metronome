@@ -41,11 +41,12 @@ import {
   BEAT_SOUND_OPTIONS,
   buildDefaultPattern,
   DOTTED_PLAYBACK_LABELS,
+  getSubdivisionOptionsForBpm,
   JAZZ_ASSIST_LABELS,
   METRONOME_PRESETS,
   pitchLabel,
   SUBDIVISION_NOTATION,
-  SUBDIVISION_OPTIONS,
+  subdivisionShortcutForKey,
   TRIPLET_ASSIST_LABELS,
   type BeatPattern,
   type DottedPlaybackMode,
@@ -169,6 +170,19 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
     if (!active) return;
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
+      const shortcutSubdivision = subdivisionShortcutForKey(e.key, state.bpm);
+      if (shortcutSubdivision) {
+        e.preventDefault();
+        if (selectedBeat === null) {
+          setGlobalSubdivision(shortcutSubdivision);
+        } else {
+          applyPatternToBeat(selectedBeat, {
+            pulses: shortcutSubdivision,
+            accents: Array.from({ length: shortcutSubdivision }, (_, pulseIndex) => state.pattern[selectedBeat]?.accents[pulseIndex] ?? "normal"),
+          });
+        }
+        return;
+      }
       if (e.code === "Space") { e.preventDefault(); }
       else if (e.code === "ArrowUp") { e.preventDefault(); adjustBpm(1); }
       else if (e.code === "ArrowDown") { e.preventDefault(); adjustBpm(-1); }
@@ -179,7 +193,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [active, adjustBpm, concertMode, tap]);
+  }, [active, adjustBpm, applyPatternToBeat, concertMode, selectedBeat, setGlobalSubdivision, state.bpm, state.pattern, tap]);
 
   const loadPreset = (idx: number) => {
     const p = METRONOME_PRESETS[idx];
@@ -387,9 +401,11 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
             <BeatMapRow
               bpm={state.bpm}
               pattern={state.pattern}
+              selectedBeat={selectedBeat}
               isPlaying={state.isPlaying}
               currentBeat={state.currentBeat}
               currentPulse={state.currentPulse}
+              onSelectBeat={setSelectedBeat}
               onSetSubdivision={(beatIndex, pulses) => applyPatternToBeat(beatIndex, {
                 pulses,
                 accents: Array.from({ length: pulses }, (_, pulseIndex) => {
@@ -1984,7 +2000,7 @@ function SubdivisionPalette({
   onApply: (subdivision: SubdivisionCount) => void;
   onReset: () => void;
 }) {
-  const options = subdivisionOptionsForBpm(bpm);
+  const options = getSubdivisionOptionsForBpm(bpm);
   return (
     <div className="rounded-md border border-border/70 bg-card/60 p-4">
       <SectionLabel
@@ -2030,21 +2046,25 @@ function SubdivisionPalette({
 function BeatMapRow({
   bpm,
   pattern,
+  selectedBeat,
   isPlaying,
   currentBeat,
   currentPulse,
+  onSelectBeat,
   onSetSubdivision,
   onCyclePulse,
 }: {
   bpm: number;
   pattern: BeatPattern[];
+  selectedBeat: number | null;
   isPlaying: boolean;
   currentBeat: number;
   currentPulse: number;
+  onSelectBeat: (beatIndex: number) => void;
   onSetSubdivision: (beatIndex: number, pulses: SubdivisionCount) => void;
   onCyclePulse: (beatIndex: number, pulseIndex: number) => void;
 }) {
-  const options = subdivisionOptionsForBpm(bpm);
+  const options = getSubdivisionOptionsForBpm(bpm);
   return (
     <div className="rounded-lg border border-border/70 bg-card/60 p-4">
       <SectionLabel title="Beat Map" hint="beats in one row" />
@@ -2056,9 +2076,10 @@ function BeatMapRow({
           return (
             <div
               key={beatIndex}
+              onPointerDown={() => onSelectBeat(beatIndex)}
               className={
                 "rounded-md border p-3 transition-colors " +
-                (activeBeat ? "bg-background/65" : "bg-background/35")
+                (selectedBeat === beatIndex ? "bg-primary/10 ring-1 ring-primary/60 " : activeBeat ? "bg-background/65 " : "bg-background/35 ")
               }
               style={{ borderColor: color }}
             >
@@ -2081,7 +2102,11 @@ function BeatMapRow({
               <div className="mt-3">
                 <select
                   value={beat.pulses}
-                  onChange={(e) => onSetSubdivision(beatIndex, Number(e.target.value) as SubdivisionCount)}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onChange={(e) => {
+                    onSelectBeat(beatIndex);
+                    onSetSubdivision(beatIndex, Number(e.target.value) as SubdivisionCount);
+                  }}
                   className="metronome-select min-h-10 text-xs"
                   aria-label={`Subdivision for beat ${beatIndex + 1}`}
                 >
@@ -2099,7 +2124,12 @@ function BeatMapRow({
                     <button
                       key={pulseIndex}
                       type="button"
-                      onPointerDown={(e) => { e.preventDefault(); onCyclePulse(beatIndex, pulseIndex); }}
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onSelectBeat(beatIndex);
+                        onCyclePulse(beatIndex, pulseIndex);
+                      }}
                       className="min-h-10 rounded-sm border text-center font-mono text-sm transition-colors"
                       style={{
                         borderColor: activePulse ? "hsl(var(--primary))" : "hsl(var(--border))",
@@ -2120,12 +2150,6 @@ function BeatMapRow({
       </div>
     </div>
   );
-}
-
-function subdivisionOptionsForBpm(bpm: number): SubdivisionCount[] {
-  if (bpm <= 80) return [1, 2, 3, 4, 5, 6, 7, 8];
-  if (bpm <= 100) return [1, 2, 3, 4, 5];
-  return [1, 2, 3, 4];
 }
 
 function PremiumToolNote({ label, body }: { label: string; body: string }) {

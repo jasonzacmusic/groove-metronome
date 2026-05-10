@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 
 import {
   SUBDIVISION_NOTATION,
-  SUBDIVISION_OPTIONS,
   TEMPO_PRESETS,
+  getSubdivisionOptionsForBpm,
   type BeatPattern,
   type SubdivisionCount,
   type TimeSignature,
@@ -41,7 +41,7 @@ export function TempoHeaderStrip({
   const tempoInputRef = useRef<HTMLInputElement | null>(null);
   const dom = dominantPulses(pattern);
   const tempoWord = getTempoMarking(bpm);
-  const subdivisionOptions = bpm <= 80 ? SUBDIVISION_OPTIONS : bpm <= 100 ? SUBDIVISION_OPTIONS.filter((n) => n <= 5) : SUBDIVISION_OPTIONS.filter((n) => n <= 4);
+  const subdivisionOptions = getSubdivisionOptionsForBpm(bpm);
 
   const toggle = (panel: OpenPanel) => setOpen((current) => (current === panel ? null : panel));
   const commitTempoDraft = (rawValue = tempoDraft) => {

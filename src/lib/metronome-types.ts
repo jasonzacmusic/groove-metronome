@@ -154,6 +154,18 @@ export const LEVEL_TO_ACCENT: PulseAccent[] = ["mute", "ghost", "normal", "accen
 
 export const SUBDIVISION_OPTIONS: SubdivisionCount[] = [1, 2, 3, 4, 5, 6, 7, 8];
 
+export function getSubdivisionOptionsForBpm(bpm: number): SubdivisionCount[] {
+  if (bpm <= 80) return [1, 2, 3, 4, 5, 6, 7, 8];
+  if (bpm <= 100) return [1, 2, 3, 4, 5];
+  return [1, 2, 3, 4];
+}
+
+export function subdivisionShortcutForKey(key: string, bpm: number): SubdivisionCount | null {
+  if (!/^[1-8]$/.test(key)) return null;
+  const subdivision = Number(key) as SubdivisionCount;
+  return getSubdivisionOptionsForBpm(bpm).includes(subdivision) ? subdivision : null;
+}
+
 export const SUBDIVISION_NOTATION: Record<SubdivisionCount, { glyph: string; label: string }> = {
   1: { glyph: "♩", label: "Crotchet" },
   2: { glyph: "♫", label: "2 quavers" },
