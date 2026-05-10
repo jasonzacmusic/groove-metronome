@@ -2,11 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as Tone from "tone";
 
 import {
+  accentForLevel,
   buildDefaultPattern,
   DOTTED_PLAYBACK_LABELS,
   getSubdivisionOptionsForBpm,
   JAZZ_ASSIST_LABELS,
-  LEVEL_TO_ACCENT,
+  nextPulseTapAccent,
   pitchToMultiplier,
   PULSE_ACCENT_VOLUME,
   SAMPLE_SOUND_SETS,
@@ -66,10 +67,6 @@ export interface MetronomeState {
   toneStarted: boolean;
   tapInfo: { count: number; avgBpm: number | null };
   accentVolumes: Record<PulseAccent, number>;
-}
-
-function nextPulseTapAccent(accent: PulseAccent): PulseAccent {
-  return accent === "normal" ? "mute" : "normal";
 }
 
 type ClickRole = "accent" | "normal" | "sub";
@@ -862,13 +859,12 @@ export function useMetronome() {
   }, []);
 
   const setPulseLevel = useCallback((beatIndex: number, pulseIndex: number, level: number) => {
-    const lvl = Math.max(0, Math.min(3, Math.round(level)));
     setPattern((prev) => {
       if (beatIndex < 0 || beatIndex >= prev.length) return prev;
       const beat = prev[beatIndex];
       if (pulseIndex < 0 || pulseIndex >= beat.accents.length) return prev;
       const accents = [...beat.accents];
-      accents[pulseIndex] = LEVEL_TO_ACCENT[lvl];
+      accents[pulseIndex] = accentForLevel(level);
       const next = [...prev];
       next[beatIndex] = { ...beat, accents };
       return next;

@@ -10,6 +10,7 @@ interface LevelMetersProps {
   currentBeat: number;
   currentPulse: number;
   onCycleBeatSubdivision: (beatIndex: number) => void;
+  onCyclePulse: (beatIndex: number, pulseIndex: number) => void;
   onSetPulseLevel: (beatIndex: number, pulseIndex: number, level: number) => void;
 }
 
@@ -29,6 +30,7 @@ export function LevelMeters({
   currentBeat,
   currentPulse,
   onCycleBeatSubdivision,
+  onCyclePulse,
   onSetPulseLevel,
 }: LevelMetersProps) {
   return (
@@ -51,6 +53,17 @@ export function LevelMeters({
                   const active = isActiveBeat && currentPulse === p;
                   return (
                     <div key={p} className="flex-1 flex flex-col-reverse gap-1 select-none">
+                      <button
+                        type="button"
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          onCyclePulse(i, p);
+                        }}
+                        aria-label={`Beat ${i + 1} pulse ${p + 1}: tap to toggle normal and off`}
+                        className="mb-1 min-h-7 rounded-sm border border-border/70 font-mono text-[10px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                      >
+                        {accent === "mute" ? "off" : "on"}
+                      </button>
                       {Array.from({ length: SEGMENTS }, (_, segIdx) => {
                         const filled = level >= segIdx + 1;
                         return (

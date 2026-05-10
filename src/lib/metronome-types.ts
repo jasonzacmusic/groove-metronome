@@ -152,6 +152,15 @@ export const PULSE_ACCENT_LEVEL: Record<PulseAccent, number> = {
 
 export const LEVEL_TO_ACCENT: PulseAccent[] = ["mute", "ghost", "normal", "accent"];
 
+export function nextPulseTapAccent(accent: PulseAccent): PulseAccent {
+  return accent === "normal" ? "mute" : "normal";
+}
+
+export function accentForLevel(level: number): PulseAccent {
+  const safeLevel = Math.max(0, Math.min(3, Math.round(level)));
+  return LEVEL_TO_ACCENT[safeLevel] ?? "normal";
+}
+
 export const SUBDIVISION_OPTIONS: SubdivisionCount[] = [1, 2, 3, 4, 5, 6, 7, 8];
 
 export function getSubdivisionOptionsForBpm(bpm: number): SubdivisionCount[] {

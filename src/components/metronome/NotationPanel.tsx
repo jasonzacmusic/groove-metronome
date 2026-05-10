@@ -11,6 +11,7 @@ import {
 } from "vexflow";
 
 import {
+  PULSE_ACCENT_LEVEL,
   type BeatPattern,
   type PolyrhythmConfig,
   type PulseAccent,
@@ -27,6 +28,7 @@ interface NotationPanelProps {
   currentPoly?: number;
   isPlaying: boolean;
   onCyclePulse?: (beatIndex: number, pulseIndex: number) => void;
+  onSetPulseLevel?: (beatIndex: number, pulseIndex: number, level: number) => void;
   onCycleBeatSubdivision?: (beatIndex: number) => void;
 }
 
@@ -83,6 +85,7 @@ export function NotationPanel({
   currentPoly = -1,
   isPlaying,
   onCyclePulse,
+  onSetPulseLevel,
   onCycleBeatSubdivision,
 }: NotationPanelProps) {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -214,6 +217,46 @@ export function NotationPanel({
               ))}
             </div>
           ))}
+        </div>
+      )}
+      {view !== "polyrhythm" && onSetPulseLevel && pattern.length > 0 && (
+        <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+          {pattern.flatMap((beat, beatIndex) =>
+            beat.accents.map((accent, pulseIndex) => (
+              <div key={`${beatIndex}-${pulseIndex}`} className="shrink-0 rounded-md border border-border/70 bg-background/45 p-1">
+                <div className="mb-1 text-center font-mono text-[10px] text-muted-foreground">
+                  {beatIndex + 1}.{pulseIndex + 1}
+                </div>
+                <div className="grid grid-cols-4 gap-1">
+                  {[
+                    [3, "◆"],
+                    [2, "●"],
+                    [1, "·"],
+                    [0, "0"],
+                  ].map(([level, symbol]) => (
+                    <button
+                      key={level}
+                      type="button"
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        onSetPulseLevel(beatIndex, pulseIndex, Number(level));
+                      }}
+                      aria-label={`Set beat ${beatIndex + 1} pulse ${pulseIndex + 1} level ${symbol}`}
+                      aria-pressed={PULSE_ACCENT_LEVEL[accent] === level}
+                      className={
+                        "grid size-7 place-items-center rounded-sm border font-serif text-sm transition-colors " +
+                        (PULSE_ACCENT_LEVEL[accent] === level
+                          ? "border-primary bg-primary/15 text-primary"
+                          : "border-border text-muted-foreground hover:border-primary hover:text-primary")
+                      }
+                    >
+                      {symbol}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )),
+          )}
         </div>
       )}
     </div>

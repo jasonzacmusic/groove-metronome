@@ -46,6 +46,7 @@ import {
   METRONOME_PRESETS,
   pitchLabel,
   PULSE_ACCENT_VOLUME,
+  PULSE_ACCENT_LEVEL,
   SUBDIVISION_NOTATION,
   subdivisionShortcutForKey,
   TRIPLET_ASSIST_LABELS,
@@ -421,6 +422,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
                 }),
               })}
               onCyclePulse={cyclePulse}
+              onSetPulseLevel={setPulseLevel}
             />
           ) : view === "levels" ? (
             <LevelMeters
@@ -429,6 +431,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
               currentBeat={state.currentBeat}
               currentPulse={state.currentPulse}
               onCycleBeatSubdivision={cycleBeatSubdivision}
+              onCyclePulse={cyclePulse}
               onSetPulseLevel={setPulseLevel}
             />
           ) : view === "polyrhythm" ? (
@@ -467,6 +470,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
             currentPoly={state.currentPoly}
             isPlaying={state.isPlaying}
             onCyclePulse={cyclePulse}
+            onSetPulseLevel={setPulseLevel}
             onCycleBeatSubdivision={cycleBeatSubdivision}
           />
         </div>
@@ -958,6 +962,7 @@ function NotationStage({
   currentPoly,
   isPlaying,
   onCyclePulse,
+  onSetPulseLevel,
   onCycleBeatSubdivision,
 }: {
   view: MetronomeView;
@@ -969,6 +974,7 @@ function NotationStage({
   currentPoly: number;
   isPlaying: boolean;
   onCyclePulse: (beatIndex: number, pulseIndex: number) => void;
+  onSetPulseLevel: (beatIndex: number, pulseIndex: number, level: number) => void;
   onCycleBeatSubdivision: (beatIndex: number) => void;
 }) {
   const previewHint = view === "polyrhythm" && polyrhythm.enabled
@@ -994,6 +1000,7 @@ function NotationStage({
           currentPoly={currentPoly}
           isPlaying={isPlaying}
           onCyclePulse={onCyclePulse}
+          onSetPulseLevel={onSetPulseLevel}
           onCycleBeatSubdivision={onCycleBeatSubdivision}
         />
       </div>
@@ -2103,6 +2110,7 @@ function BeatMapRow({
   onSelectBeat,
   onSetSubdivision,
   onCyclePulse,
+  onSetPulseLevel,
 }: {
   bpm: number;
   pattern: BeatPattern[];
@@ -2113,6 +2121,7 @@ function BeatMapRow({
   onSelectBeat: (beatIndex: number) => void;
   onSetSubdivision: (beatIndex: number, pulses: SubdivisionCount) => void;
   onCyclePulse: (beatIndex: number, pulseIndex: number) => void;
+  onSetPulseLevel: (beatIndex: number, pulseIndex: number, level: number) => void;
 }) {
   const options = getSubdivisionOptionsForBpm(bpm);
   return (
@@ -2193,6 +2202,41 @@ function BeatMapRow({
                   );
                 })}
               </div>
+              {selectedBeat === beatIndex && (
+                <div className="mt-3 space-y-1.5">
+                  {beat.accents.map((accent, pulseIndex) => (
+                    <div key={`level-${pulseIndex}`} className="grid grid-cols-[1.8rem_repeat(4,minmax(0,1fr))] items-center gap-1">
+                      <span className="font-mono text-[10px] text-muted-foreground">{pulseIndex + 1}</span>
+                      {([
+                        [3, "◆"],
+                        [2, "●"],
+                        [1, "·"],
+                        [0, "0"],
+                      ] as const).map(([level, symbol]) => (
+                        <button
+                          key={level}
+                          type="button"
+                          onPointerDown={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            onSetPulseLevel(beatIndex, pulseIndex, level);
+                          }}
+                          aria-label={`Set beat ${beatIndex + 1} pulse ${pulseIndex + 1} to ${symbol}`}
+                          aria-pressed={PULSE_ACCENT_LEVEL[accent] === level}
+                          className={
+                            "min-h-8 rounded-sm border font-serif text-sm transition-colors " +
+                            (PULSE_ACCENT_LEVEL[accent] === level
+                              ? "border-primary bg-primary/15 text-primary"
+                              : "border-border text-muted-foreground hover:border-primary hover:text-primary")
+                          }
+                        >
+                          {symbol}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
