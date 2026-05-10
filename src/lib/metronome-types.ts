@@ -5,9 +5,11 @@ export type BeatSound =
   | "studio"
   | "wood"
   | "cowbell"
-  | "sample-tight"
-  | "sample-clave"
   | "sample-marimba"
+  | "sample-clave"
+  | "sample-tight"
+  | "sample-shaker"
+  | "sample-tabla"
   | "sample-rim"
   | "sample-ping"
   | "voice-male"
@@ -21,6 +23,8 @@ export const BEAT_SOUND_LABELS: Record<BeatSound, string> = {
   "sample-tight": "Tight",
   "sample-clave": "Clave",
   "sample-marimba": "Marimba",
+  "sample-shaker": "Shaker",
+  "sample-tabla": "Tabla",
   "sample-rim": "Rim",
   "sample-ping": "Ping",
   "voice-male": "Voice M",
@@ -34,13 +38,15 @@ export interface BeatSoundOption {
 }
 
 export const BEAT_SOUND_OPTIONS: BeatSoundOption[] = [
+  { id: "sample-marimba", label: BEAT_SOUND_LABELS["sample-marimba"], family: "Sampled" },
+  { id: "wood", label: BEAT_SOUND_LABELS.wood, family: "Modeled" },
+  { id: "sample-clave", label: BEAT_SOUND_LABELS["sample-clave"], family: "Sampled" },
+  { id: "sample-shaker", label: BEAT_SOUND_LABELS["sample-shaker"], family: "Sampled" },
+  { id: "sample-tabla", label: BEAT_SOUND_LABELS["sample-tabla"], family: "Sampled" },
   { id: "tone", label: BEAT_SOUND_LABELS.tone, family: "Modeled" },
   { id: "studio", label: BEAT_SOUND_LABELS.studio, family: "Modeled" },
-  { id: "wood", label: BEAT_SOUND_LABELS.wood, family: "Modeled" },
   { id: "cowbell", label: BEAT_SOUND_LABELS.cowbell, family: "Modeled" },
   { id: "sample-tight", label: BEAT_SOUND_LABELS["sample-tight"], family: "Sampled" },
-  { id: "sample-clave", label: BEAT_SOUND_LABELS["sample-clave"], family: "Sampled" },
-  { id: "sample-marimba", label: BEAT_SOUND_LABELS["sample-marimba"], family: "Sampled" },
   { id: "sample-rim", label: BEAT_SOUND_LABELS["sample-rim"], family: "Sampled" },
   { id: "sample-ping", label: BEAT_SOUND_LABELS["sample-ping"], family: "Sampled" },
   { id: "voice-male", label: BEAT_SOUND_LABELS["voice-male"], family: "Voice" },
@@ -78,36 +84,44 @@ function voiceUrls(folder: "male" | "female"): Record<string, string> {
 }
 
 export const SAMPLE_SOUND_SETS: Partial<Record<BeatSound, SampleSoundSet>> = {
-  "sample-tight": {
-    urls: clickUrls("tight"),
-    gainDb: -2,
+  "sample-marimba": {
+    urls: clickUrls("marimba"),
+    gainDb: -3,
   },
   "sample-clave": {
     urls: clickUrls("clave"),
-    gainDb: -1,
+    gainDb: -3,
   },
-  "sample-marimba": {
-    urls: clickUrls("marimba"),
-    gainDb: -2,
+  "sample-shaker": {
+    urls: clickUrls("shaker"),
+    gainDb: -5,
+  },
+  "sample-tabla": {
+    urls: clickUrls("tabla"),
+    gainDb: -4,
+  },
+  "sample-tight": {
+    urls: clickUrls("tight"),
+    gainDb: -5,
   },
   "sample-rim": {
     urls: clickUrls("rim"),
-    gainDb: -3,
+    gainDb: -5,
   },
   "sample-ping": {
     urls: clickUrls("ping"),
-    gainDb: -4,
+    gainDb: -5,
   },
   "voice-male": {
     urls: voiceUrls("male"),
-    gainDb: -1,
+    gainDb: -4,
     beatNumbered: true,
     maxBeatNumber: 16,
     pitchResponsive: false,
   },
   "voice-female": {
     urls: voiceUrls("female"),
-    gainDb: -1,
+    gainDb: -4,
     beatNumbered: true,
     maxBeatNumber: 16,
     pitchResponsive: false,
@@ -277,6 +291,8 @@ export const SOUND_FREQS: Record<BeatSound, { accent: number; normal: number; su
   "sample-tight":   { accent: 1000, normal: 800,  sub: 600 },
   "sample-clave":   { accent: 2200, normal: 1800, sub: 1400 },
   "sample-marimba": { accent: 820,  normal: 620,  sub: 460 },
+  "sample-shaker":  { accent: 3000, normal: 2400, sub: 1800 },
+  "sample-tabla":   { accent: 540,  normal: 390,  sub: 280 },
   "sample-rim":     { accent: 1700, normal: 1300, sub: 900 },
   "sample-ping":    { accent: 1400, normal: 1050, sub: 760 },
   "voice-male":     { accent: 1000, normal: 800,  sub: 600 },
@@ -291,6 +307,8 @@ export const SOUND_ENVELOPES: Record<BeatSound, { attack: number; decay: number;
   "sample-tight":   { attack: 0.001, decay: 0.05, sustain: 0,    release: 0.05 },
   "sample-clave":   { attack: 0.001, decay: 0.03, sustain: 0,    release: 0.02 },
   "sample-marimba": { attack: 0.001, decay: 0.12, sustain: 0.01, release: 0.05 },
+  "sample-shaker":  { attack: 0.001, decay: 0.09, sustain: 0,    release: 0.04 },
+  "sample-tabla":   { attack: 0.001, decay: 0.14, sustain: 0,    release: 0.08 },
   "sample-rim":     { attack: 0.001, decay: 0.09, sustain: 0,    release: 0.04 },
   "sample-ping":    { attack: 0.001, decay: 0.12, sustain: 0,    release: 0.08 },
   "voice-male":     { attack: 0.001, decay: 0.05, sustain: 0,    release: 0.05 },

@@ -220,7 +220,7 @@ export function useMetronome() {
   const [timeSignature, setTimeSignature] = useState<TimeSignature>({ numerator: 4, denominator: 4 });
   const [currentBeat, setCurrentBeat] = useState(-1);
   const [currentPulse, setCurrentPulse] = useState(-1);
-  const [beatSound, setBeatSound] = useState<BeatSound>("wood");
+  const [beatSound, setBeatSound] = useState<BeatSound>("sample-marimba");
   const [pitch, setPitch] = useState(50);
   const [pattern, setPattern] = useState<BeatPattern[]>(() => buildDefaultPattern(4, 1));
   const [accentVolumes, setAccentVolumes] = useState<Record<PulseAccent, number>>({ ...PULSE_ACCENT_VOLUME });
@@ -407,6 +407,21 @@ export function useMetronome() {
   }, []);
 
   const playPolyClick = useCallback((time: number, freq: number, vol: number, voiceIndex: number, downbeat: boolean) => {
+    const players = samplePlayersRef.current;
+    const sampleSet = SAMPLE_SOUND_SETS[beatSoundRef.current];
+    if (players?.loaded && sampleSet && !sampleSet.beatNumbered) {
+      const role: ClickRole = downbeat ? "accent" : voiceIndex === 0 ? "normal" : "sub";
+      const sampleKey = players.has(role) ? role : players.has("normal") ? "normal" : "sub";
+      if (players.has(sampleKey)) {
+        const player = players.player(sampleKey);
+        const voiceRate = [1, 0.92, 1.08, 0.84][voiceIndex] ?? 1;
+        player.playbackRate = samplePlaybackRate(pitchRef.current) * voiceRate;
+        player.volume.setValueAtTime(vol, time);
+        player.start(time);
+        return;
+      }
+    }
+
     if (!polySynthsRef.current) {
       polySynthsRef.current = Array.from({ length: 4 }, (_, index) =>
         new Tone.Synth({

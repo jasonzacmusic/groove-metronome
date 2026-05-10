@@ -3,7 +3,18 @@ Curated metronome samples
 
 This folder contains a small, app-ready selection from the local
 `Reapertips - Metronome Sounds` pack, converted to mono 44.1 kHz 16-bit WAV
-for reliable browser, iOS, and Android playback.
+for reliable browser, iOS, and Android playback. The click families are
+peak-normalized as one-shots; musical accent, normal, ghost, and mute levels
+are controlled by the app instead of being baked randomly into the files.
+
+The sampled families are:
+
+- `marimba-*` — default rounded click.
+- `clave-*` — clearer hi-res clave source.
+- `tight-*`, `rim-*`, `ping-*` — secondary click colors.
+- `shaker-*` — short shaker-style subdivision color from the Reapertips set.
+- `tabla-*` — compact tabla-style percussion excerpts prepared from local
+  Indian percussion material for the app.
 
 `voices/` contains male and female count-off samples for beats 1-16 plus
 subdivision syllables for "and", "e", and "a". They are generated as mono
