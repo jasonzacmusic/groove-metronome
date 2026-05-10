@@ -8,18 +8,18 @@ import { buildDefaultPattern, type MeterDenominator, type TimeSignature } from "
 
 type Tab = "metronome" | "analyzer" | "setlist";
 export type MetronomeView = "beatmap" | "levels" | "polyrhythm" | "polymeter";
-type ThemeId = "midnight" | "concert" | "aqua" | "graphite" | "contrast";
+type ThemeId = "midnight" | "graphite" | "bright" | "concert" | "contrast";
 
 const THEME_STORAGE_KEY = "groove-metronome.theme.v1";
 const PUBLIC_URL = "https://metronome.nathanielschool.com/";
 const SHARE_TITLE = "Groove Metronome";
 const SHARE_TEXT = "Groove Metronome is a serious online metronome for musicians: beat maps, polyrhythm, polymeter, practice tools, and audio/MIDI analysis.";
-const THEMES: Array<{ id: ThemeId; label: string; colors: [string, string, string] }> = [
-  { id: "midnight", label: "Midnight", colors: ["#101525", "#facc15", "#4deee0"] },
-  { id: "concert", label: "Pulse Green", colors: ["#071b14", "#48e48a", "#f4729b"] },
-  { id: "aqua", label: "Aqua", colors: ["#062326", "#62f4c8", "#ffd166"] },
-  { id: "graphite", label: "Vintage Graphite", colors: ["#e6dbc4", "#4f382b", "#ad5f30"] },
-  { id: "contrast", label: "Contrast", colors: ["#020617", "#ffffff", "#39ff14"] },
+const THEMES: Array<{ id: ThemeId; label: string; colors: string[] }> = [
+  { id: "midnight", label: "Default Dark", colors: ["#101525", "#f8f3df", "#facc15", "#4deee0"] },
+  { id: "graphite", label: "Classic Graphite", colors: ["#0d0f11", "#e4ebf2", "#f5b642", "#5f6872"] },
+  { id: "bright", label: "Bright Graphite", colors: ["#eee7d8", "#1f1b17", "#bf6a24", "#6f584a"] },
+  { id: "concert", label: "Rose Garden", colors: ["#17051b", "#ff4f9f", "#4ee38a", "#ffd166"] },
+  { id: "contrast", label: "High Contrast", colors: ["#020617", "#ffffff", "#39ff14", "#39c7ff"] },
 ];
 
 const APP_TABS: Array<{
@@ -38,9 +38,9 @@ const AnalyzerPage = lazy(() => import("@/pages/AnalyzerPage").then((module) => 
 const SetlistPage = lazy(() => import("@/pages/SetlistPage").then((module) => ({ default: module.SetlistPage })));
 
 function readStoredTheme(): ThemeId {
-  if (typeof window === "undefined") return "graphite";
+  if (typeof window === "undefined") return "midnight";
   const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  return THEMES.some((theme) => theme.id === stored) ? (stored as ThemeId) : "graphite";
+  return THEMES.some((theme) => theme.id === stored) ? (stored as ThemeId) : "midnight";
 }
 
 function readInitialTab(): Tab {
@@ -321,6 +321,15 @@ function SeoFooter() {
 }
 
 function ThemeSwitch({ theme, onThemeChange }: { theme: ThemeId; onThemeChange: (theme: ThemeId) => void }) {
+  const swatchGradient = (colors: string[]) => {
+    const step = 100 / colors.length;
+    return `linear-gradient(135deg, ${colors.map((color, index) => {
+      const start = Math.round(index * step);
+      const end = Math.round((index + 1) * step);
+      return `${color} ${start}% ${end}%`;
+    }).join(", ")})`;
+  };
+
   return (
     <div className="flex flex-col gap-1.5 sm:items-end" aria-label="Color theme">
       <span className="tiny-caps text-[9px] text-muted-foreground/75">Theme</span>
@@ -342,7 +351,7 @@ function ThemeSwitch({ theme, onThemeChange }: { theme: ThemeId; onThemeChange: 
             >
               <span
                 className="theme-swatch-palette"
-                style={{ background: `linear-gradient(135deg, ${option.colors[0]} 0 38%, ${option.colors[1]} 38% 69%, ${option.colors[2]} 69% 100%)` }}
+                style={{ background: swatchGradient(option.colors) }}
               />
             </button>
           );

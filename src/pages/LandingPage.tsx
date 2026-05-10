@@ -44,11 +44,11 @@ const appSpaces = [
 ];
 
 const themes = [
-  { name: "Vintage Graphite", colors: ["#e6dbc4", "#4f382b", "#ad5f30"], note: "new default" },
-  { name: "Midnight", colors: ["#0c1020", "#facc15", "#4deee0"], note: "stage dark" },
-  { name: "Pulse Green", colors: ["#071b14", "#48e48a", "#f4729b"], note: "green + rose" },
-  { name: "Aqua", colors: ["#052327", "#62f4c8", "#ffd166"], note: "studio focus" },
-  { name: "Contrast", colors: ["#020617", "#ffffff", "#39ff14"], note: "high visibility" },
+  { name: "Default Dark", colors: ["#101525", "#f8f3df", "#facc15", "#4deee0"], note: "stage ready" },
+  { name: "Classic Graphite", colors: ["#0d0f11", "#e4ebf2", "#f5b642", "#5f6872"], note: "restored" },
+  { name: "Bright Graphite", colors: ["#eee7d8", "#1f1b17", "#bf6a24", "#6f584a"], note: "new bright" },
+  { name: "Rose Garden", colors: ["#17051b", "#ff4f9f", "#4ee38a", "#ffd166"], note: "pink + green" },
+  { name: "High Contrast", colors: ["#020617", "#ffffff", "#39ff14", "#39c7ff"], note: "maximum clarity" },
 ];
 
 const features = [
@@ -85,7 +85,7 @@ const versions = [
 
 export function LandingPage() {
   return (
-    <div data-theme="graphite" className="landing-page min-h-screen bg-background text-foreground">
+    <div data-theme="bright" className="landing-page min-h-screen bg-background text-foreground">
       <header className="landing-nav">
         <a href="/" className="landing-brand" aria-label="Open Groove Metronome">
           <img src="/brand/groove-mark.svg" alt="" className="h-10 w-10" />
@@ -192,11 +192,14 @@ export function LandingPage() {
         </section>
 
         <section id="themes" className="landing-section">
-          <SectionHeader eyebrow="Five designs" title="The app now leads with Vintage Graphite." />
+          <SectionHeader eyebrow="Five designs" title="Five clear looks for different players and stages." />
           <div className="landing-theme-grid">
             {themes.map((theme) => (
               <article className="landing-theme-card" key={theme.name}>
-                <div className="landing-theme-swatch" style={{ background: `linear-gradient(135deg, ${theme.colors[0]} 0 36%, ${theme.colors[1]} 36% 68%, ${theme.colors[2]} 68% 100%)` }} />
+                <div
+                  className="landing-theme-swatch"
+                  style={{ background: `linear-gradient(135deg, ${theme.colors.map((color, index) => `${color} ${Math.round((index * 100) / theme.colors.length)}% ${Math.round(((index + 1) * 100) / theme.colors.length)}%`).join(", ")})` }}
+                />
                 <h3>{theme.name}</h3>
                 <p>{theme.note}</p>
               </article>
