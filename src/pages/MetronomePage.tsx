@@ -431,6 +431,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
               main={state.polyrhythm.main}
               voices={state.polyrhythm.voices}
               enabled={state.polyrhythm.enabled}
+              bpm={state.bpm}
               isPlaying={state.isPlaying}
               currentBeat={state.currentBeat}
               currentPoly={state.currentPoly}
@@ -2274,6 +2275,7 @@ function PolyrhythmMode({
   voices,
   enabled,
   rate,
+  bpm,
   isPlaying,
   currentBeat,
   currentPoly,
@@ -2286,6 +2288,7 @@ function PolyrhythmMode({
   voices: number[];
   enabled: boolean;
   rate: PolyrhythmRate;
+  bpm: number;
   isPlaying: boolean;
   currentBeat: number;
   currentPoly: number;
@@ -2388,6 +2391,17 @@ function PolyrhythmMode({
         </div>
       </div>
 
+      <PolyrhythmBounceStage
+        voices={allVoices}
+        sharedSlots={sharedSlots}
+        enabled={enabled}
+        isPlaying={isPlaying}
+        bpm={bpm}
+        rate={rate}
+        currentBeat={currentBeat}
+        currentPoly={currentPoly}
+      />
+
       <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
         <NumberField label="Main" value={main} onChange={(value) => onMain(clamp(value, 2, 16))} />
         {voices.map((voice, index) => (
@@ -2476,6 +2490,149 @@ function PolyrhythmMode({
           <span className="tiny-caps block text-[11px] text-muted-foreground">Meeting point</span>
           <span className="font-mono text-lg tabular">Every {sharedSlots} slots</span>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function PolyrhythmBounceStage({
+  voices,
+  sharedSlots,
+  enabled,
+  isPlaying,
+  bpm,
+  rate,
+  currentBeat,
+  currentPoly,
+}: {
+  voices: number[];
+  sharedSlots: number;
+  enabled: boolean;
+  isPlaying: boolean;
+  bpm: number;
+  rate: PolyrhythmRate;
+  currentBeat: number;
+  currentPoly: number;
+}) {
+  const [now, setNow] = useState(() => performance.now());
+
+  useEffect(() => {
+    if (!isPlaying || !enabled) return;
+    let frame = 0;
+    const tick = () => {
+      setNow(performance.now());
+      frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [enabled, isPlaying]);
+
+  const visibleVoices = voices.slice(0, 4);
+  const cycleMs = Math.max(600, (60000 / Math.max(20, bpm)) * (rate === "double" ? 2 : 4));
+  const phase = isPlaying && enabled ? (now % cycleMs) / cycleMs : 0;
+  const colors = ["hsl(var(--primary))", "hsl(var(--slate-cyan))", "hsl(var(--amber))", "hsl(338 82% 66%)"];
+  const activeVoiceIndex = isPlaying && enabled
+    ? currentPoly >= 0 ? 1 : currentBeat >= 0 ? 0 : -1
+    : -1;
+
+  return (
+    <div className="mt-5 overflow-hidden rounded-lg border border-primary/25 bg-[radial-gradient(circle_at_50%_0%,hsl(var(--primary)/0.14),transparent_34%),linear-gradient(180deg,hsl(var(--background)/0.30),hsl(var(--card)/0.78))] p-3 md:p-4">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <span className="tiny-caps text-[10px] text-primary">Bounce Map</span>
+        <span className="font-mono text-xs text-muted-foreground">{sharedSlots} slot cycle</span>
+      </div>
+      <div className="space-y-3">
+        {visibleVoices.map((voice, voiceIndex) => (
+          <PolyrhythmBounceLane
+            key={`${voice}-${voiceIndex}`}
+            label={voiceIndex === 0 ? "Main" : `V${voiceIndex + 1}`}
+            voice={voice}
+            sharedSlots={sharedSlots}
+            phase={phase}
+            color={colors[voiceIndex] ?? colors[0]}
+            dimmed={!enabled}
+            active={activeVoiceIndex === voiceIndex}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PolyrhythmBounceLane({
+  label,
+  voice,
+  sharedSlots,
+  phase,
+  color,
+  dimmed,
+  active,
+}: {
+  label: string;
+  voice: number;
+  sharedSlots: number;
+  phase: number;
+  color: string;
+  dimmed: boolean;
+  active: boolean;
+}) {
+  const step = sharedSlots / voice;
+  const voicePosition = phase * voice;
+  const hitIndex = Math.floor(voicePosition) % voice;
+  const localPhase = voicePosition - Math.floor(voicePosition);
+  const x = voice <= 1 ? 0 : ((hitIndex + localPhase) / (voice - 1)) * 100;
+  const bounce = Math.sin(localPhase * Math.PI);
+  const y = 74 - bounce * 44;
+  const squash = localPhase < 0.08 || localPhase > 0.92 ? 1 : 0;
+
+  return (
+    <div className="grid grid-cols-[3.25rem_minmax(0,1fr)] items-center gap-3">
+      <div className="text-right">
+        <span className="block font-mono text-sm text-foreground">{voice}</span>
+        <span className="tiny-caps text-[9px] text-muted-foreground">{label}</span>
+      </div>
+      <div className="relative h-20 rounded-md border border-border/60 bg-background/35 shadow-[inset_0_-18px_28px_hsl(var(--ink)/0.22)]">
+        <div className="absolute inset-x-3 bottom-4 h-px bg-border/70" />
+        {Array.from({ length: voice }, (_, index) => {
+          const left = voice <= 1 ? 0 : (index / (voice - 1)) * 100;
+          const slot = index * step;
+          const meeting = slot === 0;
+          return (
+            <span
+              key={index}
+              className="absolute bottom-[0.78rem] grid size-3 -translate-x-1/2 place-items-center rounded-full border"
+              style={{
+                left: `calc(${left}% + ${left === 0 ? "0.75rem" : left === 100 ? "-0.75rem" : "0rem"})`,
+                borderColor: meeting ? color : "hsl(var(--border))",
+                background: meeting ? color : "hsl(var(--background))",
+                opacity: dimmed ? 0.42 : 1,
+              }}
+              aria-hidden
+            />
+          );
+        })}
+        <span
+          className="absolute bottom-3 h-2.5 w-9 -translate-x-1/2 rounded-full blur-[2px] transition-opacity"
+          style={{
+            left: `calc(${x}% + ${x === 0 ? "0.95rem" : x === 100 ? "-0.95rem" : "0rem"})`,
+            opacity: dimmed ? 0.22 : 0.45 + bounce * 0.25,
+            background: "hsl(var(--ink) / 0.72)",
+            transform: `translateX(-50%) scale(${1 + bounce * 0.5}, ${0.5 + (1 - bounce) * 0.35})`,
+          }}
+        />
+        <span
+          className="absolute grid size-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border transition-[box-shadow,opacity]"
+          style={{
+            left: `calc(${x}% + ${x === 0 ? "0.95rem" : x === 100 ? "-0.95rem" : "0rem"})`,
+            top: `${y}%`,
+            background: `radial-gradient(circle at 34% 28%, white, ${color} 24%, color-mix(in srgb, ${color} 62%, black) 100%)`,
+            borderColor: "hsl(var(--background) / 0.82)",
+            opacity: dimmed ? 0.42 : 1,
+            transform: `translate(-50%, -50%) scale(${1 + squash * 0.08}, ${1 - squash * 0.13})`,
+            boxShadow: active ? `0 0 22px ${color}` : `0 8px 18px hsl(var(--ink) / 0.28)`,
+          }}
+          aria-label={`${label} bouncing ${voice}`}
+        />
       </div>
     </div>
   );
