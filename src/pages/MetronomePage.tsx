@@ -1641,38 +1641,38 @@ function RhythmAssistPanel({
             ))}
           </select>
         </SelectField>
-        <div className="rounded-md border border-primary/35 bg-primary/10 p-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
+        <Collapsible defaultOpen={jazzMode !== "off"} className="rounded-md border border-primary/35 bg-primary/10">
+          <CollapsibleTrigger className="flex min-h-12 w-full items-center justify-between gap-3 px-3 text-left">
+            <span>
               <span className="tiny-caps block text-[10px] text-primary">Jazz Assist</span>
-              <p className="mt-1 text-sm leading-relaxed text-foreground/85">
-                Practice the pocket with 2 and 4, swung offbeats, or a Charleston push.
-              </p>
-            </div>
+              <span className="mt-1 block font-mono text-xs text-foreground/80">{jazzMode === "off" ? "Collapsed" : JAZZ_ASSIST_LABELS[jazzMode]}</span>
+            </span>
             <span className="rounded-full border border-primary/40 px-2 py-1 tiny-caps text-[9px] text-primary">Swing</span>
-          </div>
-          <div className="mt-3 grid gap-2">
-            {(Object.keys(JAZZ_ASSIST_LABELS) as JazzAssistMode[]).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  onJazzMode(mode);
-                }}
-                className={cn(
-                  "rounded-md border px-3 py-2 text-left transition-colors",
-                  jazzMode === mode
-                    ? "border-primary bg-primary/16 text-foreground"
-                    : "border-border/70 bg-background/48 text-muted-foreground hover:border-primary/60 hover:text-foreground",
-                )}
-              >
-                <span className="block font-mono text-sm">{JAZZ_ASSIST_LABELS[mode]}</span>
-                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{jazzAssistDescription(mode)}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="grid gap-2 border-t border-primary/20 p-3">
+              {(Object.keys(JAZZ_ASSIST_LABELS) as JazzAssistMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    onJazzMode(mode);
+                  }}
+                  className={cn(
+                    "rounded-md border px-3 py-2 text-left transition-colors",
+                    jazzMode === mode
+                      ? "border-primary bg-primary/16 text-foreground"
+                      : "border-border/70 bg-background/48 text-muted-foreground hover:border-primary/60 hover:text-foreground",
+                  )}
+                >
+                  <span className="block font-mono text-sm">{JAZZ_ASSIST_LABELS[mode]}</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{jazzAssistDescription(mode)}</span>
+                </button>
+              ))}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </div>
     </CollapsiblePanel>
   );

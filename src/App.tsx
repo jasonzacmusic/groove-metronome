@@ -79,6 +79,7 @@ export default function App() {
         || (target instanceof HTMLElement && target.isContentEditable);
       if (editable || event.code !== "Space") return;
       event.preventDefault();
+      if (event.repeat) return;
       if (tab === "analyzer") {
         prepareAnalyzerClick();
         if (metronome.state.isPlaying) metronome.stop();

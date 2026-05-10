@@ -714,23 +714,37 @@ function StageRhythmAssist({
   const toggleJazz = (mode: JazzAssistMode) => onJazzMode(jazzMode === mode ? "off" : mode);
 
   return (
-    <div className="grid grid-cols-4 gap-2">
-      <StageTile label="Dotted quarter" active={dottedMode === "quarter"} disabled={disabled} onPress={() => toggleDotted("quarter")}>♩.</StageTile>
-      <StageTile label="Dotted eighth" active={dottedMode === "eighth"} disabled={disabled} onPress={() => toggleDotted("eighth")}>♪.</StageTile>
-      <StageTile label="Dotted sixteenth" active={dottedMode === "sixteenth"} disabled={disabled} onPress={() => toggleDotted("sixteenth")}>♬.</StageTile>
-      <StageTile label="Half triplet" active={tripletMode === "half"} disabled={disabled} onPress={() => toggleTriplet("half")}>𝅗𝅥³</StageTile>
-      <StageTile label="Quarter triplet" active={tripletMode === "quarter"} disabled={disabled} onPress={() => toggleTriplet("quarter")}>♩³</StageTile>
-      <StageTile label="Eighth triplet" active={tripletMode === "eighth"} disabled={disabled} onPress={() => toggleTriplet("eighth")}>♪³</StageTile>
-      <StageTile label="Sextuplet" active={tripletMode === "sextuplet"} disabled={disabled} onPress={() => toggleTriplet("sextuplet")}>♬⁶</StageTile>
-      <StageTile label="Jazz 2 and 4" active={jazzMode === "twoFour"} disabled={disabled} onPress={() => toggleJazz("twoFour")}>2·4</StageTile>
-      <StageTile label="Jazz ands" active={jazzMode === "ands"} disabled={disabled} onPress={() => toggleJazz("ands")}>{"&"}</StageTile>
-      <StageTile label="Jazz 2 and 4 plus ands" active={jazzMode === "twoFourAnds"} disabled={disabled} onPress={() => toggleJazz("twoFourAnds")}>{"2&4"}</StageTile>
-      <StageTile label="Charleston" active={jazzMode === "charleston"} disabled={disabled} onPress={() => toggleJazz("charleston")}>{"1&"}</StageTile>
-      <StageTile label="Rhythm assist off" active={dottedMode === "off" && tripletMode === "off" && jazzMode === "off"} disabled={disabled} onPress={() => {
-        onDottedMode("off");
-        onTripletMode("off");
-        onJazzMode("off");
-      }}>0</StageTile>
+    <div className="space-y-2">
+      <div className="grid grid-cols-4 gap-2">
+        <StageTile label="Dotted quarter" active={dottedMode === "quarter"} disabled={disabled} onPress={() => toggleDotted("quarter")}>♩.</StageTile>
+        <StageTile label="Dotted eighth" active={dottedMode === "eighth"} disabled={disabled} onPress={() => toggleDotted("eighth")}>♪.</StageTile>
+        <StageTile label="Dotted sixteenth" active={dottedMode === "sixteenth"} disabled={disabled} onPress={() => toggleDotted("sixteenth")}>♬.</StageTile>
+        <StageTile label="Rhythm assist off" active={dottedMode === "off" && tripletMode === "off" && jazzMode === "off"} disabled={disabled} onPress={() => {
+          onDottedMode("off");
+          onTripletMode("off");
+          onJazzMode("off");
+        }}>0</StageTile>
+      </div>
+      <div className="grid grid-cols-4 gap-2">
+        <StageTile label="Half triplet" active={tripletMode === "half"} disabled={disabled} onPress={() => toggleTriplet("half")}>𝅗𝅥³</StageTile>
+        <StageTile label="Quarter triplet" active={tripletMode === "quarter"} disabled={disabled} onPress={() => toggleTriplet("quarter")}>♩³</StageTile>
+        <StageTile label="Eighth triplet" active={tripletMode === "eighth"} disabled={disabled} onPress={() => toggleTriplet("eighth")}>♪³</StageTile>
+        <StageTile label="Sextuplet" active={tripletMode === "sextuplet"} disabled={disabled} onPress={() => toggleTriplet("sextuplet")}>♬⁶</StageTile>
+      </div>
+      <Collapsible defaultOpen={jazzMode !== "off"} className="rounded-lg border border-primary/30 bg-primary/5">
+        <CollapsibleTrigger className="flex min-h-12 w-full items-center justify-between px-3 text-left">
+          <span className="tiny-caps text-[10px] text-primary">Jazz</span>
+          <span className="font-serif text-2xl leading-none text-primary">+</span>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="grid grid-cols-4 gap-2 border-t border-primary/20 p-2">
+            <StageTile label="Jazz 2 and 4" active={jazzMode === "twoFour"} disabled={disabled} onPress={() => toggleJazz("twoFour")}>2·4</StageTile>
+            <StageTile label="Jazz ands" active={jazzMode === "ands"} disabled={disabled} onPress={() => toggleJazz("ands")}>{"&"}</StageTile>
+            <StageTile label="Jazz 2 and 4 plus ands" active={jazzMode === "twoFourAnds"} disabled={disabled} onPress={() => toggleJazz("twoFourAnds")}>{"2&4"}</StageTile>
+            <StageTile label="Charleston" active={jazzMode === "charleston"} disabled={disabled} onPress={() => toggleJazz("charleston")}>{"1&"}</StageTile>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }

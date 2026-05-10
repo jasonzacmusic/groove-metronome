@@ -321,6 +321,30 @@ export function useMetronome() {
     engineSoundRef.current = null;
   }, []);
 
+  const silenceEngine = useCallback(() => {
+    try {
+      const players = samplePlayersRef.current as Tone.Players & { stopAll?: (time?: Tone.Unit.Time) => Tone.Players } | null;
+      players?.stopAll?.(Tone.now());
+    } catch {
+      // Some browsers can throw while a sample is between scheduled and started.
+    }
+    try {
+      synthRef.current?.triggerRelease(Tone.now());
+    } catch {
+      // ignore release errors during rapid transport toggles
+    }
+    try {
+      polySynthsRef.current?.forEach((synth) => synth.triggerRelease(Tone.now()));
+    } catch {
+      // ignore release errors during rapid transport toggles
+    }
+    try {
+      (Tone.Draw as { cancel?: (after?: number) => void }).cancel?.(0);
+    } catch {
+      // ignore draw cancellation differences between Tone builds
+    }
+  }, []);
+
   const ensureSoundEngine = useCallback(() => {
     const sound = beatSoundRef.current;
     if (engineSoundRef.current === sound && (synthRef.current || samplePlayersRef.current)) return;
@@ -627,8 +651,11 @@ export function useMetronome() {
 
   const stop = useCallback(() => {
     const transport = Tone.getTransport();
+    setIsPlaying(false);
     transport.stop();
-    transport.cancel();
+    transport.cancel(0);
+    transport.position = 0;
+    silenceEngine();
     scheduleIdRef.current = null;
     if (practiceIntervalRef.current) {
       clearInterval(practiceIntervalRef.current);
@@ -638,14 +665,13 @@ export function useMetronome() {
       clearInterval(rampIntervalRef.current);
       rampIntervalRef.current = null;
     }
-    setIsPlaying(false);
     setCurrentBeat(-1);
     setCurrentPulse(-1);
     setCurrentPoly(-1);
     setBarCount(0);
     setRampProgress(null);
     setTrainerPhase("playing");
-  }, []);
+  }, [silenceEngine]);
 
   const toggle = useCallback(() => {
     if (isPlaying) stop();
@@ -662,13 +688,42 @@ export function useMetronome() {
   useEffect(() => {
     if (!isPlaying) return;
     const transport = Tone.getTransport();
-    transport.cancel();
+    transport.cancel(0);
     beatRef.current = 0;
     barCountRef.current = 0;
     transport.timeSignature = timeSignature.numerator;
     scheduleLoop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeSignature.numerator, timeSignature.denominator]);
+
+  const polyrhythmSignature = JSON.stringify({
+    enabled: polyrhythm.enabled,
+    main: polyrhythm.main,
+    voices: polyrhythm.voices,
+    rate: polyrhythm.rate,
+    dottedMode: polyrhythm.dottedMode,
+    tripletMode: polyrhythm.tripletMode,
+    jazzMode: polyrhythm.jazzMode,
+    polymeterEnabled: polyrhythm.polymeterEnabled,
+    polymeterLanes: polyrhythm.polymeterLanes,
+  });
+
+  useEffect(() => {
+    if (!isPlaying) return;
+    const transport = Tone.getTransport();
+    silenceEngine();
+    transport.stop();
+    transport.cancel(0);
+    transport.position = 0;
+    beatRef.current = 0;
+    barCountRef.current = 0;
+    setCurrentBeat(-1);
+    setCurrentPulse(-1);
+    setCurrentPoly(-1);
+    scheduleLoop();
+    transport.start("+0.005");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [polyrhythmSignature]);
 
   useEffect(() => {
     if (isPlaying || toneStarted) ensureSoundEngine();
@@ -828,6 +883,9 @@ export function useMetronome() {
   }, []);
 
   const setPolyrhythm = useCallback((cfg: Partial<PolyrhythmConfig>) => {
+    if (cfg.jazzMode !== undefined && cfg.jazzMode !== "off") {
+      setSwing((currentSwing) => (currentSwing > 0 ? currentSwing : 60));
+    }
     setPolyrhythmState((prev) => {
       const next = { ...prev, ...cfg };
       if (cfg.dottedMode !== undefined && cfg.dottedMode !== "off") {
