@@ -19,6 +19,7 @@ interface LevelMetersProps {
 }
 
 const SEGMENTS = 3;
+const SEGMENT_LABELS = ["Soft", "Normal", "Loud"];
 
 function segmentColor(filled: boolean, accent: PulseAccent, isActive: boolean): string {
   if (!filled) return "transparent";
@@ -84,8 +85,8 @@ export function LevelMeters({
                               const targetLevel = filled && level === segIdx + 1 ? 0 : segIdx + 1;
                               onSetPulseLevel(i, p, targetLevel);
                             }}
-                            aria-label={`Beat ${i + 1} pulse ${p + 1} level ${segIdx + 1}`}
-                            className="flex-1 transition-colors"
+                            aria-label={`Set beat ${i + 1} pulse ${p + 1} to ${SEGMENT_LABELS[segIdx]}`}
+                            className="flex min-h-9 flex-1 items-center justify-center transition-colors"
                             style={{
                               background: segmentColor(filled, accent, active),
                               border: `1px solid ${filled ? "transparent" : "hsl(var(--border))"}`,
@@ -93,7 +94,14 @@ export function LevelMeters({
                               boxShadow: active && filled ? "0 0 8px hsla(36, 84%, 64%, 0.5)" : undefined,
                               minHeight: "10px",
                             }}
-                          />
+                          >
+                            <span
+                              className="tiny-caps text-[7px] leading-none"
+                              style={{ color: filled ? "hsl(var(--background) / 0.8)" : "hsl(var(--muted-foreground) / 0.72)" }}
+                            >
+                              {SEGMENT_LABELS[segIdx]}
+                            </span>
+                          </button>
                         );
                       })}
                     </div>

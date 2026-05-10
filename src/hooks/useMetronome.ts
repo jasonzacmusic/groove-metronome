@@ -219,7 +219,7 @@ function voiceSubdivisionKey(pulses: number, pulseIndex: number): string | null 
  * schedules one event per beat; sub-pulses fan out within the beat span.
  */
 export function useMetronome() {
-  const [bpm, setBpm] = useState(100);
+  const [bpm, setBpmState] = useState(100);
   const [isPlaying, setIsPlaying] = useState(false);
   const [timeSignature, setTimeSignature] = useState<TimeSignature>({ numerator: 4, denominator: 4 });
   const [currentBeat, setCurrentBeat] = useState(-1);
@@ -276,6 +276,7 @@ export function useMetronome() {
   const pitchRef = useRef(pitch);
   const timeSignatureRef = useRef(timeSignature);
   const bpmRef = useRef(bpm);
+  const isPlayingRef = useRef(isPlaying);
   const trainerEnabledRef = useRef(trainerEnabled);
   const trainerConfigRef = useRef(trainerConfig);
   const rampEnabledRef = useRef(rampEnabled);
@@ -290,6 +291,7 @@ export function useMetronome() {
   useEffect(() => { pitchRef.current = pitch; }, [pitch]);
   useEffect(() => { timeSignatureRef.current = timeSignature; }, [timeSignature]);
   useEffect(() => { bpmRef.current = bpm; }, [bpm]);
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   useEffect(() => { trainerEnabledRef.current = trainerEnabled; }, [trainerEnabled]);
   useEffect(() => { trainerConfigRef.current = trainerConfig; }, [trainerConfig]);
   useEffect(() => { rampEnabledRef.current = rampEnabled; }, [rampEnabled]);
@@ -378,6 +380,18 @@ export function useMetronome() {
     synthRef.current.triggerAttackRelease(1, "128n", Tone.now(), 0);
     engineSoundRef.current = sound;
   }, [disposeEngine]);
+
+  const setBpm = useCallback((nextBpm: number | ((current: number) => number)) => {
+    setBpmState((previous) => {
+      const raw = typeof nextBpm === "function" ? nextBpm(previous) : nextBpm;
+      const safe = clamp(Math.round(raw * 10) / 10, 20, 300);
+      bpmRef.current = safe;
+      if (isPlayingRef.current && !rampEnabledRef.current) {
+        Tone.getTransport().bpm.value = displayBpmToTransportBpm(safe, timeSignatureRef.current.denominator);
+      }
+      return safe;
+    });
+  }, []);
 
   const playClick = useCallback((time: number, freq: number, vol: number, role: ClickRole, beatNumber?: number, voiceToken?: string | null) => {
     if (vol === -Infinity) return;
@@ -651,6 +665,7 @@ export function useMetronome() {
     Tone.getContext().lookAhead = 0.01;
     const delaySeconds = clamp(options?.delaySeconds ?? 0.01, 0.01, 8);
     transport.start(`+${delaySeconds}`);
+    isPlayingRef.current = true;
     setIsPlaying(true);
     setPracticeSeconds(0);
 
@@ -663,6 +678,7 @@ export function useMetronome() {
 
   const stop = useCallback(() => {
     const transport = Tone.getTransport();
+    isPlayingRef.current = false;
     setIsPlaying(false);
     transport.stop();
     transport.cancel(0);

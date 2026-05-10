@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Download, Lock, Plus, RotateCcw, Share2, Tra
 
 import { Button } from "@/components/ui/button";
 import { PolyrhythmWheel } from "@/components/metronome/PolyrhythmWheel";
+import { TempoScrubBar } from "@/components/metronome/TempoScrubBar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { UseMetronomeReturn } from "@/hooks/useMetronome";
 import {
@@ -510,6 +511,9 @@ function ConcertDeck({
               />
             </div>
             <StageTempoNudges disabled={controlsLocked} onAdjustBpm={onAdjustBpm} />
+            <div className="mt-3">
+              <TempoScrubBar bpm={state.bpm} onSetBpm={onSetBpm} disabled={controlsLocked} compact />
+            </div>
           </div>
         </div>
 
@@ -857,9 +861,9 @@ function StageTopPerformanceControls({
         </div>
         <div className="mt-3 grid grid-cols-5 gap-2">
           <StageAccentTile label="Mute all" symbol="0" active={allPulsesAre(pattern, "mute")} disabled={controlsLocked} onPress={() => onSetAllAccents("mute")} />
-          <StageAccentTile label="Ghost all" symbol="·" active={allPulsesAre(pattern, "ghost")} disabled={controlsLocked} onPress={() => onSetAllAccents("ghost")} />
+          <StageAccentTile label="Soft all" symbol="·" active={allPulsesAre(pattern, "ghost")} disabled={controlsLocked} onPress={() => onSetAllAccents("ghost")} />
           <StageAccentTile label="Normal all" symbol="●" active={allPulsesAre(pattern, "normal")} disabled={controlsLocked} onPress={() => onSetAllAccents("normal")} />
-          <StageAccentTile label="Accent all" symbol="◆" active={allPulsesAre(pattern, "accent")} disabled={controlsLocked} onPress={() => onSetAllAccents("accent")} />
+          <StageAccentTile label="Loud all" symbol="◆" active={allPulsesAre(pattern, "accent")} disabled={controlsLocked} onPress={() => onSetAllAccents("accent")} />
           <StageTile label="Reset live accents" disabled={controlsLocked} onPress={() => onSetAllAccents("normal")}>
             <RotateCcw className="size-5" />
           </StageTile>

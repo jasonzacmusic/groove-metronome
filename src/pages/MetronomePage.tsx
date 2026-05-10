@@ -30,6 +30,7 @@ import { PatternTiles } from "@/components/metronome/PatternTiles";
 import { PolyrhythmWheel } from "@/components/metronome/PolyrhythmWheel";
 import { TapPad } from "@/components/metronome/TapPad";
 import { TempoHeaderStrip } from "@/components/metronome/TempoHeaderStrip";
+import { TempoScrubBar } from "@/components/metronome/TempoScrubBar";
 import { TransportButton } from "@/components/metronome/TransportButton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Slider } from "@/components/ui/slider";
@@ -1440,15 +1441,7 @@ function TransportDeck({
         </div>
       </div>
       <div className="mt-4 px-2">
-        <Slider
-          value={[state.bpm]}
-          min={20}
-          max={300}
-          step={1}
-          onValueChange={([v]) => onSetBpm(v)}
-          onDoubleClick={() => onSetBpm(100)}
-          title="Double-click to reset to 100 BPM"
-        />
+        <TempoScrubBar bpm={state.bpm} onSetBpm={onSetBpm} />
       </div>
     </div>
   );
@@ -2279,11 +2272,11 @@ function BeatMapRow({
                     <div key={`level-${pulseIndex}`} className="grid grid-cols-[1.8rem_repeat(4,minmax(0,1fr))] items-center gap-1">
                       <span className="font-mono text-[10px] text-muted-foreground">{pulseIndex + 1}</span>
                       {([
-                        [3, "◆"],
-                        [2, "●"],
-                        [1, "·"],
-                        [0, "0"],
-                      ] as const).map(([level, symbol]) => (
+                        [3, "◆", "Loud"],
+                        [2, "●", "Normal"],
+                        [1, "·", "Soft"],
+                        [0, "0", "Off"],
+                      ] as const).map(([level, symbol, label]) => (
                         <button
                           key={level}
                           type="button"
@@ -2292,16 +2285,17 @@ function BeatMapRow({
                             event.stopPropagation();
                             onSetPulseLevel(beatIndex, pulseIndex, level);
                           }}
-                          aria-label={`Set beat ${beatIndex + 1} pulse ${pulseIndex + 1} to ${symbol}`}
+                          aria-label={`Set beat ${beatIndex + 1} pulse ${pulseIndex + 1} to ${label}`}
                           aria-pressed={PULSE_ACCENT_LEVEL[accent] === level}
                           className={
-                            "min-h-8 rounded-sm border font-serif text-sm transition-colors " +
+                            "min-h-9 rounded-sm border px-1 font-serif text-sm transition-colors " +
                             (PULSE_ACCENT_LEVEL[accent] === level
                               ? "border-primary bg-primary/15 text-primary"
                               : "border-border text-muted-foreground hover:border-primary hover:text-primary")
                           }
                         >
-                          {symbol}
+                          <span className="block leading-none">{symbol}</span>
+                          <span className="tiny-caps mt-0.5 block text-[7px] leading-none">{label}</span>
                         </button>
                       ))}
                     </div>
