@@ -36,12 +36,14 @@ export interface RampConfig {
   startBpm: number;
   endBpm: number;
   durationBars: number;
+  stepBpm: number;
   loop: boolean;
 }
 
 export interface TrainerConfig {
-  playBars: number;
-  muteBars: number;
+  phraseBars: number;
+  mutePercent: number;
+  randomness: number;
 }
 
 export interface MetronomeState {
@@ -266,11 +268,11 @@ export function useMetronome() {
   const [currentPoly, setCurrentPoly] = useState(-1);
 
   const [trainerEnabled, setTrainerEnabled] = useState(false);
-  const [trainerConfig, setTrainerConfig] = useState<TrainerConfig>({ playBars: 2, muteBars: 2 });
+  const [trainerConfig, setTrainerConfig] = useState<TrainerConfig>({ phraseBars: 2, mutePercent: 50, randomness: 70 });
   const [trainerPhase, setTrainerPhase] = useState<"playing" | "muted">("playing");
 
   const [rampEnabled, setRampEnabled] = useState(false);
-  const [rampConfig, setRampConfig] = useState<RampConfig>({ startBpm: 80, endBpm: 160, durationBars: 2, loop: false });
+  const [rampConfig, setRampConfig] = useState<RampConfig>({ startBpm: 80, endBpm: 160, durationBars: 2, stepBpm: 5, loop: false });
   const [rampProgress, setRampProgress] = useState<MetronomeState["rampProgress"]>(null);
   const [hapticsEnabled, setHapticsEnabled] = useState(false);
 
@@ -298,6 +300,7 @@ export function useMetronome() {
   const isPlayingRef = useRef(isPlaying);
   const trainerEnabledRef = useRef(trainerEnabled);
   const trainerConfigRef = useRef(trainerConfig);
+  const trainerPhraseRef = useRef({ index: -1, muted: false, mutedRun: 0, playRun: 0 });
   const rampEnabledRef = useRef(rampEnabled);
   const rampConfigRef = useRef(rampConfig);
   const hapticsEnabledRef = useRef(hapticsEnabled);
@@ -480,14 +483,31 @@ export function useMetronome() {
 
       let muted = false;
       if (trainerEnabledRef.current) {
-        const { playBars, muteBars } = trainerConfigRef.current;
-        const total = Math.max(1, playBars + muteBars);
-        const phaseIdx = barCountRef.current % total;
-        muted = phaseIdx >= playBars;
-        if (beatIdx === 0) {
-          const phase: "playing" | "muted" = muted ? "muted" : "playing";
-          Tone.Draw.schedule(() => setTrainerPhase(phase), time);
+        const cfg = trainerConfigRef.current;
+        const phraseBars = Math.max(1, Math.round(cfg.phraseBars));
+        const beatsPerPhrase = Math.max(1, phraseBars * ts.numerator);
+        const globalBeat = barCountRef.current * ts.numerator + beatIdx;
+        const phraseIndex = Math.floor(globalBeat / beatsPerPhrase);
+
+        if (phraseIndex !== trainerPhraseRef.current.index) {
+          const baseChance = clamp(cfg.mutePercent / 100, 0, 1);
+          const randomAmount = clamp(cfg.randomness / 100, 0, 1);
+          const jitter = (Math.random() - 0.5) * 0.44 * randomAmount;
+          let muteChance = clamp(baseChance + jitter, 0, 1);
+
+          if (trainerPhraseRef.current.mutedRun >= 2) muteChance = Math.min(muteChance, 0.18);
+          if (trainerPhraseRef.current.playRun >= 3 && baseChance > 0.05) muteChance = Math.max(muteChance, 0.72);
+
+          const nextMuted = baseChance >= 1 ? true : baseChance <= 0 ? false : Math.random() < muteChance;
+          trainerPhraseRef.current = {
+            index: phraseIndex,
+            muted: nextMuted,
+            mutedRun: nextMuted ? trainerPhraseRef.current.mutedRun + 1 : 0,
+            playRun: nextMuted ? 0 : trainerPhraseRef.current.playRun + 1,
+          };
+          Tone.Draw.schedule(() => setTrainerPhase(nextMuted ? "muted" : "playing"), time);
         }
+        muted = trainerPhraseRef.current.muted;
       }
 
       const pulses = beatPat.pulses;
@@ -622,6 +642,46 @@ export function useMetronome() {
         barCountRef.current++;
         const bc = barCountRef.current;
         Tone.Draw.schedule(() => setBarCount(bc), time);
+
+        if (rampEnabledRef.current) {
+          const cfg = rampConfigRef.current;
+          const barsPerStep = Math.max(1, Math.round(cfg.durationBars));
+          const barInStep = ((bc - 1) % barsPerStep) + 1;
+          let nextBpm = bpmRef.current;
+          let shouldFinish = false;
+
+          if (barInStep === barsPerStep) {
+            const direction = cfg.endBpm >= cfg.startBpm ? 1 : -1;
+            const step = Math.max(0.1, Math.abs(cfg.stepBpm || 1));
+            const reachedTarget = direction > 0 ? nextBpm >= cfg.endBpm : nextBpm <= cfg.endBpm;
+
+            if (reachedTarget) {
+              if (cfg.loop) {
+                nextBpm = cfg.startBpm;
+              } else {
+                shouldFinish = true;
+              }
+            } else {
+              nextBpm = direction > 0
+                ? Math.min(cfg.endBpm, nextBpm + step)
+                : Math.max(cfg.endBpm, nextBpm - step);
+              shouldFinish = nextBpm === cfg.endBpm && !cfg.loop;
+            }
+
+            if (!shouldFinish || nextBpm !== bpmRef.current) {
+              bpmRef.current = nextBpm;
+              Tone.getTransport().bpm.value = displayBpmToTransportBpm(nextBpm, ts.denominator);
+            }
+          }
+
+          const progressBar = shouldFinish ? barsPerStep : barInStep;
+          const currentRampBpm = nextBpm;
+          Tone.Draw.schedule(() => {
+            setBpmState(currentRampBpm);
+            setRampProgress({ bar: progressBar, currentBpm: Math.round(currentRampBpm * 10) / 10 });
+            if (shouldFinish) setRampEnabled(false);
+          }, time);
+        }
       }
     }, `${timeSignatureRef.current.denominator}n`);
 
@@ -631,34 +691,14 @@ export function useMetronome() {
   const startRampCycle = useCallback(() => {
     const cfg = rampConfigRef.current;
     const transport = Tone.getTransport();
-    const totalBeats = cfg.durationBars * timeSignatureRef.current.numerator;
-    const beatDuration = beatDurationSeconds(cfg.startBpm, timeSignatureRef.current.denominator);
-    const totalTime = totalBeats * beatDuration;
+    if (rampIntervalRef.current) {
+      clearInterval(rampIntervalRef.current);
+      rampIntervalRef.current = null;
+    }
     transport.bpm.value = displayBpmToTransportBpm(cfg.startBpm, timeSignatureRef.current.denominator);
+    bpmRef.current = cfg.startBpm;
     setBpm(cfg.startBpm);
-    transport.bpm.rampTo(displayBpmToTransportBpm(cfg.endBpm, timeSignatureRef.current.denominator), totalTime);
-    setRampProgress({ bar: 1, currentBpm: cfg.startBpm });
-
-    const startTime = Date.now();
-    if (rampIntervalRef.current) clearInterval(rampIntervalRef.current);
-    rampIntervalRef.current = window.setInterval(() => {
-      const elapsed = (Date.now() - startTime) / 1000;
-      const progress = Math.min(elapsed / totalTime, 1);
-      const currentBpmVal = cfg.startBpm + (cfg.endBpm - cfg.startBpm) * progress;
-      const currentBar = Math.min(Math.floor(progress * cfg.durationBars) + 1, cfg.durationBars);
-      setBpm(Math.round(currentBpmVal));
-      setRampProgress({ bar: currentBar, currentBpm: Math.round(currentBpmVal) });
-      if (progress >= 1) {
-        if (rampIntervalRef.current) clearInterval(rampIntervalRef.current);
-        if (rampConfigRef.current.loop) {
-          startRampCycle();
-        } else {
-          setBpm(cfg.endBpm);
-          setRampEnabled(false);
-          setRampProgress(null);
-        }
-      }
-    }, 200);
+    setRampProgress({ bar: 0, currentBpm: cfg.startBpm });
   }, []);
 
   const start = useCallback(async (options?: StartOptions) => {
@@ -672,6 +712,7 @@ export function useMetronome() {
     }
     beatRef.current = 0;
     barCountRef.current = 0;
+    trainerPhraseRef.current = { index: -1, muted: false, mutedRun: 0, playRun: 0 };
     setCurrentBeat(-1);
     setCurrentPulse(-1);
 
@@ -719,6 +760,7 @@ export function useMetronome() {
     setBarCount(0);
     setRampProgress(null);
     setTrainerPhase("playing");
+    trainerPhraseRef.current = { index: -1, muted: false, mutedRun: 0, playRun: 0 };
   }, [silenceEngine]);
 
   const toggle = useCallback(() => {

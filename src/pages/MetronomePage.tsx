@@ -677,16 +677,17 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
         {/* Tempo Ramp */}
         <CollapsiblePanel
           title="Practice Ramp"
-          summary={state.rampEnabled ? `${state.rampConfig.startBpm} → ${state.rampConfig.endBpm}` : "Off"}
+          summary={state.rampEnabled ? `${state.rampConfig.startBpm} → ${state.rampConfig.endBpm} · +${state.rampConfig.stepBpm}/${state.rampConfig.durationBars} bars` : "Off"}
           icon={<TrendingUp className="size-4" />}
           trailing={<Switch checked={state.rampEnabled} onCheckedChange={setRampEnabled} />}
           defaultOpen
         >
-          <PremiumToolNote label="Practice builder" body="Ramp gradually across a phrase so speed increases feel musical, not sudden." />
-          <div className="mt-3 grid grid-cols-3 gap-2.5">
+          <PremiumToolNote label="Practice builder" body="Hold a tempo for a full phrase, then step up cleanly so the change feels musical." />
+          <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
             <NumberField label="Start" value={state.rampConfig.startBpm} onChange={(v) => setRampConfig({ ...state.rampConfig, startBpm: clamp(v, 20, 300) })} />
             <NumberField label="End" value={state.rampConfig.endBpm} onChange={(v) => setRampConfig({ ...state.rampConfig, endBpm: clamp(v, 20, 300) })} />
-            <NumberField label="Bars" value={state.rampConfig.durationBars} onChange={(v) => setRampConfig({ ...state.rampConfig, durationBars: Math.max(1, v) })} />
+            <NumberField label="Step" value={state.rampConfig.stepBpm} onChange={(v) => setRampConfig({ ...state.rampConfig, stepBpm: clamp(v, 0.5, 40) })} />
+            <NumberField label="Every bars" value={state.rampConfig.durationBars} onChange={(v) => setRampConfig({ ...state.rampConfig, durationBars: Math.max(1, Math.round(v)) })} />
           </div>
           <label className="mt-3 flex min-h-11 items-center justify-between gap-3 rounded-md border border-border/70 bg-background/55 px-3">
             <span className="tiny-caps text-[10px] text-foreground/90">Loop ramp</span>
@@ -695,7 +696,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
           {state.rampProgress && (
             <div className="mt-3">
               <p className="tiny-caps text-[10px] text-primary">
-                Bar {state.rampProgress.bar}/{state.rampConfig.durationBars} · {state.rampProgress.currentBpm} → {state.rampConfig.endBpm}
+                Hold {state.rampProgress.bar}/{state.rampConfig.durationBars} bars · {state.rampProgress.currentBpm} BPM
               </p>
               <div className="mt-1 w-full bg-border h-px overflow-hidden">
                 <div
@@ -710,21 +711,48 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
         {/* Mute trainer */}
         <CollapsiblePanel
           title="Mute Trainer"
-          summary={state.trainerEnabled ? `${state.trainerConfig.playBars} play / ${state.trainerConfig.muteBars} mute` : "Off"}
+          summary={state.trainerEnabled ? `${state.trainerConfig.mutePercent}% off · ${state.trainerConfig.phraseBars} bars` : "Off"}
           icon={<VolumeX className="size-4" />}
           trailing={<Switch checked={state.trainerEnabled} onCheckedChange={setTrainerEnabled} />}
           defaultOpen
         >
-          <PremiumToolNote label="Inner clock" body="Alternate playing and silent bars to test whether your pulse survives without the click." />
+          <PremiumToolNote label="Inner clock" body="Randomly remove full phrases so you learn to carry the pulse without the click." />
+          <div className="mt-3 rounded-md border border-border/70 bg-background/55 px-3 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="tiny-caps text-[10px] text-foreground/90">Off / On</span>
+              <span className="font-mono text-sm text-foreground">{state.trainerConfig.mutePercent}% / {100 - state.trainerConfig.mutePercent}%</span>
+            </div>
+            <Slider
+              className="mt-3"
+              value={[state.trainerConfig.mutePercent]}
+              min={0}
+              max={100}
+              step={5}
+              onValueChange={([value]) => setTrainerConfig({ ...state.trainerConfig, mutePercent: Math.round(value ?? 0) })}
+            />
+          </div>
           <div className="mt-3 grid grid-cols-2 gap-2.5">
-            <NumberField label="Play" value={state.trainerConfig.playBars} onChange={(v) => setTrainerConfig({ ...state.trainerConfig, playBars: Math.max(1, v) })} />
-            <NumberField label="Mute" value={state.trainerConfig.muteBars} onChange={(v) => setTrainerConfig({ ...state.trainerConfig, muteBars: Math.max(1, v) })} />
+            <NumberField label="Phrase bars" value={state.trainerConfig.phraseBars} onChange={(v) => setTrainerConfig({ ...state.trainerConfig, phraseBars: Math.max(1, Math.round(v)) })} />
+            <div>
+              <label className="tiny-caps block text-[10px] text-foreground/85">Random</label>
+              <div className="mt-1 rounded-md border border-border/75 bg-background/58 px-2.5 py-2">
+                <span className="font-mono text-sm text-foreground">{state.trainerConfig.randomness}%</span>
+                <Slider
+                  className="mt-2"
+                  value={[state.trainerConfig.randomness]}
+                  min={0}
+                  max={100}
+                  step={5}
+                  onValueChange={([value]) => setTrainerConfig({ ...state.trainerConfig, randomness: Math.round(value ?? 0) })}
+                />
+              </div>
+            </div>
           </div>
           <div className="flex gap-0.5 mt-3 h-1.5">
-            {Array.from({ length: state.trainerConfig.playBars + state.trainerConfig.muteBars }).map((_, i) => (
+            {Array.from({ length: 10 }).map((_, i) => (
               <div
                 key={i}
-                className={`flex-1 ${i < state.trainerConfig.playBars ? "bg-primary/70" : "bg-border"}`}
+                className={`flex-1 ${i < Math.round((100 - state.trainerConfig.mutePercent) / 10) ? "bg-primary/70" : "bg-border"}`}
               />
             ))}
           </div>
