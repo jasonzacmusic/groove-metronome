@@ -13,7 +13,6 @@ import {
   Smartphone,
   Sparkles,
   TabletSmartphone,
-  Watch,
 } from "lucide-react";
 
 const LIVE_URL = "https://metronome.nathanielschool.com/";
@@ -192,12 +191,6 @@ export function LandingPage() {
                 </article>
               );
             })}
-            <article className="landing-version-card">
-              <Watch className="size-6" />
-              <span>Companion target</span>
-              <h3>Apple Watch</h3>
-              <p>A SwiftUI watch target exists for tempo, play/stop, crown BPM, and haptic-focused practice after signing is configured.</p>
-            </article>
           </div>
         </section>
 
