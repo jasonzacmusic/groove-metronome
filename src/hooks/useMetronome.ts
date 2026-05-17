@@ -461,7 +461,13 @@ export function useMetronome() {
   }, []);
 
   const scheduleLoop = useCallback(() => {
-    const id = Tone.getTransport().scheduleRepeat((time) => {
+    const transport = Tone.getTransport();
+    if (scheduleIdRef.current !== null) {
+      transport.clear(scheduleIdRef.current);
+      scheduleIdRef.current = null;
+    }
+
+    const id = transport.scheduleRepeat((time) => {
       const beatIdx = beatRef.current;
       const ts = timeSignatureRef.current;
       const pat = patternRef.current;
@@ -774,13 +780,13 @@ export function useMetronome() {
     }
   }, [bpm, isPlaying, rampEnabled, timeSignature.denominator]);
 
-  // Reschedule when time signature changes mid-play (subdivisions are read live from ref)
+  // Keep the master clock running while meter edits change what gets played.
   useEffect(() => {
     if (!isPlaying) return;
     const transport = Tone.getTransport();
-    transport.cancel(0);
-    beatRef.current = 0;
-    barCountRef.current = 0;
+    const safeNumerator = Math.max(1, timeSignature.numerator);
+    beatRef.current = beatRef.current % safeNumerator;
+    setCurrentBeat((beat) => (beat >= 0 ? beat % safeNumerator : beat));
     transport.timeSignature = timeSignature.numerator;
     scheduleLoop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -800,18 +806,11 @@ export function useMetronome() {
 
   useEffect(() => {
     if (!isPlaying) return;
-    const transport = Tone.getTransport();
-    silenceEngine();
-    transport.stop();
-    transport.cancel(0);
-    transport.position = 0;
-    beatRef.current = 0;
-    barCountRef.current = 0;
-    setCurrentBeat(-1);
-    setCurrentPulse(-1);
-    setCurrentPoly(-1);
-    scheduleLoop();
-    transport.start("+0.005");
+    const safeNumerator = Math.max(1, timeSignatureRef.current.numerator);
+    const beat = beatRef.current % safeNumerator;
+    setCurrentBeat((current) => (current >= 0 ? current % safeNumerator : beat));
+    setCurrentPulse((current) => (current >= 0 ? current : 0));
+    setCurrentPoly((current) => (current >= 0 ? current : 0));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [polyrhythmSignature]);
 
