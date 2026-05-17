@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { clamp, cn } from "@/lib/utils";
 
@@ -9,12 +9,24 @@ interface TempoScrubBarProps {
   compact?: boolean;
 }
 
-function playScrubTick(direction: number, amount: number) {
+let scrubAudioContext: AudioContext | null = null;
+
+function getScrubAudioContext() {
   if (typeof window === "undefined") return;
   const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioContextClass) return;
+  if (!scrubAudioContext || scrubAudioContext.state === "closed") {
+    scrubAudioContext = new AudioContextClass();
+  }
+  if (scrubAudioContext.state === "suspended") {
+    void scrubAudioContext.resume().catch(() => undefined);
+  }
+  return scrubAudioContext;
+}
 
-  const context = new AudioContextClass();
+function playScrubTick(direction: number, amount: number) {
+  const context = getScrubAudioContext();
+  if (!context) return;
   const now = context.currentTime;
   const oscillator = context.createOscillator();
   const gain = context.createGain();
@@ -28,12 +40,25 @@ function playScrubTick(direction: number, amount: number) {
   gain.connect(context.destination);
   oscillator.start(now);
   oscillator.stop(now + 0.06);
-  window.setTimeout(() => void context.close().catch(() => undefined), 90);
 }
 
 export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false }: TempoScrubBarProps) {
   const dragRef = useRef<{ pointerId: number; startX: number; startBpm: number; lastBpm: number } | null>(null);
   const lastTickAtRef = useRef(0);
+  const lastTouchAtRef = useRef(0);
+  const [touchScrubAvailable, setTouchScrubAvailable] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const updateAvailability = () => {
+      const coarsePointer = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+      setTouchScrubAvailable(coarsePointer || navigator.maxTouchPoints > 0);
+    };
+    updateAvailability();
+    const media = window.matchMedia?.("(pointer: coarse)");
+    media?.addEventListener?.("change", updateAvailability);
+    return () => media?.removeEventListener?.("change", updateAvailability);
+  }, []);
 
   const setTempoWithCue = (nextBpm: number, direction: number, amount: number) => {
     const safe = clamp(Math.round(nextBpm), 20, 300);
@@ -46,11 +71,13 @@ export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false
     }
   };
 
+  const canTouchScrub = !disabled && touchScrubAvailable;
+
   return (
     <div
       className={cn(
         "group relative select-none touch-none rounded-lg border border-border/70 bg-background/35",
-        disabled ? "opacity-40" : "cursor-ew-resize hover:border-primary/55",
+        disabled ? "opacity-40" : canTouchScrub ? "cursor-ew-resize hover:border-primary/55" : "cursor-default",
         compact ? "p-2" : "p-3",
       )}
       role="slider"
@@ -58,10 +85,12 @@ export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false
       aria-valuemin={20}
       aria-valuemax={300}
       aria-valuenow={Math.round(bpm)}
-      tabIndex={disabled ? -1 : 0}
+      aria-disabled={!canTouchScrub}
+      tabIndex={-1}
       onPointerDown={(event) => {
-        if (disabled) return;
+        if (!canTouchScrub || event.pointerType !== "touch") return;
         event.preventDefault();
+        lastTouchAtRef.current = performance.now();
         event.currentTarget.setPointerCapture(event.pointerId);
         dragRef.current = {
           pointerId: event.pointerId,
@@ -72,7 +101,7 @@ export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false
       }}
       onPointerMove={(event) => {
         const drag = dragRef.current;
-        if (!drag || drag.pointerId !== event.pointerId || disabled) return;
+        if (!drag || drag.pointerId !== event.pointerId || !canTouchScrub || event.pointerType !== "touch") return;
         event.preventDefault();
         const delta = event.clientX - drag.startX;
         if (Math.abs(delta) < 3) return;
@@ -89,28 +118,19 @@ export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false
         dragRef.current = null;
       }}
       onWheel={(event) => {
-        if (disabled) return;
-        event.preventDefault();
-        const rawDelta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? -event.deltaX : -event.deltaY;
-        if (Math.abs(rawDelta) < 1) return;
-        const amount = clamp(Math.round(Math.abs(rawDelta) / 18), 1, 5);
-        setTempoWithCue(bpm + Math.sign(rawDelta) * amount, Math.sign(rawDelta), amount);
+        if (canTouchScrub) return;
+        event.stopPropagation();
       }}
       onKeyDown={(event) => {
-        if (disabled) return;
-        if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
-          event.preventDefault();
-          setTempoWithCue(bpm - 1, -1, 1);
-        }
-        if (event.key === "ArrowRight" || event.key === "ArrowUp") {
-          event.preventDefault();
-          setTempoWithCue(bpm + 1, 1, 1);
-        }
+        if (!canTouchScrub) return;
+        event.preventDefault();
       }}
       onDoubleClick={() => {
-        if (!disabled) setTempoWithCue(100, 100 >= bpm ? 1 : -1, Math.abs(100 - bpm));
+        if (canTouchScrub && performance.now() - lastTouchAtRef.current < 700) {
+          setTempoWithCue(100, 100 >= bpm ? 1 : -1, Math.abs(100 - bpm));
+        }
       }}
-      title="Slide to adjust tempo. Trackpad scroll also works. Double-click to reset to 100 BPM."
+      title={canTouchScrub ? "Slide with a finger to adjust tempo." : "Touch scrub is available on phone and iPad only."}
     >
       <div className="flex items-center justify-between gap-3">
         <span className="tiny-caps text-[9px] text-muted-foreground">Slide tempo</span>
@@ -122,7 +142,11 @@ export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false
           style={{ width: `${((clamp(bpm, 20, 300) - 20) / 280) * 100}%` }}
         />
       </div>
-      {!compact && <div className="mt-2 text-center font-mono text-[10px] text-muted-foreground">drag left/right · scroll trackpad · double-click 100</div>}
+      {!compact && (
+        <div className="mt-2 text-center font-mono text-[10px] text-muted-foreground">
+          {canTouchScrub ? "finger slide · double-tap 100" : "phone/iPad touch scrub only"}
+        </div>
+      )}
     </div>
   );
 }
