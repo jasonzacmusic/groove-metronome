@@ -92,6 +92,11 @@ const VOICE_ACCENT_VOLUME: Record<PulseAccent, number> = {
   mute: -Infinity,
 };
 
+type ToneContextWithRaw = Tone.Context & {
+  rawContext?: AudioContext;
+  _context?: AudioContext;
+};
+
 const POLYRHYTHM_VOICE_FREQS = [760, 560, 430, 330];
 const POLYRHYTHM_VOICE_OSCILLATORS = ["triangle", "sine", "triangle", "sine"] as const;
 
@@ -216,6 +221,11 @@ function samplePlaybackRate(pitch: number): number {
   return 0.82 + (clamped / 100) * 0.36;
 }
 
+function rawToneContext(): AudioContext | null {
+  const context = Tone.getContext() as ToneContextWithRaw;
+  return context.rawContext ?? context._context ?? null;
+}
+
 function numberedVoiceKey(role: ClickRole, beatNumber: number | undefined, maxBeatNumber = 16): string | null {
   if (role === "sub" || beatNumber === undefined) return null;
   const wrapped = ((Math.max(1, Math.round(beatNumber)) - 1) % maxBeatNumber) + 1;
@@ -304,6 +314,7 @@ export function useMetronome() {
   const rampEnabledRef = useRef(rampEnabled);
   const rampConfigRef = useRef(rampConfig);
   const hapticsEnabledRef = useRef(hapticsEnabled);
+  const unlockedOnceRef = useRef(false);
 
   useEffect(() => { patternRef.current = pattern; }, [pattern]);
   useEffect(() => { accentVolumesRef.current = accentVolumes; }, [accentVolumes]);
@@ -377,11 +388,50 @@ export function useMetronome() {
     }
   }, []);
 
+  const safariAudioUnlockPulse = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const context = rawToneContext();
+    if (!context || context.state === "closed") return;
+
+    try {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const now = context.currentTime;
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(440, now);
+      gain.gain.setValueAtTime(0.00001, now);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(now);
+      oscillator.stop(now + 0.025);
+    } catch {
+      // Safari can throw if it is still completing the user-gesture resume.
+    }
+  }, []);
+
+  const unlockAudio = useCallback(async () => {
+    await Tone.start();
+    const context = rawToneContext();
+    if (context && context.state !== "running") {
+      await context.resume().catch(() => undefined);
+    }
+    Tone.getContext().lookAhead = 0.02;
+    safariAudioUnlockPulse();
+    unlockedOnceRef.current = true;
+    setToneStarted(true);
+  }, [safariAudioUnlockPulse]);
+
   const ensureSoundEngine = useCallback(() => {
     const sound = beatSoundRef.current;
     if (engineSoundRef.current === sound && (synthRef.current || samplePlayersRef.current)) return;
 
     disposeEngine();
+
+    const modeledSound: BeatSound = sound === "cowbell" ? "cowbell" : sound === "studio" ? "studio" : sound === "tone" ? "tone" : "wood";
+    synthRef.current = new Tone.Synth({
+      oscillator: { type: SOUND_OSCILLATORS[modeledSound] ?? "sine" },
+      envelope: SOUND_ENVELOPES[modeledSound],
+    }).toDestination();
 
     const sampleSet = SAMPLE_SOUND_SETS[sound];
     if (sampleSet) {
@@ -394,11 +444,6 @@ export function useMetronome() {
       return;
     }
 
-    const env = SOUND_ENVELOPES[sound];
-    synthRef.current = new Tone.Synth({
-      oscillator: { type: SOUND_OSCILLATORS[sound] ?? "sine" },
-      envelope: env,
-    }).toDestination();
     synthRef.current.triggerAttackRelease(1, "128n", Tone.now(), 0);
     engineSoundRef.current = sound;
   }, [disposeEngine]);
@@ -417,28 +462,33 @@ export function useMetronome() {
 
   const playClick = useCallback((time: number, freq: number, vol: number, role: ClickRole, beatNumber?: number, voiceToken?: string | null) => {
     if (vol === -Infinity) return;
-    try {
-      const players = samplePlayersRef.current;
-      const sampleSet = SAMPLE_SOUND_SETS[beatSoundRef.current];
-      const voiceKey = sampleSet?.beatNumbered && voiceToken && players?.has(voiceToken)
-        ? voiceToken
-        : sampleSet?.beatNumbered
-        ? numberedVoiceKey(role, beatNumber, sampleSet.maxBeatNumber)
-        : null;
-      const sampleKey = voiceKey && players?.has(voiceKey)
-        ? voiceKey
-        : players?.has(role)
-          ? role
-          : "sub";
+    const players = samplePlayersRef.current;
+    const sampleSet = SAMPLE_SOUND_SETS[beatSoundRef.current];
+    const voiceKey = sampleSet?.beatNumbered && voiceToken && players?.has(voiceToken)
+      ? voiceToken
+      : sampleSet?.beatNumbered
+      ? numberedVoiceKey(role, beatNumber, sampleSet.maxBeatNumber)
+      : null;
+    const sampleKey = voiceKey && players?.has(voiceKey)
+      ? voiceKey
+      : players?.has(role)
+        ? role
+        : "sub";
 
-      if (players?.loaded && players.has(sampleKey)) {
+    if (players?.loaded && players.has(sampleKey)) {
+      try {
         const player = players.player(sampleKey);
         player.playbackRate = sampleSet?.pitchResponsive === false ? 1 : samplePlaybackRate(pitchRef.current);
         player.volume.setValueAtTime(vol, time);
         player.start(time);
         return;
+      } catch {
+        // Fall through to the modeled click. Safari can reject a decoded buffer
+        // start while recovering from a suspended/interrupted audio context.
       }
+    }
 
+    try {
       if (!synthRef.current) return;
       synthRef.current.triggerAttackRelease(freq, "32n", time, Tone.dbToGain(vol));
     } catch {
@@ -708,14 +758,15 @@ export function useMetronome() {
   }, []);
 
   const start = useCallback(async (options?: StartOptions) => {
-    if (!toneStarted) {
-      await Tone.start();
-      setToneStarted(true);
-    }
+    await unlockAudio();
     ensureSoundEngine();
     if (samplePlayersRef.current) {
-      await Tone.loaded();
+      await Promise.race([
+        Tone.loaded(),
+        new Promise<void>((resolve) => window.setTimeout(resolve, 700)),
+      ]);
     }
+    await unlockAudio();
     beatRef.current = 0;
     barCountRef.current = 0;
     trainerPhraseRef.current = { index: -1, muted: false, mutedRun: 0, playRun: 0 };
@@ -729,7 +780,7 @@ export function useMetronome() {
     transport.position = 0;
 
     scheduleLoop();
-    Tone.getContext().lookAhead = 0.01;
+    Tone.getContext().lookAhead = 0.02;
     const delaySeconds = clamp(options?.delaySeconds ?? 0.01, 0.01, 8);
     transport.start(`+${delaySeconds}`);
     isPlayingRef.current = true;
@@ -741,7 +792,7 @@ export function useMetronome() {
     }, 1000);
 
     if (rampEnabledRef.current) startRampCycle();
-  }, [toneStarted, ensureSoundEngine, scheduleLoop, startRampCycle]);
+  }, [unlockAudio, ensureSoundEngine, scheduleLoop, startRampCycle]);
 
   const stop = useCallback(() => {
     const transport = Tone.getTransport();
@@ -821,11 +872,9 @@ export function useMetronome() {
   // Pre-init Tone on first user gesture
   useEffect(() => {
     const init = () => {
-      if (!toneStarted) {
-        void Tone.start().then(() => {
-          setToneStarted(true);
+      if (!unlockedOnceRef.current) {
+        void unlockAudio().then(() => {
           ensureSoundEngine();
-          Tone.getContext().lookAhead = 0.01;
         });
       }
       document.removeEventListener("pointerdown", init);
@@ -837,7 +886,25 @@ export function useMetronome() {
       document.removeEventListener("pointerdown", init);
       document.removeEventListener("keydown", init);
     };
-  }, [toneStarted, ensureSoundEngine]);
+  }, [unlockAudio, ensureSoundEngine]);
+
+  useEffect(() => {
+    const resumeIfPlaying = () => {
+      if (!isPlayingRef.current || !unlockedOnceRef.current) return;
+      void unlockAudio();
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") resumeIfPlaying();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("pageshow", resumeIfPlaying);
+    window.addEventListener("focus", resumeIfPlaying);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pageshow", resumeIfPlaying);
+      window.removeEventListener("focus", resumeIfPlaying);
+    };
+  }, [unlockAudio]);
 
   useEffect(() => {
     return () => {
@@ -870,8 +937,8 @@ export function useMetronome() {
     if (tapResetTimerRef.current) clearTimeout(tapResetTimerRef.current);
     tapResetTimerRef.current = setTimeout(() => setTapInfo({ count: 0, avgBpm: null }), 3000);
 
-    if (!toneStarted) {
-      void Tone.start().then(() => { setToneStarted(true); ensureSoundEngine(); });
+    if (!unlockedOnceRef.current) {
+      void unlockAudio().then(() => { ensureSoundEngine(); });
     }
 
     if (taps.length >= 2) {
