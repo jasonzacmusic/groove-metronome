@@ -26,6 +26,7 @@ import {
   type PolyrhythmConfig,
   type PulseAccent,
   type SubdivisionCount,
+  type SwingFeel,
   type TimeSignature,
   type TripletAssistMode,
 } from "@/lib/metronome-types";
@@ -54,6 +55,7 @@ export interface MetronomeState {
   pitch: number;
   pattern: BeatPattern[];
   swing: number;
+  swingFeel: SwingFeel;
   polyrhythm: PolyrhythmConfig;
   currentBeat: number;
   currentPulse: number;
@@ -141,6 +143,28 @@ function tripletHitsPerBar(mode: TripletAssistMode, numerator: number, denominat
   if (mode === "quarter") return Math.max(1, Math.round((quarterNotesPerBar / 2) * 3));
   if (mode === "eighth") return Math.max(1, Math.round(quarterNotesPerBar * 3));
   if (mode === "sextuplet") return Math.max(1, Math.round(quarterNotesPerBar * 6));
+  return 0;
+}
+
+function swingPulseOffset(beatDuration: number, pulses: number, pulseIndex: number, swing: number, feel: SwingFeel): number {
+  if (swing === 0 || pulseIndex === 0) return 0;
+  const amount = clamp(swing / 100, -1, 1);
+
+  const canEighthSwing = pulses === 2 || pulses === 4;
+  const eighthPulse = pulses / 2;
+  if ((feel === "eighth" || (feel === "auto" && pulses === 2)) && canEighthSwing && pulseIndex === eighthPulse) {
+    return amount * (beatDuration / 6);
+  }
+
+  const canSixteenthSwing = pulses >= 4 && pulses % 4 === 0;
+  const sixteenthPulse = pulses / 4;
+  const isOddSixteenth = canSixteenthSwing
+    && pulseIndex % sixteenthPulse === 0
+    && Math.floor(pulseIndex / sixteenthPulse) % 2 === 1;
+  if ((feel === "sixteenth" || (feel === "auto" && canSixteenthSwing)) && isOddSixteenth) {
+    return amount * (beatDuration / 12);
+  }
+
   return 0;
 }
 
@@ -260,6 +284,7 @@ export function useMetronome() {
   const [pattern, setPattern] = useState<BeatPattern[]>(() => buildDefaultPattern(4, 1));
   const [accentVolumes, setAccentVolumes] = useState<Record<PulseAccent, number>>({ ...PULSE_ACCENT_VOLUME });
   const [swing, setSwing] = useState(0);
+  const [swingFeel, setSwingFeel] = useState<SwingFeel>("auto");
   const [barCount, setBarCount] = useState(0);
   const [polyrhythm, setPolyrhythmState] = useState<PolyrhythmConfig>({
     enabled: false,
@@ -302,6 +327,7 @@ export function useMetronome() {
   const patternRef = useRef(pattern);
   const accentVolumesRef = useRef(accentVolumes);
   const swingRef = useRef(swing);
+  const swingFeelRef = useRef(swingFeel);
   const polyrhythmRef = useRef(polyrhythm);
   const beatSoundRef = useRef(beatSound);
   const pitchRef = useRef(pitch);
@@ -319,6 +345,7 @@ export function useMetronome() {
   useEffect(() => { patternRef.current = pattern; }, [pattern]);
   useEffect(() => { accentVolumesRef.current = accentVolumes; }, [accentVolumes]);
   useEffect(() => { swingRef.current = swing; }, [swing]);
+  useEffect(() => { swingFeelRef.current = swingFeel; }, [swingFeel]);
   useEffect(() => { polyrhythmRef.current = polyrhythm; }, [polyrhythm]);
   useEffect(() => { beatSoundRef.current = beatSound; }, [beatSound]);
   useEffect(() => { pitchRef.current = pitch; }, [pitch]);
@@ -530,6 +557,7 @@ export function useMetronome() {
         sub: baseFreqs.sub * pitchMul,
       };
       const sw = swingRef.current;
+      const swingFeel = swingFeelRef.current;
       const beatPat = pat[beatIdx] ?? { pulses: 1 as SubdivisionCount, accents: ["normal" as PulseAccent] };
       const beatDuration = beatDurationSeconds(bpmRef.current, ts.denominator);
       const poly = polyrhythmRef.current;
@@ -568,11 +596,7 @@ export function useMetronome() {
 
       const pulses = beatPat.pulses;
       for (let p = 0; p < pulses; p++) {
-        let offset = (beatDuration / pulses) * p;
-        // Apply swing only when there are exactly 2 pulses (8th-note feel)
-        if (sw !== 0 && pulses === 2 && p === 1) {
-          offset += (sw / 100) * (beatDuration / 6);
-        }
+        const offset = (beatDuration / pulses) * p + swingPulseOffset(beatDuration, pulses, p, sw, swingFeel);
         const accent: PulseAccent = beatPat.accents[p] ?? "normal";
         const isFirstPulse = p === 0;
         const freq = isFirstPulse
@@ -1150,6 +1174,7 @@ export function useMetronome() {
       pitch,
       pattern,
       swing,
+      swingFeel,
       polyrhythm,
       currentBeat,
       currentPulse,
@@ -1173,6 +1198,7 @@ export function useMetronome() {
     setPitch,
     setPattern,
     setSwing,
+    setSwingFeel,
     setTrainerEnabled,
     setTrainerConfig,
     setRampEnabled,

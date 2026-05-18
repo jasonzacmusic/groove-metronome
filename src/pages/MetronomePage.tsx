@@ -50,6 +50,7 @@ import {
   PULSE_ACCENT_VOLUME,
   PULSE_ACCENT_LEVEL,
   SUBDIVISION_NOTATION,
+  SWING_FEEL_LABELS,
   TRIPLET_ASSIST_LABELS,
   type BeatPattern,
   type DottedPlaybackMode,
@@ -60,6 +61,7 @@ import {
   type PolyrhythmConfig,
   type PulseAccent,
   type SubdivisionCount,
+  type SwingFeel,
   type TimeSignature,
   type TripletAssistMode,
 } from "@/lib/metronome-types";
@@ -91,6 +93,7 @@ interface SavedSong {
   timeSignature: TimeSignature;
   pattern: BeatPattern[];
   swing: number;
+  swingFeel?: SwingFeel;
 }
 
 interface SetlistState {
@@ -114,6 +117,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
     setPitch,
     setPattern,
     setSwing,
+    setSwingFeel,
     setTrainerEnabled,
     setTrainerConfig,
     setRampEnabled,
@@ -204,6 +208,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
     setBpm(p.bpm);
     setTimeSignature({ numerator: p.timeSig[0], denominator: p.timeSig[1] });
     setSwing(p.swing);
+    setSwingFeel("auto");
     setPattern(p.pattern);
   };
 
@@ -211,6 +216,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
     setBpm(100);
     setTimeSignature({ numerator: 4, denominator: 4 });
     setSwing(0);
+    setSwingFeel("auto");
     setPattern(buildDefaultPattern(4, 1));
     setPolyrhythm({
       enabled: false,
@@ -254,6 +260,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
       timeSignature: state.timeSignature,
       pattern: state.pattern.map((beat) => ({ pulses: beat.pulses, accents: [...beat.accents] })),
       swing: state.swing,
+      swingFeel: state.swingFeel,
     };
     setSetlist((prev) => ({ ...prev, songs: [...prev.songs, nextSong] }));
     setSongName(`Song ${setlist.songs.length + 2}`);
@@ -263,6 +270,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
     setBpm(song.bpm);
     setTimeSignature(song.timeSignature);
     setSwing(song.swing);
+    setSwingFeel(song.swingFeel ?? "auto");
     setPattern(song.pattern.map((beat) => ({ pulses: beat.pulses, accents: [...beat.accents] })));
   };
 
@@ -317,6 +325,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
         pattern: song.pattern?.length ? song.pattern : buildDefaultPattern(song.timeSignature?.numerator ?? 4, 1),
         timeSignature: song.timeSignature ?? { numerator: 4, denominator: 4 },
         swing: song.swing ?? 0,
+        swingFeel: song.swingFeel ?? "auto",
       })),
     });
   };
@@ -568,6 +577,23 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
                 title="Double-click to reset swing"
               />
             </Field>
+            <div className="mt-3 grid grid-cols-3 gap-2" aria-label="Swing feel">
+              {(Object.keys(SWING_FEEL_LABELS) as SwingFeel[]).map((feel) => (
+                <button
+                  key={feel}
+                  type="button"
+                  onClick={() => setSwingFeel(feel)}
+                  className={cn(
+                    "rounded-sm border px-2 py-2 text-center tiny-caps text-[10px] transition-colors",
+                    state.swingFeel === feel
+                      ? "border-primary bg-primary/15 text-primary"
+                      : "border-border/70 bg-background/45 text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                  )}
+                >
+                  {SWING_FEEL_LABELS[feel]}
+                </button>
+              ))}
+            </div>
           </div>
         </CollapsiblePanel>
 

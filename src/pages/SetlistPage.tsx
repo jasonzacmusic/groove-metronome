@@ -13,6 +13,7 @@ import {
   getSubdivisionOptionsForBpm,
   JAZZ_ASSIST_LABELS,
   SUBDIVISION_NOTATION,
+  SWING_FEEL_LABELS,
   TRIPLET_ASSIST_LABELS,
   type BeatPattern,
   type BeatSound,
@@ -22,6 +23,7 @@ import {
   type PolyrhythmConfig,
   type PulseAccent,
   type SubdivisionCount,
+  type SwingFeel,
   type TimeSignature,
   type TripletAssistMode,
 } from "@/lib/metronome-types";
@@ -38,6 +40,7 @@ interface SavedSong {
   timeSignature: TimeSignature;
   pattern: BeatPattern[];
   swing: number;
+  swingFeel?: SwingFeel;
 }
 
 interface SetlistState {
@@ -65,7 +68,7 @@ interface SetlistPageProps {
 }
 
 export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
-  const { state, setBpm, setTimeSignature, setBeatSound, setPitch, setPattern, setSwing, setGlobalSubdivision, setPolyrhythm, setTrainerEnabled, setRampEnabled, setAccentVolume, stop, toggle, adjustBpm, setBeatSubdivision, toggleBeatEnabled, cyclePulseStrength } = metronome;
+  const { state, setBpm, setTimeSignature, setBeatSound, setPitch, setPattern, setSwing, setSwingFeel, setGlobalSubdivision, setPolyrhythm, setTrainerEnabled, setRampEnabled, setAccentVolume, stop, toggle, adjustBpm, setBeatSubdivision, toggleBeatEnabled, cyclePulseStrength } = metronome;
   const [setlist, setSetlist] = useState<SetlistState>(() => readSetlist());
   const [songName, setSongName] = useState("New song");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -128,6 +131,7 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
     setTimeSignature(song.timeSignature);
     setPattern(song.pattern.map((beat) => ({ pulses: beat.pulses, accents: [...beat.accents] })));
     setSwing(song.swing);
+    setSwingFeel(song.swingFeel ?? "auto");
     setTrainerEnabled(false);
     setRampEnabled(false);
     setPolyrhythm({
@@ -170,6 +174,7 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
       timeSignature: state.timeSignature,
       pattern: state.pattern.map((beat) => ({ pulses: beat.pulses, accents: [...beat.accents] })),
       swing: state.swing,
+      swingFeel: state.swingFeel,
     };
     setSetlist((prev) => ({ ...prev, songs: [...prev.songs, song] }));
     setSelectedIndex(setlist.songs.length);
@@ -500,6 +505,7 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
           onSetBeatSound={setBeatSound}
           onSetPitch={setPitch}
           onSetSwing={setSwing}
+          onSetSwingFeel={setSwingFeel}
           onSetAccentVolume={setAccentVolume}
           onSetPolyrhythm={setPolyrhythm}
           onPanicRecover={panicRecover}
@@ -566,6 +572,7 @@ function ConcertDeck({
   onSetBeatSound,
   onSetPitch,
   onSetSwing,
+  onSetSwingFeel,
   onSetAccentVolume,
   onSetPolyrhythm,
   onPanicRecover,
@@ -595,6 +602,7 @@ function ConcertDeck({
   onSetBeatSound: (sound: BeatSound) => void;
   onSetPitch: (pitch: number) => void;
   onSetSwing: (swing: number) => void;
+  onSetSwingFeel: (feel: SwingFeel) => void;
   onSetAccentVolume: (accent: Exclude<PulseAccent, "mute">, volume: number) => void;
   onSetPolyrhythm: (config: Partial<PolyrhythmConfig>) => void;
   onPanicRecover: () => void;
@@ -807,7 +815,7 @@ function ConcertDeck({
             </div>
           </StageSettingsPanel>
 
-          <StageSettingsPanel title="Sound" summary={`${BEAT_SOUND_OPTIONS.find((sound) => sound.id === state.beatSound)?.label ?? "Tone"} · ${state.swing}%`}>
+          <StageSettingsPanel title="Sound" summary={`${BEAT_SOUND_OPTIONS.find((sound) => sound.id === state.beatSound)?.label ?? "Tone"} · ${state.swing}% · ${SWING_FEEL_LABELS[state.swingFeel]}`}>
             <div className="grid grid-cols-3 gap-2">
               {BEAT_SOUND_OPTIONS.map((sound) => (
                 <StageTile
@@ -825,6 +833,19 @@ function ConcertDeck({
             <div className="mt-3 grid grid-cols-2 gap-3">
               <StageVerticalSlider label="Pitch" value={state.pitch} min={0} max={100} step={1} disabled={controlsLocked} onChange={onSetPitch} onReset={() => onSetPitch(50)} />
               <StageVerticalSlider label="Swing" value={clamp(state.swing, 0, 70)} min={0} max={70} step={5} disabled={controlsLocked} onChange={onSetSwing} />
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {(Object.keys(SWING_FEEL_LABELS) as SwingFeel[]).map((feel) => (
+                <StageTile
+                  key={feel}
+                  label={`${SWING_FEEL_LABELS[feel]} swing`}
+                  active={state.swingFeel === feel}
+                  disabled={controlsLocked}
+                  onPress={() => onSetSwingFeel(feel)}
+                >
+                  <span className="font-mono text-sm">{SWING_FEEL_LABELS[feel]}</span>
+                </StageTile>
+              ))}
             </div>
             <StageAccentVolumeControls
               accentVolumes={state.accentVolumes}
@@ -1548,6 +1569,7 @@ function readSetlistBackup(value: unknown): SetlistState | null {
         timeSignature: song.timeSignature || { numerator: 4, denominator: 4 },
         pattern: song.pattern?.length ? song.pattern : buildDefaultPattern(song.timeSignature?.numerator ?? 4, 1),
         swing: song.swing ?? 0,
+        swingFeel: song.swingFeel ?? "auto",
       })),
   };
 }
@@ -1590,6 +1612,7 @@ function readCsvSetlist(raw: string): SetlistState | null {
         timeSignature,
         pattern: buildDefaultPattern(timeSignature.numerator, 1),
         swing: 0,
+        swingFeel: "auto",
       };
     })
     .filter((song): song is SavedSong => Boolean(song));

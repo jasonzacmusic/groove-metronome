@@ -71,6 +71,7 @@ export default function App() {
     const denominator: MeterDenominator = timeSignature.denominator === 16 ? 16 : timeSignature.denominator === 8 ? 8 : 4;
     metronome.setPattern(buildDefaultPattern(timeSignature.numerator, 1));
     metronome.setSwing(0);
+    metronome.setSwingFeel("auto");
     metronome.setTrainerEnabled(false);
     metronome.setRampEnabled(false);
     metronome.setPolyrhythm({
