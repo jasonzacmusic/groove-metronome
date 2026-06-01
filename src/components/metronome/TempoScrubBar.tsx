@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 
 import { clamp, cn } from "@/lib/utils";
 
@@ -42,6 +42,15 @@ function playScrubTick(direction: number, amount: number) {
   oscillator.stop(now + 0.06);
 }
 
+function isTouchTempoDevice() {
+  if (typeof navigator === "undefined" || typeof window === "undefined") return false;
+  const coarsePointer = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+  const touchPoints = navigator.maxTouchPoints > 0;
+  const mobileLike = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent);
+  const desktopModeIpad = /\bMacintosh\b/.test(navigator.userAgent) && navigator.maxTouchPoints > 1;
+  return coarsePointer || touchPoints || mobileLike || desktopModeIpad;
+}
+
 export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false }: TempoScrubBarProps) {
   const dragRef = useRef<{ pointerId: number; startX: number; startBpm: number; lastBpm: number } | null>(null);
   const lastTickAtRef = useRef(0);
@@ -51,8 +60,7 @@ export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false
   useEffect(() => {
     if (typeof window === "undefined") return;
     const updateAvailability = () => {
-      const coarsePointer = window.matchMedia?.("(pointer: coarse)").matches ?? false;
-      setTouchScrubAvailable(coarsePointer || navigator.maxTouchPoints > 0);
+      setTouchScrubAvailable(isTouchTempoDevice());
     };
     updateAvailability();
     const media = window.matchMedia?.("(pointer: coarse)");
@@ -72,6 +80,8 @@ export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false
   };
 
   const canTouchScrub = !disabled && touchScrubAvailable;
+  const canUsePointer = (event: PointerEvent<HTMLElement>) =>
+    canTouchScrub && (event.pointerType === "touch" || event.pointerType === "pen");
 
   return (
     <div
@@ -88,7 +98,7 @@ export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false
       aria-disabled={!canTouchScrub}
       tabIndex={-1}
       onPointerDown={(event) => {
-        if (!canTouchScrub || event.pointerType !== "touch") return;
+        if (!canUsePointer(event)) return;
         event.preventDefault();
         lastTouchAtRef.current = performance.now();
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -101,7 +111,7 @@ export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false
       }}
       onPointerMove={(event) => {
         const drag = dragRef.current;
-        if (!drag || drag.pointerId !== event.pointerId || !canTouchScrub || event.pointerType !== "touch") return;
+        if (!drag || drag.pointerId !== event.pointerId || !canUsePointer(event)) return;
         event.preventDefault();
         const delta = event.clientX - drag.startX;
         if (Math.abs(delta) < 3) return;

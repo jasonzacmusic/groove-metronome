@@ -508,8 +508,39 @@
   border-top: 1px solid hsl(var(--border));
 }
 
+.stage-wheel-card > div {
+  max-width: min(100%, 680px);
+}
+
+.stage-wheel-card svg {
+  max-height: min(62dvh, 640px);
+}
+
 .app-space-nav-mobile {
   display: none;
+}
+
+@media (max-width: 1023px) {
+  .setlist-workspace {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .setlist-workspace > .stage-deck {
+    order: 1;
+  }
+
+  .setlist-workspace > .setlist-admin-panel {
+    order: 2;
+  }
+
+  .stage-deck .stage-wheel-card > div {
+    max-width: min(100%, 600px);
+  }
+
+  .stage-deck .stage-wheel-card svg {
+    max-height: min(50dvh, 580px);
+  }
 }
 
 @media (max-width: 767px) {
@@ -677,6 +708,61 @@
 
   .metronome-wheel-stage svg {
     max-height: min(52dvh, 430px);
+  }
+
+  .setlist-header-card {
+    padding: 0.65rem;
+  }
+
+  .setlist-header-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 0.65rem;
+  }
+
+  .setlist-title-field {
+    width: auto;
+  }
+
+  .setlist-title-field input {
+    font-size: 1.55rem;
+  }
+
+  .setlist-header-actions {
+    grid-column: 1 / -1;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.15rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .setlist-header-actions .stage-action {
+    min-width: max-content;
+    min-height: 2.1rem;
+    padding-inline: 0.65rem;
+    font-size: 0.54rem;
+  }
+
+  .stage-deck {
+    min-height: calc(100dvh - 9.8rem);
+  }
+
+  .stage-deck .stage-wheel-card {
+    margin-inline: -0.25rem;
+    padding: 0.45rem;
+  }
+
+  .stage-deck .stage-wheel-card > div {
+    max-width: min(100%, 72dvh);
+  }
+
+  .stage-deck .stage-wheel-card svg {
+    max-height: min(48dvh, 420px);
+  }
+
+  .stage-deck input[aria-label="Stage tempo"] {
+    font-size: clamp(3.1rem, 17vw, 4.2rem);
   }
 
   .metronome-essential-strip > div {

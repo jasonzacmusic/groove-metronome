@@ -101,6 +101,16 @@ type ToneContextWithRaw = Tone.Context & {
 
 const POLYRHYTHM_VOICE_FREQS = [760, 560, 430, 330];
 const POLYRHYTHM_VOICE_OSCILLATORS = ["triangle", "sine", "triangle", "sine"] as const;
+const AUDIO_UNLOCK_TIMEOUT_MS = 160;
+const SAMPLE_START_TIMEOUT_MS = 250;
+
+function shortAudioWait() {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, AUDIO_UNLOCK_TIMEOUT_MS));
+}
+
+async function settleAudioUnlock(promise: Promise<unknown>) {
+  await Promise.race([promise.then(() => undefined), shortAudioWait()]).catch(() => undefined);
+}
 
 function polyVoiceProfile(sound: BeatSound): { freqs: number[]; oscillators: Array<"sine" | "triangle" | "square">; gain: number } {
   if (sound === "sample-tabla") {
@@ -437,10 +447,10 @@ export function useMetronome() {
   }, []);
 
   const unlockAudio = useCallback(async () => {
-    await Tone.start();
+    await settleAudioUnlock(Tone.start());
     const context = rawToneContext();
     if (context && context.state !== "running") {
-      await context.resume().catch(() => undefined);
+      await settleAudioUnlock(context.resume());
     }
     Tone.getContext().lookAhead = 0.02;
     safariAudioUnlockPulse();
@@ -787,10 +797,10 @@ export function useMetronome() {
     if (samplePlayersRef.current) {
       await Promise.race([
         Tone.loaded(),
-        new Promise<void>((resolve) => window.setTimeout(resolve, 700)),
+        new Promise<void>((resolve) => window.setTimeout(resolve, SAMPLE_START_TIMEOUT_MS)),
       ]);
     }
-    await unlockAudio();
+    void unlockAudio();
     beatRef.current = 0;
     barCountRef.current = 0;
     trainerPhraseRef.current = { index: -1, muted: false, mutedRun: 0, playRun: 0 };
@@ -902,12 +912,18 @@ export function useMetronome() {
         });
       }
       document.removeEventListener("pointerdown", init);
+      document.removeEventListener("touchend", init);
+      document.removeEventListener("click", init);
       document.removeEventListener("keydown", init);
     };
     document.addEventListener("pointerdown", init);
+    document.addEventListener("touchend", init);
+    document.addEventListener("click", init);
     document.addEventListener("keydown", init);
     return () => {
       document.removeEventListener("pointerdown", init);
+      document.removeEventListener("touchend", init);
+      document.removeEventListener("click", init);
       document.removeEventListener("keydown", init);
     };
   }, [unlockAudio, ensureSoundEngine]);

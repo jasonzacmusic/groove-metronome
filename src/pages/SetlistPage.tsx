@@ -62,6 +62,17 @@ interface ConcertSessionState {
   songDurations: Record<string, SongDurationLog>;
 }
 
+type WakeLockSentinelLike = {
+  release: () => Promise<void>;
+  released?: boolean;
+};
+
+type NavigatorWithWakeLock = Navigator & {
+  wakeLock?: {
+    request: (type: "screen") => Promise<WakeLockSentinelLike>;
+  };
+};
+
 interface SetlistPageProps {
   metronome: UseMetronomeReturn;
   active?: boolean;
@@ -97,6 +108,36 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
     const id = window.setInterval(() => setClockNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!active) return;
+    let wakeLock: WakeLockSentinelLike | null = null;
+    let cancelled = false;
+    const requestWakeLock = async () => {
+      try {
+        const api = (navigator as NavigatorWithWakeLock).wakeLock;
+        if (!api || document.visibilityState !== "visible") return;
+        const lock = await api.request("screen");
+        if (cancelled) {
+          void lock.release().catch(() => undefined);
+          return;
+        }
+        wakeLock = lock;
+      } catch {
+        // Wake Lock is not available on every iOS/WebView build; stage mode still works without it.
+      }
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && (!wakeLock || wakeLock.released)) void requestWakeLock();
+    };
+    void requestWakeLock();
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibility);
+      if (wakeLock && !wakeLock.released) void wakeLock.release().catch(() => undefined);
+    };
+  }, [active]);
 
   useEffect(() => {
     try {
@@ -335,9 +376,9 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
 
   return (
     <div className="space-y-5 pb-12">
-      <section className="rounded-lg border border-primary/35 bg-card/80 p-3 md:p-4">
-        <div className="flex flex-wrap items-end gap-3 md:gap-4">
-          <div className="w-full max-w-xl md:w-[24rem]">
+      <section className="setlist-header-card rounded-lg border border-primary/35 bg-card/80 p-3 md:p-4">
+        <div className="setlist-header-row flex flex-wrap items-end gap-3 md:gap-4">
+          <div className="setlist-title-field w-full max-w-xl md:w-[24rem]">
             <span className="tiny-caps text-[10px] text-primary">Setlist Studio</span>
             <input
               value={setlist.name}
@@ -347,7 +388,7 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
             />
           </div>
           <SetlistHeaderClock nowMs={clockNow} />
-          <div className="flex flex-wrap gap-2 pb-0.5">
+          <div className="setlist-header-actions flex flex-wrap gap-2 pb-0.5">
             <StageAction label="Share" icon={<Share2 className="size-4" />} onClick={() => void shareSetlist()} />
             <StageAction label="Copy Link" icon={<Link className="size-4" />} onClick={() => void copySetlistLink()} />
             <StageAction label="Back up" icon={<Download className="size-4" />} onClick={exportSetlist} />
@@ -369,8 +410,8 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
         />
       </section>
 
-      <div className="grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
-        <aside className="space-y-4">
+      <div className="setlist-workspace grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
+        <aside className="setlist-admin-panel space-y-4">
           <div className="rounded-lg border border-border bg-card/60 p-4">
             <span className="tiny-caps text-[10px] text-muted-foreground">Add current setup</span>
             <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
@@ -666,7 +707,7 @@ function ConcertDeck({
   };
 
   return (
-    <section className="rounded-lg border border-border bg-card/70 p-4 md:p-6">
+    <section className="stage-deck rounded-lg border border-border bg-card/70 p-3 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="tiny-caps text-[10px] text-primary">Stage metronome</span>
         <button
@@ -684,7 +725,38 @@ function ConcertDeck({
         </button>
       </div>
 
-      <div className="mt-5 space-y-4">
+      <div className="mt-3 space-y-3 md:mt-5 md:space-y-4">
+        <div className="stage-wheel-card relative rounded-lg border border-primary/30 bg-[linear-gradient(145deg,hsl(var(--primary)/0.10),hsl(var(--background)/0.50))] p-2.5 md:p-5">
+          <PolyrhythmWheel
+            pattern={state.pattern}
+            bpm={state.bpm}
+            isPlaying={state.isPlaying}
+            currentBeat={state.currentBeat}
+            currentPulse={state.currentPulse}
+            onToggleBeat={(beatIndex) => {
+              if (!controlsLocked) onToggleBeat(beatIndex);
+            }}
+            onSetBeatSubdivision={(beatIndex, pulses) => {
+              if (!controlsLocked) {
+                onSetBeatSubdivision(beatIndex, pulses);
+                setStageApplyAllSubdivision(pulses);
+              }
+            }}
+            onCyclePulseStrength={(beatIndex, pulseIndex) => {
+              if (!controlsLocked) onCyclePulseStrength(beatIndex, pulseIndex);
+            }}
+            onTapTempo={tap}
+          />
+          <StageSubdivisionApplyAllTool
+            subdivision={controlsLocked ? null : stageApplyAllSubdivision}
+            onApply={() => {
+              if (!controlsLocked && stageApplyAllSubdivision) onSetSubdivision(stageApplyAllSubdivision);
+              setStageApplyAllSubdivision(null);
+            }}
+            onClose={() => setStageApplyAllSubdivision(null)}
+          />
+        </div>
+
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_17rem]">
           <div className="rounded-lg border border-border bg-background/35 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -730,6 +802,13 @@ function ConcertDeck({
           </div>
         </div>
 
+        <div className="grid gap-2 sm:grid-cols-[0.8fr_1.45fr_0.8fr_0.8fr]">
+          <StageButton label="Previous" icon={<ChevronLeft className="size-6" />} disabled={controlsLocked || songIndex <= 0} onClick={onPrev} />
+          <StagePlayButton playing={state.isPlaying} onToggle={onToggle} />
+          <StageButton label="Next" icon={<ChevronRight className="size-6" />} disabled={controlsLocked || songIndex >= songCount - 1} onClick={onNext} />
+          <StageButton label={tapPreview.bpm ? `${tapPreview.bpm}` : "Tap"} compact disabled={controlsLocked} onClick={tap} />
+        </div>
+
         <StageClockStrip concertElapsedMs={concertElapsedMs} songElapsedMs={songElapsedMs} songLogs={songLogs} />
 
         <StageTopPerformanceControls
@@ -740,42 +819,6 @@ function ConcertDeck({
           onSetAllAccents={onSetAllAccents}
         />
 
-        <div className="relative rounded-lg border border-primary/30 bg-[linear-gradient(145deg,hsl(var(--primary)/0.10),hsl(var(--background)/0.50))] p-3 md:p-5">
-          <PolyrhythmWheel
-            pattern={state.pattern}
-            bpm={state.bpm}
-            isPlaying={state.isPlaying}
-            currentBeat={state.currentBeat}
-            currentPulse={state.currentPulse}
-            onToggleBeat={(beatIndex) => {
-              if (!controlsLocked) onToggleBeat(beatIndex);
-            }}
-            onSetBeatSubdivision={(beatIndex, pulses) => {
-              if (!controlsLocked) {
-                onSetBeatSubdivision(beatIndex, pulses);
-                setStageApplyAllSubdivision(pulses);
-              }
-            }}
-            onCyclePulseStrength={(beatIndex, pulseIndex) => {
-              if (!controlsLocked) onCyclePulseStrength(beatIndex, pulseIndex);
-            }}
-            onTapTempo={tap}
-          />
-          <StageSubdivisionApplyAllTool
-            subdivision={controlsLocked ? null : stageApplyAllSubdivision}
-            onApply={() => {
-              if (!controlsLocked && stageApplyAllSubdivision) onSetSubdivision(stageApplyAllSubdivision);
-              setStageApplyAllSubdivision(null);
-            }}
-            onClose={() => setStageApplyAllSubdivision(null)}
-          />
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-[1fr_1.45fr_1fr]">
-          <StageButton label="Previous" icon={<ChevronLeft className="size-6" />} disabled={controlsLocked || songIndex <= 0} onClick={onPrev} />
-          <StagePlayButton playing={state.isPlaying} onToggle={onToggle} />
-          <StageButton label="Next" icon={<ChevronRight className="size-6" />} disabled={controlsLocked || songIndex >= songCount - 1} onClick={onNext} />
-        </div>
         <button
           type="button"
           disabled={controlsLocked}
@@ -791,7 +834,7 @@ function ConcertDeck({
         </button>
 
         <div className="grid gap-3 md:grid-cols-2">
-          <StageSettingsPanel title="Tap" summary={tapPreview.bpm ? `${tapPreview.bpm} BPM` : `${tapPreview.count} taps`} defaultOpen>
+          <StageSettingsPanel title="Tap" summary={tapPreview.bpm ? `${tapPreview.bpm} BPM` : `${tapPreview.count} taps`}>
             <TapPreview preview={tapPreview} onTap={tap} onSetBpm={onSetBpm} disabled={controlsLocked} />
           </StageSettingsPanel>
 
@@ -1403,7 +1446,7 @@ function StageAction({ label, icon, onClick }: { label: string; icon: ReactNode;
         event.preventDefault();
         onClick();
       }}
-      className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border bg-background/45 px-3 tiny-caps text-[10px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+      className="stage-action inline-flex min-h-10 items-center gap-2 rounded-md border border-border bg-background/45 px-3 tiny-caps text-[10px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
     >
       {icon}
       {label}
