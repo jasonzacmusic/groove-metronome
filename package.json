@@ -8,6 +8,7 @@
     "build": "vite build",
     "serve": "vite preview",
     "typecheck": "tsc --noEmit",
+    "check:public": "node scripts/check-public-health.mjs",
     "mobile:sync": "pnpm build && npx cap sync",
     "mobile:ios": "pnpm build && npx cap sync ios && npx cap open ios",
     "mobile:ios:build": "pnpm build && npx cap sync ios && xcodebuild -project ios/App/App.xcodeproj -scheme App -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build",
