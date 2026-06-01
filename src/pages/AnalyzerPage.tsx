@@ -7,9 +7,10 @@ import { ImportZone, type DetectedKind } from "@/components/analyzer/ImportZone"
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Slider } from "@/components/ui/slider";
 import { analyzeAudioTempo, type TempoAnalysisResult } from "@/lib/audio-tempo";
 import { analyzeMidi, type MidiAnalysis, type MidiPreviewNote } from "@/lib/midi-analyzer";
-import { cn } from "@/lib/utils";
+import { clamp, cn } from "@/lib/utils";
 import type { UseMetronomeReturn } from "@/hooks/useMetronome";
 
 interface AnalyzerPageProps {
@@ -235,7 +236,7 @@ function AnalyzerMetronomeDock({
 
   const commitDraft = () => {
     const value = Number(draft);
-    if (Number.isFinite(value)) setBpm(Math.max(20, Math.min(300, Math.round(value))));
+    if (Number.isFinite(value)) setBpm(clampBpm(value));
   };
   const toggleAnalyzerClick = () => {
     onPrepare();
@@ -264,14 +265,16 @@ function AnalyzerMetronomeDock({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setBpm(clampBpm(state.bpm / 2))}>1/2</Button>
+          <Button size="sm" variant="outline" onClick={() => adjustBpm(-5)}>-5</Button>
           <Button size="sm" variant="outline" onClick={() => adjustBpm(-1)}>-1</Button>
           <Button size="sm" onClick={toggleAnalyzerClick}>
             {state.isPlaying ? <Pause className="mr-2 size-4" /> : <Play className="mr-2 size-4" />}
             {state.isPlaying ? "Stop click" : "Play click"}
           </Button>
           <Button size="sm" variant="outline" onClick={() => adjustBpm(1)}>+1</Button>
-          <Button size="sm" variant="outline" onClick={() => setBpm(Math.max(20, Math.round(state.bpm / 2)))}>Half</Button>
-          <Button size="sm" variant="outline" onClick={() => setBpm(Math.min(300, Math.round(state.bpm * 2)))}>Double</Button>
+          <Button size="sm" variant="outline" onClick={() => adjustBpm(5)}>+5</Button>
+          <Button size="sm" variant="outline" onClick={() => setBpm(clampBpm(state.bpm * 2))}>2x</Button>
         </div>
       </div>
     </div>
@@ -417,15 +420,74 @@ function AudioWorkspace({
   metronome: UseMetronomeReturn;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const trackAudioContextRef = useRef<AudioContext | null>(null);
+  const trackSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const trackGainNodeRef = useRef<GainNode | null>(null);
   const clickSynthRef = useRef<Tone.Synth | null>(null);
   const clickTimerRef = useRef<number | null>(null);
+  const lastGlobalBpmRef = useRef(metronome.state.bpm);
   const lastClickTimeRef = useRef(-Infinity);
   const [currentTime, setCurrentTime] = useState(0);
   const [trackClick, setTrackClick] = useState(false);
   const [lockedPlayback, setLockedPlayback] = useState(false);
+  const [selectedBpm, setSelectedBpm] = useState(() => clampBpm(item.result?.bpm ?? metronome.state.bpm));
+  const [trackGain, setTrackGain] = useState(1);
   const result = item.result;
 
   const duration = result?.durationSec ?? audioRef.current?.duration ?? 0;
+  const applyAnalyzerBpm = (next: number | ((current: number) => number)) => {
+    const raw = typeof next === "function" ? next(selectedBpm) : next;
+    const safe = clampBpm(raw);
+    setSelectedBpm(safe);
+    metronome.setBpm(safe);
+    onUseAsBpm(safe);
+    return safe;
+  };
+
+  const ensureTrackGainNode = async (nextGain = trackGain) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (!trackAudioContextRef.current || !trackSourceRef.current || !trackGainNodeRef.current) {
+      const AudioContextCtor = window.AudioContext
+        ?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) {
+        audio.volume = Math.min(1, nextGain);
+        return;
+      }
+      try {
+        const context = new AudioContextCtor();
+        const source = context.createMediaElementSource(audio);
+        const gain = context.createGain();
+        source.connect(gain);
+        gain.connect(context.destination);
+        trackAudioContextRef.current = context;
+        trackSourceRef.current = source;
+        trackGainNodeRef.current = gain;
+      } catch {
+        audio.volume = Math.min(1, nextGain);
+        return;
+      }
+    }
+    audio.volume = 1;
+    trackGainNodeRef.current.gain.setValueAtTime(nextGain, trackAudioContextRef.current.currentTime);
+    if (trackAudioContextRef.current.state === "suspended") {
+      await trackAudioContextRef.current.resume().catch(() => undefined);
+    }
+  };
+
+  const updateTrackGain = (nextPercent: number) => {
+    const nextGain = clamp(Math.round(nextPercent) / 100, 0.05, 2);
+    setTrackGain(nextGain);
+    const audio = audioRef.current;
+    if (trackGainNodeRef.current && trackAudioContextRef.current) {
+      audio && (audio.volume = 1);
+      trackGainNodeRef.current.gain.setValueAtTime(nextGain, trackAudioContextRef.current.currentTime);
+      return;
+    }
+    if (audio) audio.volume = Math.min(1, nextGain);
+    if (nextGain > 1) void ensureTrackGainNode(nextGain);
+  };
+
   const stopLockedPlayback = () => {
     const audio = audioRef.current;
     if (audio && !audio.paused) audio.pause();
@@ -442,7 +504,7 @@ function AudioWorkspace({
       return;
     }
 
-    const bpm = Math.round(result.bpm);
+    const bpm = clampBpm(selectedBpm);
     setTrackClick(false);
     metronome.stop();
     metronome.setBpm(bpm);
@@ -453,6 +515,7 @@ function AudioWorkspace({
     audio.pause();
     audio.currentTime = startAt;
 
+    if (trackGain > 1 || trackGainNodeRef.current) await ensureTrackGainNode(trackGain);
     const audioStart = audio.play();
     const metroStart = metronome.start({ delaySeconds: 0 });
     const [audioResult, metroResult] = await Promise.allSettled([audioStart, metroStart]);
@@ -494,6 +557,30 @@ function AudioWorkspace({
   });
 
   useEffect(() => {
+    if (result) setSelectedBpm(clampBpm(result.bpm));
+  }, [item.id, result]);
+
+  useEffect(() => {
+    const previousGlobal = lastGlobalBpmRef.current;
+    lastGlobalBpmRef.current = metronome.state.bpm;
+    if (!result) return;
+    if (Math.abs(previousGlobal - metronome.state.bpm) < 0.05) return;
+    const next = clampBpm(metronome.state.bpm);
+    if (Math.abs(next - selectedBpm) > 0.05) setSelectedBpm(next);
+  }, [metronome.state.bpm, result, selectedBpm]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (trackGainNodeRef.current && trackAudioContextRef.current) {
+      audio.volume = 1;
+      trackGainNodeRef.current.gain.setValueAtTime(trackGain, trackAudioContextRef.current.currentTime);
+    } else {
+      audio.volume = Math.min(1, trackGain);
+    }
+  }, [item.id, trackGain]);
+
+  useEffect(() => {
     updateAnalyzerDelay();
     return () => onAnalyzerStartDelayChange(0);
     // The delay is recalculated from audio element events below.
@@ -516,7 +603,7 @@ function AudioWorkspace({
     }
 
     const anchor = result.downbeatSec;
-    const period = result.beatPeriodSec;
+    const period = 60 / selectedBpm;
 
     clickSynthRef.current ??= new Tone.Synth({
       oscillator: { type: "triangle" },
@@ -543,12 +630,15 @@ function AudioWorkspace({
       if (clickTimerRef.current) window.clearInterval(clickTimerRef.current);
       clickTimerRef.current = null;
     };
-  }, [trackClick, result]);
+  }, [trackClick, result, selectedBpm]);
 
   useEffect(() => {
     return () => {
       if (clickTimerRef.current) window.clearInterval(clickTimerRef.current);
       clickSynthRef.current?.dispose();
+      trackSourceRef.current?.disconnect();
+      trackGainNodeRef.current?.disconnect();
+      void trackAudioContextRef.current?.close();
     };
   }, []);
 
@@ -571,7 +661,10 @@ function AudioWorkspace({
           setCurrentTime(e.currentTarget.currentTime);
           updateAnalyzerDelay();
         }}
-        onPlay={updateAnalyzerDelay}
+        onPlay={() => {
+          if (trackGain > 1 || trackGainNodeRef.current) void ensureTrackGainNode(trackGain);
+          updateAnalyzerDelay();
+        }}
         onPause={() => {
           updateAnalyzerDelay();
           if (lockedPlayback) {
@@ -594,6 +687,16 @@ function AudioWorkspace({
           updateAnalyzerDelay();
         }}
       />
+
+      {result && (
+        <AnalyzerTempoPanel
+          result={result}
+          selectedBpm={selectedBpm}
+          onSetBpm={applyAnalyzerBpm}
+          trackGain={trackGain}
+          onTrackGainChange={updateTrackGain}
+        />
+      )}
 
       <WaveformLane
         peaks={result?.waveformPeaks}
@@ -633,11 +736,6 @@ function AudioWorkspace({
             {trackClick ? "Guide click on" : "Guide click off"}
           </Button>
         )}
-        {result && (
-          <Button size="sm" onClick={() => onUseAsBpm(Math.round(result.bpm))}>
-            Apply {Math.round(result.bpm)} BPM
-          </Button>
-        )}
         {result?.timeSignature && (
           <Button
             size="sm"
@@ -649,21 +747,143 @@ function AudioWorkspace({
         )}
       </div>
 
-      {result ? <AudioReadout result={result} onUseAsBpm={onUseAsBpm} /> : <LoadingAnalysis label="Analyzing audio tempo…" />}
+      {result ? <AudioReadout result={result} selectedBpm={selectedBpm} onSetBpm={applyAnalyzerBpm} /> : <LoadingAnalysis label="Analyzing audio tempo…" />}
     </div>
   );
 }
 
-function AudioReadout({ result, onUseAsBpm }: { result: TempoAnalysisResult; onUseAsBpm: (bpm: number) => void }) {
-  const tightness = result.jitterSec < 0.02 ? "tight" : result.jitterSec < 0.05 ? "moderate" : "loose";
-  const [customBpm, setCustomBpm] = useState(String(Math.round(result.bpm)));
+function AnalyzerTempoPanel({
+  result,
+  selectedBpm,
+  onSetBpm,
+  trackGain,
+  onTrackGainChange,
+}: {
+  result: TempoAnalysisResult;
+  selectedBpm: number;
+  onSetBpm: (bpm: number | ((current: number) => number)) => void;
+  trackGain: number;
+  onTrackGainChange: (percent: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(Math.round(selectedBpm)));
   useEffect(() => {
-    setCustomBpm(String(Math.round(result.bpm)));
-  }, [result.bpm]);
-  const applyCustom = () => {
-    const value = Number(customBpm);
-    if (Number.isFinite(value)) onUseAsBpm(Math.max(20, Math.min(300, Math.round(value))));
+    setDraft(String(Math.round(selectedBpm)));
+  }, [selectedBpm]);
+
+  const commitDraft = () => {
+    const value = Number(draft);
+    if (Number.isFinite(value)) onSetBpm(value);
+    else setDraft(String(Math.round(selectedBpm)));
   };
+
+  const half = clampBpm(selectedBpm / 2);
+  const double = clampBpm(selectedBpm * 2);
+  const detectedHalf = clampBpm(result.bpm / 2);
+  const detectedDouble = clampBpm(result.bpm * 2);
+
+  return (
+    <div className="grid gap-3 rounded-md border border-primary/25 bg-primary/5 p-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.75fr)]">
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="tiny-caps text-[10px] text-muted-foreground">Tempo lock</div>
+            <div className="mt-1 flex items-end gap-2">
+              <input
+                value={draft}
+                onChange={(event) => setDraft(event.target.value.replace(/[^0-9.]/g, ""))}
+                onBlur={commitDraft}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") commitDraft();
+                }}
+                onDoubleClick={() => onSetBpm(result.bpm)}
+                className="h-12 w-28 rounded-md border border-border bg-background/65 px-2 text-center font-mono text-3xl font-bold tabular-nums text-primary outline-none focus:border-primary"
+                inputMode="decimal"
+                aria-label="Analyzer locked BPM"
+                title="Double-click to return to detected tempo"
+              />
+              <span className="mb-1 font-mono text-xs text-muted-foreground">BPM</span>
+            </div>
+          </div>
+          <div className="font-mono text-[11px] text-muted-foreground">
+            detected {result.bpm.toFixed(1)} · stable {result.weightedBpm.toFixed(1)}
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+          <Button size="sm" variant="outline" onClick={() => onSetBpm(half)}>1/2</Button>
+          <Button size="sm" variant="outline" onClick={() => onSetBpm((bpm) => bpm - 5)}>-5</Button>
+          <Button size="sm" variant="outline" onClick={() => onSetBpm((bpm) => bpm - 1)}>-1</Button>
+          <Button size="sm" variant="outline" onClick={() => onSetBpm((bpm) => bpm + 1)}>+1</Button>
+          <Button size="sm" variant="outline" onClick={() => onSetBpm((bpm) => bpm + 5)}>+5</Button>
+          <Button size="sm" variant="outline" onClick={() => onSetBpm(double)}>2x</Button>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => onSetBpm(result.bpm)}
+            className={cn(
+              "rounded-full border px-2 py-1 font-mono text-[11px] transition-colors",
+              Math.abs(selectedBpm - result.bpm) < 0.6 ? "border-primary bg-primary/15 text-primary" : "border-border bg-background/45 hover:border-primary/50",
+            )}
+          >
+            detected {result.bpm.toFixed(1)}
+          </button>
+          <button
+            type="button"
+            onClick={() => onSetBpm(detectedHalf)}
+            className={cn(
+              "rounded-full border px-2 py-1 font-mono text-[11px] transition-colors",
+              Math.abs(selectedBpm - detectedHalf) < 0.6 ? "border-primary bg-primary/15 text-primary" : "border-border bg-background/45 hover:border-primary/50",
+            )}
+          >
+            half {detectedHalf.toFixed(1)}
+          </button>
+          <button
+            type="button"
+            onClick={() => onSetBpm(detectedDouble)}
+            className={cn(
+              "rounded-full border px-2 py-1 font-mono text-[11px] transition-colors",
+              Math.abs(selectedBpm - detectedDouble) < 0.6 ? "border-primary bg-primary/15 text-primary" : "border-border bg-background/45 hover:border-primary/50",
+            )}
+          >
+            double {detectedDouble.toFixed(1)}
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-md border border-border bg-background/45 p-3">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="tiny-caps text-[10px] text-muted-foreground">Track volume</div>
+          <button
+            type="button"
+            onClick={() => onTrackGainChange(100)}
+            className="rounded-full border border-border bg-muted/20 px-2 py-1 font-mono text-[10px] text-muted-foreground hover:border-primary/60"
+            title="Reset track volume"
+          >
+            {Math.round(trackGain * 100)}%
+          </button>
+        </div>
+        <Slider
+          value={[Math.round(trackGain * 100)]}
+          min={5}
+          max={200}
+          step={1}
+          onValueChange={([value]) => onTrackGainChange(value ?? 100)}
+          onDoubleClick={() => onTrackGainChange(100)}
+          aria-label="Track volume"
+          title="Double-click to reset track volume"
+        />
+        <div className="mt-2 flex justify-between font-mono text-[10px] text-muted-foreground">
+          <span>soft</span>
+          <span>unity</span>
+          <span>boost</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AudioReadout({ result, selectedBpm, onSetBpm }: { result: TempoAnalysisResult; selectedBpm: number; onSetBpm: (bpm: number | ((current: number) => number)) => void }) {
+  const tightness = result.jitterSec < 0.02 ? "tight" : result.jitterSec < 0.05 ? "moderate" : "loose";
   return (
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-[auto_minmax(0,1fr)]">
@@ -683,22 +903,6 @@ function AudioReadout({ result, onUseAsBpm }: { result: TempoAnalysisResult; onU
       <div className="rounded-md border border-border bg-muted/20 p-3 text-xs leading-relaxed text-muted-foreground">
         {result.explanation}
       </div>
-      <div className="rounded-md border border-border bg-background/45 p-3">
-        <div className="tiny-caps mb-2 text-[10px] text-muted-foreground">Fine tune tempo</div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" onClick={() => onUseAsBpm(Math.round(result.bpm))}>
-            Use {Math.round(result.bpm)}
-          </Button>
-          <input
-            value={customBpm}
-            onChange={(event) => setCustomBpm(event.target.value.replace(/[^0-9.]/g, ""))}
-            className="h-9 w-24 rounded-md border border-border bg-card px-2 font-mono text-sm text-foreground outline-none focus:border-primary"
-            inputMode="decimal"
-            aria-label="Custom BPM"
-          />
-          <Button size="sm" variant="outline" onClick={applyCustom}>Set</Button>
-        </div>
-      </div>
       {result.candidates.length > 1 && (
         <div>
           <div className="tiny-caps mb-2 text-[10px] text-muted-foreground">Tempo candidates</div>
@@ -706,8 +910,11 @@ function AudioReadout({ result, onUseAsBpm }: { result: TempoAnalysisResult; onU
             {result.candidates.map((candidate) => (
               <button
                 key={`${candidate.bpm}-${candidate.score}`}
-                onClick={() => onUseAsBpm(Math.round(candidate.bpm))}
-                className="rounded-full bg-muted/40 px-2 py-1 font-mono text-[11px] transition-colors hover:bg-muted/70"
+                onClick={() => onSetBpm(candidate.bpm)}
+                className={cn(
+                  "rounded-full px-2 py-1 font-mono text-[11px] transition-colors",
+                  Math.abs(selectedBpm - candidate.bpm) < 0.6 ? "bg-primary/20 text-primary" : "bg-muted/40 hover:bg-muted/70",
+                )}
               >
                 {candidate.bpm.toFixed(1)} · {(candidate.score * 100).toFixed(0)}%
               </button>
@@ -1343,6 +1550,10 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="font-mono tabular-nums text-sm">{value}</div>
     </div>
   );
+}
+
+function clampBpm(value: number): number {
+  return clamp(Math.round(value * 10) / 10, 20, 300);
 }
 
 function formatClock(sec: number): string {
