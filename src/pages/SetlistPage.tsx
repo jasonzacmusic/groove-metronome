@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode, type Ref } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Download, FileText, Link, Lock, Plus, RotateCcw, ShieldAlert, Share2, Trash2, Unlock, Upload, Volume2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -88,6 +88,7 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
   const [concertSession, setConcertSession] = useState<ConcertSessionState>(() => readConcertSession());
   const [shareStatus, setShareStatus] = useState("");
   const stageInitializedRef = useRef(false);
+  const stageDeckRef = useRef<HTMLElement | null>(null);
   const importRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -138,6 +139,59 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
       if (wakeLock && !wakeLock.released) void wakeLock.release().catch(() => undefined);
     };
   }, [active]);
+
+  useEffect(() => {
+    if (!active || !stageLock) return;
+
+    const body = document.body;
+    const root = document.documentElement;
+    const previousBodyStyle = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      overflow: body.style.overflow,
+    };
+    let lockedScrollY = window.scrollY;
+    let fixed = false;
+
+    stageDeckRef.current?.scrollIntoView({ block: "start", inline: "nearest", behavior: "smooth" });
+
+    const freezeStageViewport = () => {
+      lockedScrollY = window.scrollY;
+      root.classList.add("stage-scroll-locked");
+      body.classList.add("stage-scroll-locked");
+      body.style.position = "fixed";
+      body.style.top = `-${lockedScrollY}px`;
+      body.style.left = "0";
+      body.style.right = "0";
+      body.style.width = "100%";
+      body.style.overflow = "hidden";
+      fixed = true;
+    };
+
+    const preventTouchScroll = (event: TouchEvent) => {
+      event.preventDefault();
+    };
+
+    const timer = window.setTimeout(freezeStageViewport, 180);
+    document.addEventListener("touchmove", preventTouchScroll, { passive: false });
+
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("touchmove", preventTouchScroll);
+      root.classList.remove("stage-scroll-locked");
+      body.classList.remove("stage-scroll-locked");
+      body.style.position = previousBodyStyle.position;
+      body.style.top = previousBodyStyle.top;
+      body.style.left = previousBodyStyle.left;
+      body.style.right = previousBodyStyle.right;
+      body.style.width = previousBodyStyle.width;
+      body.style.overflow = previousBodyStyle.overflow;
+      if (fixed) window.scrollTo(0, lockedScrollY);
+    };
+  }, [active, stageLock]);
 
   useEffect(() => {
     try {
@@ -515,6 +569,7 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
         </aside>
 
         <ConcertDeck
+          stageRef={stageDeckRef}
           active={active}
           song={selectedSong}
           nextSong={nextSong}
@@ -588,6 +643,7 @@ function SetlistSongAction({
 }
 
 function ConcertDeck({
+  stageRef,
   active,
   song,
   nextSong,
@@ -618,6 +674,7 @@ function ConcertDeck({
   onSetPolyrhythm,
   onPanicRecover,
 }: {
+  stageRef?: Ref<HTMLElement>;
   active: boolean;
   song: SavedSong | null;
   nextSong: SavedSong | null;
@@ -707,7 +764,13 @@ function ConcertDeck({
   };
 
   return (
-    <section className="stage-deck rounded-lg border border-border bg-card/70 p-3 md:p-6">
+    <section
+      ref={stageRef}
+      className={
+        "stage-deck rounded-lg border border-border bg-card/70 p-3 md:p-6 " +
+        (controlsLocked ? "stage-deck-locked" : "")
+      }
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="tiny-caps text-[10px] text-primary">Stage metronome</span>
         <button
@@ -746,6 +809,7 @@ function ConcertDeck({
               if (!controlsLocked) onCyclePulseStrength(beatIndex, pulseIndex);
             }}
             onTapTempo={tap}
+            onToggleTransport={onToggle}
           />
           <StageSubdivisionApplyAllTool
             subdivision={controlsLocked ? null : stageApplyAllSubdivision}
@@ -834,13 +898,14 @@ function ConcertDeck({
         </button>
 
         <div className="grid gap-3 md:grid-cols-2">
-          <StageSettingsPanel title="Tap" summary={tapPreview.bpm ? `${tapPreview.bpm} BPM` : `${tapPreview.count} taps`}>
+          <StageSettingsPanel title="Tap" summary={tapPreview.bpm ? `${tapPreview.bpm} BPM` : `${tapPreview.count} taps`} disabled={controlsLocked}>
             <TapPreview preview={tapPreview} onTap={tap} onSetBpm={onSetBpm} disabled={controlsLocked} />
           </StageSettingsPanel>
 
           <StageSettingsPanel
             title="Subdivision"
             summary={activeSubdivision ? SUBDIVISION_NOTATION[activeSubdivision].glyph : "Mix"}
+            disabled={controlsLocked}
           >
             <div className="grid grid-cols-4 gap-2">
               {subdivisionOptions.map((subdivision) => (
@@ -858,7 +923,7 @@ function ConcertDeck({
             </div>
           </StageSettingsPanel>
 
-          <StageSettingsPanel title="Sound" summary={`${BEAT_SOUND_OPTIONS.find((sound) => sound.id === state.beatSound)?.label ?? "Tone"} · ${state.swing}% · ${SWING_FEEL_LABELS[state.swingFeel]}`}>
+          <StageSettingsPanel title="Sound" summary={`${BEAT_SOUND_OPTIONS.find((sound) => sound.id === state.beatSound)?.label ?? "Tone"} · ${state.swing}% · ${SWING_FEEL_LABELS[state.swingFeel]}`} disabled={controlsLocked}>
             <div className="grid grid-cols-3 gap-2">
               {BEAT_SOUND_OPTIONS.map((sound) => (
                 <StageTile
@@ -897,7 +962,7 @@ function ConcertDeck({
             />
           </StageSettingsPanel>
 
-          <StageSettingsPanel title="Rhythm Assist" summary={activeAssist}>
+          <StageSettingsPanel title="Rhythm Assist" summary={activeAssist} disabled={controlsLocked}>
             <StageRhythmAssist
               dottedMode={state.polyrhythm.dottedMode}
               tripletMode={state.polyrhythm.tripletMode}
@@ -1103,7 +1168,7 @@ function StageTopPerformanceControls({
 }) {
   return (
     <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-      <StageSettingsPanel title="Time Signature" summary={`${timeSignature.numerator}/${timeSignature.denominator}`}>
+      <StageSettingsPanel title="Time Signature" summary={`${timeSignature.numerator}/${timeSignature.denominator}`} disabled={controlsLocked}>
         <div className="grid grid-cols-2 gap-3">
           <StageStepper
             label="Beats"
@@ -1155,10 +1220,13 @@ function StageTopPerformanceControls({
   );
 }
 
-function StageSettingsPanel({ title, summary, defaultOpen = false, children }: { title: string; summary: string; defaultOpen?: boolean; children: ReactNode }) {
+function StageSettingsPanel({ title, summary, defaultOpen = false, disabled = false, children }: { title: string; summary: string; defaultOpen?: boolean; disabled?: boolean; children: ReactNode }) {
   return (
-    <Collapsible defaultOpen={defaultOpen} className="rounded-lg border border-border bg-background/35">
-      <CollapsibleTrigger className="flex min-h-14 w-full items-center justify-between gap-3 px-4 text-left">
+    <Collapsible defaultOpen={defaultOpen} className={"rounded-lg border border-border bg-background/35 " + (disabled ? "opacity-60" : "")}>
+      <CollapsibleTrigger
+        disabled={disabled}
+        className="flex min-h-14 w-full items-center justify-between gap-3 px-4 text-left disabled:cursor-not-allowed"
+      >
         <span>
           <span className="tiny-caps block text-[10px] text-muted-foreground">{title}</span>
           <span className="mt-1 block truncate font-mono text-xs text-foreground/85">{summary}</span>

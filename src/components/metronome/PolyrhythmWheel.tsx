@@ -19,6 +19,7 @@ interface PolyrhythmWheelProps {
   onSetBeatSubdivision?: (beatIndex: number, pulses: SubdivisionCount) => void;
   onCyclePulseStrength: (beatIndex: number, pulseIndex: number) => void;
   onTapTempo: () => void;
+  onToggleTransport?: () => void;
 }
 
 const VIEW = 440;
@@ -75,6 +76,7 @@ export function PolyrhythmWheel({
   onSetBeatSubdivision,
   onCyclePulseStrength,
   onTapTempo,
+  onToggleTransport,
 }: PolyrhythmWheelProps) {
   const numerator = pattern.length;
   const beatSpan = (2 * Math.PI) / Math.max(1, numerator);
@@ -279,10 +281,16 @@ export function PolyrhythmWheel({
           type="button"
           onPointerDown={(event) => {
             event.preventDefault();
-            onTapTempo();
+            event.stopPropagation();
+            if (onToggleTransport) onToggleTransport();
+            else onTapTempo();
           }}
-          className="pointer-events-auto rounded-full px-8 py-7 text-center transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-          aria-label="Tap tempo from wheel center"
+          className={
+            "pointer-events-auto rounded-full px-8 py-7 text-center transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary " +
+            (isPlaying ? "bg-primary/10 hover:bg-primary/14" : "hover:bg-primary/5")
+          }
+          aria-label={isPlaying ? "Stop metronome from wheel center" : "Start metronome from wheel center"}
+          aria-pressed={isPlaying}
         >
           <span className="tiny-caps block text-xs text-muted-foreground/80">{getTempoMarking(bpm)}</span>
           <span
@@ -291,7 +299,7 @@ export function PolyrhythmWheel({
           >
             {Math.round(bpm)}
           </span>
-          <span className="tiny-caps mt-1 block text-[10px] text-muted-foreground/70">Tap tempo</span>
+          <span className="tiny-caps mt-1 block text-[10px] text-muted-foreground/70">{isPlaying ? "Stop" : "Start"}</span>
         </button>
       </div>
     </div>

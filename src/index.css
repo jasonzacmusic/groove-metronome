@@ -192,7 +192,10 @@
 
 @layer base {
   * { @apply border-border; }
-  html, body, #root { height: 100%; }
+  html, body, #root {
+    height: 100%;
+    overscroll-behavior: none;
+  }
   body {
     @apply font-sans antialiased bg-background text-foreground;
     overscroll-behavior: none;
@@ -514,6 +517,30 @@
 
 .stage-wheel-card svg {
   max-height: min(62dvh, 640px);
+}
+
+html.stage-scroll-locked,
+body.stage-scroll-locked {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body.stage-scroll-locked {
+  touch-action: none;
+}
+
+.stage-deck-locked {
+  border-color: hsl(var(--primary) / 0.62);
+  box-shadow:
+    0 0 0 1px hsl(var(--primary) / 0.14) inset,
+    0 18px 60px hsl(0 0% 0% / 0.34);
+}
+
+.stage-deck-locked .stage-wheel-card {
+  border-color: hsl(var(--primary) / 0.58);
+  background:
+    radial-gradient(circle at 50% 44%, hsl(var(--primary) / 0.14), transparent 58%),
+    linear-gradient(145deg, hsl(var(--primary) / 0.12), hsl(var(--background) / 0.62));
 }
 
 .app-space-nav-mobile {
