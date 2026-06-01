@@ -199,6 +199,7 @@ export function AnalyzerPage({
               onUseAsBpm={onUseAsBpm}
               onUseAsTimeSignature={onUseAsTimeSignature}
               onAnalyzerStartDelayChange={onAnalyzerStartDelayChange}
+              metronome={metronome}
             />
           )}
         </div>
@@ -349,6 +350,7 @@ function AnalysisWorkspace({
   onUseAsBpm,
   onUseAsTimeSignature,
   onAnalyzerStartDelayChange,
+  metronome,
 }: {
   item: AnalyzerItem;
   onRemove: () => void;
@@ -357,6 +359,7 @@ function AnalysisWorkspace({
   onUseAsBpm: (bpm: number) => void;
   onUseAsTimeSignature: (numerator: number, denominator: number) => void;
   onAnalyzerStartDelayChange: (delaySeconds: number) => void;
+  metronome: UseMetronomeReturn;
 }) {
   return (
     <Card>
@@ -386,6 +389,7 @@ function AnalysisWorkspace({
             onUseAsBpm={onUseAsBpm}
             onUseAsTimeSignature={onUseAsTimeSignature}
             onAnalyzerStartDelayChange={onAnalyzerStartDelayChange}
+            metronome={metronome}
           />
         ) : (
           <MidiWorkspace item={item} active={active} onUseAsBpm={onUseAsBpm} onUseAsTimeSignature={onUseAsTimeSignature} />
@@ -402,6 +406,7 @@ function AudioWorkspace({
   onUseAsBpm,
   onUseAsTimeSignature,
   onAnalyzerStartDelayChange,
+  metronome,
 }: {
   item: Extract<AnalyzerItem, { kind: "audio" }>;
   active: boolean;
@@ -409,6 +414,7 @@ function AudioWorkspace({
   onUseAsBpm: (bpm: number) => void;
   onUseAsTimeSignature: (numerator: number, denominator: number) => void;
   onAnalyzerStartDelayChange: (delaySeconds: number) => void;
+  metronome: UseMetronomeReturn;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const clickSynthRef = useRef<Tone.Synth | null>(null);
@@ -416,9 +422,50 @@ function AudioWorkspace({
   const lastClickTimeRef = useRef(-Infinity);
   const [currentTime, setCurrentTime] = useState(0);
   const [trackClick, setTrackClick] = useState(false);
+  const [lockedPlayback, setLockedPlayback] = useState(false);
   const result = item.result;
 
   const duration = result?.durationSec ?? audioRef.current?.duration ?? 0;
+  const stopLockedPlayback = () => {
+    const audio = audioRef.current;
+    if (audio && !audio.paused) audio.pause();
+    metronome.stop();
+    setLockedPlayback(false);
+    onAnalyzerStartDelayChange(0);
+  };
+
+  const toggleLockedPlayback = async () => {
+    const audio = audioRef.current;
+    if (!audio || !result) return;
+    if (lockedPlayback) {
+      stopLockedPlayback();
+      return;
+    }
+
+    const bpm = Math.round(result.bpm);
+    setTrackClick(false);
+    metronome.stop();
+    metronome.setBpm(bpm);
+    onUseAsBpm(bpm);
+    lastClickTimeRef.current = -Infinity;
+    onAnalyzerStartDelayChange(0);
+    const startAt = Math.max(0, Math.min(result.downbeatSec, Math.max(0, (audio.duration || result.durationSec) - 0.05)));
+    audio.pause();
+    audio.currentTime = startAt;
+
+    const audioStart = audio.play();
+    const metroStart = metronome.start({ delaySeconds: 0 });
+    const [audioResult, metroResult] = await Promise.allSettled([audioStart, metroStart]);
+    if (audioResult.status === "rejected" || metroResult.status === "rejected") {
+      audio.pause();
+      metronome.stop();
+      setLockedPlayback(false);
+      return;
+    }
+    setCurrentTime(audio.currentTime);
+    setLockedPlayback(true);
+  };
+
   const updateAnalyzerDelay = () => {
     const audio = audioRef.current;
     if (!result || !audio || audio.paused || audio.ended) {
@@ -438,12 +485,13 @@ function AudioWorkspace({
         || (target instanceof HTMLElement && target.isContentEditable);
       if (editable || event.key.toLowerCase() !== "p" || !audioRef.current) return;
       event.preventDefault();
-      if (audioRef.current.paused) void audioRef.current.play();
+      if (result) void toggleLockedPlayback();
+      else if (audioRef.current.paused) void audioRef.current.play();
       else audioRef.current.pause();
     };
     window.addEventListener("keydown", handler, { capture: true });
     return () => window.removeEventListener("keydown", handler, { capture: true });
-  }, [active]);
+  });
 
   useEffect(() => {
     updateAnalyzerDelay();
@@ -467,8 +515,8 @@ function AudioWorkspace({
       return;
     }
 
-    const anchor = result.onsets.find((onset) => onset > 0.025) ?? 0;
-    const period = 60 / result.bpm;
+    const anchor = result.downbeatSec;
+    const period = result.beatPeriodSec;
 
     clickSynthRef.current ??= new Tone.Synth({
       oscillator: { type: "triangle" },
@@ -504,6 +552,14 @@ function AudioWorkspace({
     };
   }, []);
 
+  useEffect(() => {
+    if (lockedPlayback && !metronome.state.isPlaying) {
+      const audio = audioRef.current;
+      if (audio && !audio.paused) audio.pause();
+      setLockedPlayback(false);
+    }
+  }, [lockedPlayback, metronome.state.isPlaying]);
+
   return (
     <div className="space-y-5">
       <audio
@@ -516,7 +572,19 @@ function AudioWorkspace({
           updateAnalyzerDelay();
         }}
         onPlay={updateAnalyzerDelay}
-        onPause={updateAnalyzerDelay}
+        onPause={() => {
+          updateAnalyzerDelay();
+          if (lockedPlayback) {
+            metronome.stop();
+            setLockedPlayback(false);
+          }
+        }}
+        onEnded={() => {
+          if (lockedPlayback) {
+            metronome.stop();
+            setLockedPlayback(false);
+          }
+        }}
         onLoadedMetadata={(e) => {
           setCurrentTime(e.currentTarget.currentTime);
           updateAnalyzerDelay();
@@ -546,13 +614,23 @@ function AudioWorkspace({
         {result && (
           <Button
             size="sm"
+            variant={lockedPlayback ? "default" : "outline"}
+            onClick={toggleLockedPlayback}
+          >
+            {lockedPlayback ? <Pause className="mr-2 size-4" /> : <Play className="mr-2 size-4" />}
+            {lockedPlayback ? "Stop locked" : "Play with metronome"}
+          </Button>
+        )}
+        {result && (
+          <Button
+            size="sm"
             variant={trackClick ? "default" : "outline"}
             onClick={() => {
-              void Tone.start();
+              void startToneQuick();
               setTrackClick((value) => !value);
             }}
           >
-            {trackClick ? "Locked click on" : "Locked click off"}
+            {trackClick ? "Guide click on" : "Guide click off"}
           </Button>
         )}
         {result && (
@@ -594,10 +672,11 @@ function AudioReadout({ result, onUseAsBpm }: { result: TempoAnalysisResult; onU
           <div className="font-mono tabular-nums text-5xl font-bold text-primary leading-none">{result.bpm.toFixed(1)}</div>
           <div className="font-mono text-xs text-muted-foreground">stable avg {result.weightedBpm.toFixed(1)} BPM</div>
         </div>
-        <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
           <Stat label="Confidence" value={`${(result.confidence * 100).toFixed(0)}%`} />
           <Stat label="Onsets" value={String(result.onsets.length)} />
           <Stat label="Jitter" value={`${(result.jitterSec * 1000).toFixed(0)} ms`} />
+          <Stat label="Downbeat" value={formatClock(result.downbeatSec)} />
           <Stat label="Tightness" value={tightness} />
         </div>
       </div>
@@ -750,6 +829,12 @@ function MidiPlayer({
   useEffect(() => stop, []);
 
   useEffect(() => {
+    stop();
+    // Stop any scheduled notes when the selected MIDI file changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file.name, file.size, file.lastModified]);
+
+  useEffect(() => {
     if (!active) return;
     const handler = (event: KeyboardEvent) => {
       const target = event.target;
@@ -771,10 +856,10 @@ function MidiPlayer({
       stop();
       return;
     }
-    await Tone.start();
+    await startToneQuick();
     const midi = new Midi(await file.arrayBuffer());
     const synths = createMidiInstrument(instrument);
-    await Tone.loaded();
+    await toneLoadedQuick();
     disposablesRef.current = synths.nodes;
     const sourceNotes = buildSustainAwareMidiNotes(midi).slice(0, 5000);
     const loopNotes = selectedSectionIds.length > 0 && analysis
@@ -1228,6 +1313,20 @@ function triggerDrum(synths: ReturnType<typeof createMidiInstrument>, midi: numb
   else synths.hat?.triggerAttackRelease("32n", time, velocity * 0.75);
 }
 
+async function startToneQuick(timeoutMs = 250): Promise<void> {
+  await Promise.race([
+    Tone.start().then(() => undefined),
+    new Promise<void>((resolve) => window.setTimeout(resolve, timeoutMs)),
+  ]).catch(() => undefined);
+}
+
+async function toneLoadedQuick(timeoutMs = 650): Promise<void> {
+  await Promise.race([
+    Tone.loaded().then(() => undefined),
+    new Promise<void>((resolve) => window.setTimeout(resolve, timeoutMs)),
+  ]).catch(() => undefined);
+}
+
 function LoadingAnalysis({ label }: { label: string }) {
   return (
     <div className="rounded-md border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
@@ -1296,14 +1395,19 @@ function nextOnsetDelay(onsets: number[], currentTime: number): number {
 
 function markersFromAudio(result: TempoAnalysisResult): Marker[] {
   const useful = result.windows
-    .filter((window) => window.agreement >= 0.62)
+    .filter((window) => window.agreement >= 0.62 && Math.abs(window.startSec - result.downbeatSec) > 0.35)
     .slice(0, 5);
-  if (useful.length === 0) return [];
-  return useful.map((window, index) => ({
+  const markers: Marker[] = [{
+    id: makeId(),
+    timeSec: result.downbeatSec,
+    label: "Downbeat",
+  }];
+  markers.push(...useful.map((window, index) => ({
     id: makeId(),
     timeSec: window.startSec,
     label: index === 0 ? `${Math.round(result.bpm)} BPM` : `Stable ${index + 1}`,
-  }));
+  })));
+  return markers;
 }
 
 function makeId(): string {

@@ -486,8 +486,17 @@ export function useMetronome() {
   }, [disposeEngine]);
 
   const setBpm = useCallback((nextBpm: number | ((current: number) => number)) => {
+    if (typeof nextBpm !== "function") {
+      const safe = clamp(Math.round(nextBpm * 10) / 10, 20, 300);
+      bpmRef.current = safe;
+      if (isPlayingRef.current && !rampEnabledRef.current) {
+        Tone.getTransport().bpm.value = displayBpmToTransportBpm(safe, timeSignatureRef.current.denominator);
+      }
+      setBpmState(safe);
+      return;
+    }
     setBpmState((previous) => {
-      const raw = typeof nextBpm === "function" ? nextBpm(previous) : nextBpm;
+      const raw = nextBpm(previous);
       const safe = clamp(Math.round(raw * 10) / 10, 20, 300);
       bpmRef.current = safe;
       if (isPlayingRef.current && !rampEnabledRef.current) {
