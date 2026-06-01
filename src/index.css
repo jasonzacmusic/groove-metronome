@@ -519,6 +519,137 @@
   max-height: min(62dvh, 640px);
 }
 
+.stage-live-core {
+  display: grid;
+  gap: 1rem;
+}
+
+.stage-live-core > * {
+  min-width: 0;
+}
+
+.stage-live-console {
+  display: grid;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1.45fr) minmax(12rem, 0.95fr) minmax(8rem, 0.58fr) minmax(8rem, 0.58fr);
+  gap: 0.75rem;
+  align-items: stretch;
+  overflow: hidden;
+  box-shadow:
+    inset 0 1px 0 hsl(var(--foreground) / 0.06),
+    0 14px 42px hsl(0 0% 0% / 0.22);
+}
+
+.stage-song-display,
+.stage-readout-tile {
+  min-width: 0;
+  border: 1px solid hsl(var(--border) / 0.76);
+  border-radius: 0.55rem;
+  background: hsl(var(--background) / 0.42);
+  padding: 0.78rem 0.9rem;
+}
+
+.stage-song-name {
+  display: block;
+  margin-top: 0.28rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--app-font-serif);
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  line-height: 0.95;
+  color: hsl(var(--foreground));
+}
+
+.stage-song-next {
+  display: block;
+  margin-top: 0.35rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--app-font-mono);
+  font-size: 0.72rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.stage-readout-tile {
+  display: flex;
+  min-height: 6rem;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+}
+
+.stage-readout-label {
+  display: inline-block;
+  align-self: center;
+  border-radius: 0.18rem;
+  background: hsl(var(--primary) / 0.22);
+  padding: 0.12rem 0.38rem;
+  font-family: var(--app-font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--primary));
+}
+
+.stage-readout-value-row {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.55rem;
+}
+
+.stage-tempo-input {
+  width: min(8.5rem, 38vw);
+  border: 0;
+  border-bottom: 1px solid hsl(var(--primary) / 0.42);
+  background: transparent;
+  padding: 0;
+  text-align: center;
+  font-family: var(--app-font-serif);
+  font-size: clamp(3rem, 7vw, 5.8rem);
+  line-height: 0.92;
+  color: hsl(var(--accent));
+  outline: none;
+}
+
+.stage-tempo-input:focus {
+  border-bottom-color: hsl(var(--accent));
+  color: hsl(var(--primary));
+}
+
+.stage-tempo-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.stage-tempo-mark {
+  margin-top: 0.15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--app-font-mono);
+  font-size: clamp(0.8rem, 2.1vw, 1rem);
+  color: hsl(var(--accent));
+}
+
+.stage-readout-big {
+  margin-top: 0.45rem;
+  font-family: var(--app-font-serif);
+  font-size: clamp(2.8rem, 6.6vw, 5.3rem);
+  line-height: 0.92;
+  color: hsl(var(--accent));
+}
+
+.stage-readout-subdiv {
+  font-size: clamp(2.6rem, 5.5vw, 4.4rem);
+}
+
 html.stage-scroll-locked,
 body.stage-scroll-locked {
   overflow: hidden;
@@ -573,6 +704,10 @@ body.stage-scroll-locked {
 @media (max-width: 767px) {
   .app-shell {
     min-height: 100dvh;
+  }
+
+  .app-shell[data-active-tab="setlist"] .app-space-nav-mobile {
+    display: none;
   }
 
   .mobile-masthead {
@@ -775,21 +910,98 @@ body.stage-scroll-locked {
     min-height: calc(100dvh - 9.8rem);
   }
 
+  .stage-live-core {
+    gap: 0.7rem;
+  }
+
+  .stage-live-console {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.48rem;
+    padding: 0.55rem;
+  }
+
+  .stage-song-display,
+  .stage-readout-tempo {
+    grid-column: 1 / -1;
+    padding: 0.62rem 0.7rem;
+  }
+
+  .stage-song-name {
+    font-size: clamp(1.55rem, 9vw, 2.35rem);
+  }
+
+  .stage-readout-tile {
+    min-height: 5.1rem;
+    padding: 0.48rem 0.32rem;
+  }
+
+  .stage-readout-label {
+    font-size: 0.54rem;
+    letter-spacing: 0.05em;
+  }
+
+  .stage-readout-value-row {
+    gap: 0.24rem;
+  }
+
+  .stage-readout-tempo .stage-readout-value-row > span[aria-hidden] {
+    display: none;
+  }
+
+  .stage-tempo-input {
+    width: min(7rem, 42vw);
+    font-size: clamp(2.55rem, 14vw, 3.8rem);
+  }
+
+  .stage-tempo-mark {
+    font-size: 0.68rem;
+  }
+
+  .stage-readout-big {
+    font-size: clamp(2.2rem, 12vw, 3.55rem);
+  }
+
+  .stage-readout-subdiv {
+    font-size: clamp(2rem, 11vw, 3.2rem);
+  }
+
   .stage-deck .stage-wheel-card {
     margin-inline: -0.25rem;
-    padding: 0.45rem;
+    padding: 0.25rem;
   }
 
   .stage-deck .stage-wheel-card > div {
-    max-width: min(100%, 72dvh);
+    max-width: min(100%, 80dvh);
   }
 
   .stage-deck .stage-wheel-card svg {
-    max-height: min(48dvh, 420px);
+    max-height: min(45dvh, 440px);
   }
 
-  .stage-deck input[aria-label="Stage tempo"] {
-    font-size: clamp(3.1rem, 17vw, 4.2rem);
+  .stage-info-grid {
+    gap: 0.7rem;
+  }
+
+  .stage-info-grid > div:first-child {
+    display: none;
+  }
+
+  .stage-info-grid > div:nth-child(2) {
+    padding: 0.65rem;
+  }
+
+  .stage-transport-grid {
+    grid-template-columns: 1fr 1.35fr 1fr;
+    gap: 0.52rem;
+  }
+
+  .stage-transport-grid > button:nth-child(4) {
+    grid-column: 1 / -1;
+  }
+
+  .stage-transport-grid button {
+    min-height: 4rem;
+    padding-inline: 0.75rem;
   }
 
   .metronome-essential-strip > div {
@@ -892,6 +1104,130 @@ body.stage-scroll-locked {
 
   footer {
     display: none;
+  }
+}
+
+@media (max-width: 1023px) and (orientation: landscape) and (max-height: 620px) {
+  .app-shell[data-active-tab="setlist"] .app-space-nav-mobile {
+    display: none;
+  }
+
+  .app-shell[data-active-tab="setlist"] .mobile-masthead {
+    display: none;
+  }
+
+  .setlist-header-card {
+    display: none;
+  }
+
+  .app-main {
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+  }
+
+  .stage-deck {
+    min-height: calc(100dvh - 1rem);
+    padding: 0.55rem;
+  }
+
+  .stage-live-core {
+    grid-template-columns: minmax(0, 1fr) minmax(9.4rem, 12.5rem);
+    grid-template-areas:
+      "console rail"
+      "wheel rail"
+      "info rail"
+      "clocks rail"
+      "meter rail"
+      "panic rail"
+      "settings settings";
+    align-items: start;
+    gap: 0.55rem;
+  }
+
+  .stage-live-console {
+    grid-area: console;
+    grid-template-columns: minmax(0, 1fr) minmax(8.5rem, 0.68fr) minmax(5.8rem, 0.48fr) minmax(5.8rem, 0.48fr);
+    padding: 0.5rem;
+  }
+
+  .stage-song-display,
+  .stage-readout-tile {
+    min-height: 4.6rem;
+    padding: 0.45rem 0.5rem;
+  }
+
+  .stage-song-name {
+    font-size: clamp(1.25rem, 4vw, 1.85rem);
+  }
+
+  .stage-song-next,
+  .stage-tempo-mark {
+    font-size: 0.58rem;
+  }
+
+  .stage-tempo-input {
+    width: 4.8rem;
+    font-size: clamp(2.4rem, 5.5vw, 3.4rem);
+  }
+
+  .stage-readout-big {
+    font-size: clamp(2.2rem, 5vw, 3.2rem);
+  }
+
+  .stage-wheel-card {
+    grid-area: wheel;
+    padding: 0.25rem;
+  }
+
+  .stage-deck .stage-wheel-card > div {
+    max-width: min(100%, 62dvh);
+  }
+
+  .stage-deck .stage-wheel-card svg {
+    max-height: min(57dvh, 430px);
+  }
+
+  .stage-info-grid {
+    grid-area: info;
+    grid-template-columns: 1fr;
+  }
+
+  .stage-info-grid > div:first-child {
+    display: none;
+  }
+
+  .stage-transport-grid {
+    grid-area: rail;
+    display: grid;
+    grid-template-columns: 1fr;
+    align-content: start;
+    gap: 0.5rem;
+  }
+
+  .stage-transport-grid > button {
+    min-height: 3.7rem;
+  }
+
+  .stage-transport-grid > button:nth-child(2) {
+    min-height: 5.7rem;
+    font-size: 2.4rem;
+  }
+
+  .stage-clock-strip {
+    grid-area: clocks;
+  }
+
+  .stage-meter-accent-panel {
+    grid-area: meter;
+  }
+
+  .stage-panic-button {
+    grid-area: panic;
+    min-height: 3.2rem;
+  }
+
+  .stage-settings-grid {
+    grid-area: settings;
   }
 }
 

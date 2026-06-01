@@ -37,3 +37,17 @@ export async function triggerMetronomeHaptic(accent: PulseAccent) {
     navigator.vibrate(vibrationLength(accent));
   }
 }
+
+export async function triggerTempoScrubHaptic(strength: "light" | "medium" = "light") {
+  try {
+    const { Haptics, ImpactStyle } = await getHapticsModule();
+    await Haptics.impact({ style: strength === "medium" ? ImpactStyle.Medium : ImpactStyle.Light });
+    return;
+  } catch {
+    // Browser vibration is a best-effort fallback for Android/web contexts.
+  }
+
+  if ("vibrate" in navigator) {
+    navigator.vibrate(strength === "medium" ? 18 : 8);
+  }
+}

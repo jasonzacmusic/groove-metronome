@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 
+import { triggerTempoScrubHaptic } from "@/lib/haptics";
 import { clamp, cn } from "@/lib/utils";
 
 interface TempoScrubBarProps {
@@ -54,6 +55,7 @@ function isTouchTempoDevice() {
 export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false }: TempoScrubBarProps) {
   const dragRef = useRef<{ pointerId: number; startX: number; startBpm: number; lastBpm: number } | null>(null);
   const lastTickAtRef = useRef(0);
+  const lastHapticAtRef = useRef(0);
   const lastTouchAtRef = useRef(0);
   const [touchScrubAvailable, setTouchScrubAvailable] = useState(false);
 
@@ -76,6 +78,10 @@ export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false
     if (now - lastTickAtRef.current > 55) {
       lastTickAtRef.current = now;
       playScrubTick(direction, amount);
+    }
+    if (now - lastHapticAtRef.current > 90) {
+      lastHapticAtRef.current = now;
+      void triggerTempoScrubHaptic(amount >= 3 ? "medium" : "light");
     }
   };
 
@@ -100,6 +106,7 @@ export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false
       onPointerDown={(event) => {
         if (!canUsePointer(event)) return;
         event.preventDefault();
+        event.stopPropagation();
         lastTouchAtRef.current = performance.now();
         event.currentTarget.setPointerCapture(event.pointerId);
         dragRef.current = {
@@ -113,6 +120,7 @@ export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false
         const drag = dragRef.current;
         if (!drag || drag.pointerId !== event.pointerId || !canUsePointer(event)) return;
         event.preventDefault();
+        event.stopPropagation();
         const delta = event.clientX - drag.startX;
         if (Math.abs(delta) < 3) return;
         const next = drag.startBpm + delta / 4;
@@ -122,10 +130,28 @@ export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false
         drag.lastBpm = rounded;
       }}
       onPointerUp={(event) => {
-        if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
+        if (dragRef.current?.pointerId === event.pointerId) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
+          dragRef.current = null;
+        }
       }}
-      onPointerCancel={() => {
-        dragRef.current = null;
+      onPointerCancel={(event) => {
+        if (dragRef.current?.pointerId === event.pointerId) {
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
+          dragRef.current = null;
+        }
+      }}
+      onTouchStart={(event) => {
+        if (canTouchScrub) event.preventDefault();
+      }}
+      onTouchMove={(event) => {
+        if (canTouchScrub) event.preventDefault();
       }}
       onWheel={(event) => {
         if (canTouchScrub) return;

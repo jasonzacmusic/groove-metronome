@@ -27,7 +27,7 @@ import {
   type TimeSignature,
   type TripletAssistMode,
 } from "@/lib/metronome-types";
-import { clamp } from "@/lib/utils";
+import { clamp, getTempoMarking } from "@/lib/utils";
 
 const SETLIST_STORAGE_KEY = "groove-metronome.setlists.v1";
 const CONCERT_SESSION_STORAGE_KEY = "groove-metronome.concert-session.v1";
@@ -714,6 +714,7 @@ function ConcertDeck({
   const subdivisionOptions = getSubdivisionOptionsForBpm(state.bpm);
   const controlsLocked = stageLock;
   const activeAssist = stageAssistSummary(state.polyrhythm);
+  const subdivisionLabel = activeSubdivision ? SUBDIVISION_NOTATION[activeSubdivision].glyph : "Mix";
 
   useEffect(() => {
     if (document.activeElement !== bpmInputRef.current) {
@@ -788,7 +789,52 @@ function ConcertDeck({
         </button>
       </div>
 
-      <div className="mt-3 space-y-3 md:mt-5 md:space-y-4">
+      <div className="stage-live-core mt-3 md:mt-5">
+        <div className="stage-live-console rounded-lg border border-primary/25 bg-[linear-gradient(180deg,hsl(var(--ink)/0.68),hsl(var(--background)/0.42))] p-3">
+          <div className="stage-song-display">
+            <span className="tiny-caps text-[10px] text-primary">Song</span>
+            <span className="stage-song-name">{song?.name ?? "Live click"}</span>
+            <span className="stage-song-next">{nextSong ? `Next: ${nextSong.name}` : songCount ? `${songIndex + 1}/${songCount}` : "No setlist loaded"}</span>
+          </div>
+
+          <label className="stage-readout-tile stage-readout-tempo">
+            <span className="stage-readout-label">Tempo (BPM)</span>
+            <span className="stage-readout-value-row">
+              <span className="font-serif text-2xl text-accent" aria-hidden>♩</span>
+              <input
+                ref={bpmInputRef}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={bpmDraft}
+                disabled={controlsLocked}
+                onChange={(event) => setBpmDraft(event.target.value)}
+                onFocus={(event) => event.currentTarget.select()}
+                onBlur={(event) => commitBpmDraft(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    commitBpmDraft(event.currentTarget.value);
+                    event.currentTarget.blur();
+                  }
+                }}
+                className="stage-tempo-input"
+                aria-label="Stage tempo"
+              />
+            </span>
+            <span className="stage-tempo-mark">{getTempoMarking(state.bpm)}</span>
+          </label>
+
+          <div className="stage-readout-tile">
+            <span className="stage-readout-label">T.S.</span>
+            <span className="stage-readout-big">{state.timeSignature.numerator}/{state.timeSignature.denominator}</span>
+          </div>
+
+          <div className="stage-readout-tile">
+            <span className="stage-readout-label">Sub Div.</span>
+            <span className="stage-readout-big stage-readout-subdiv">{subdivisionLabel}</span>
+          </div>
+        </div>
+
         <div className="stage-wheel-card relative rounded-lg border border-primary/30 bg-[linear-gradient(145deg,hsl(var(--primary)/0.10),hsl(var(--background)/0.50))] p-2.5 md:p-5">
           <PolyrhythmWheel
             pattern={state.pattern}
@@ -821,7 +867,7 @@ function ConcertDeck({
           />
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_17rem]">
+        <div className="stage-info-grid grid gap-4 xl:grid-cols-[minmax(0,1fr)_17rem]">
           <div className="rounded-lg border border-border bg-background/35 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
@@ -838,27 +884,6 @@ function ConcertDeck({
           </div>
           <div className="rounded-lg border border-border bg-background/35 p-4">
             <span className="tiny-caps text-[10px] text-muted-foreground">Tempo</span>
-            <div className="mt-2">
-              <input
-                ref={bpmInputRef}
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={bpmDraft}
-                disabled={controlsLocked}
-                onChange={(event) => setBpmDraft(event.target.value)}
-                onFocus={(event) => event.currentTarget.select()}
-                onBlur={(event) => commitBpmDraft(event.currentTarget.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    commitBpmDraft(event.currentTarget.value);
-                    event.currentTarget.blur();
-                  }
-                }}
-                className="w-full rounded-md border border-border bg-background/55 px-2 py-2 text-center font-serif text-6xl leading-none text-primary outline-none focus:border-primary disabled:cursor-not-allowed disabled:opacity-45"
-                aria-label="Stage tempo"
-              />
-            </div>
             <StageTempoNudges disabled={controlsLocked} onAdjustBpm={onAdjustBpm} />
             <div className="mt-3">
               <TempoScrubBar bpm={state.bpm} onSetBpm={onSetBpm} disabled={controlsLocked} compact />
@@ -866,7 +891,7 @@ function ConcertDeck({
           </div>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-[0.8fr_1.45fr_0.8fr_0.8fr]">
+        <div className="stage-transport-grid grid gap-2 sm:grid-cols-[0.8fr_1.45fr_0.8fr_0.8fr]">
           <StageButton label="Previous" icon={<ChevronLeft className="size-6" />} disabled={controlsLocked || songIndex <= 0} onClick={onPrev} />
           <StagePlayButton playing={state.isPlaying} onToggle={onToggle} />
           <StageButton label="Next" icon={<ChevronRight className="size-6" />} disabled={controlsLocked || songIndex >= songCount - 1} onClick={onNext} />
@@ -890,14 +915,14 @@ function ConcertDeck({
             event.preventDefault();
             if (!controlsLocked) onPanicRecover();
           }}
-          className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-lg border border-destructive/45 bg-destructive/10 px-4 tiny-caps text-[11px] text-destructive transition-colors hover:bg-destructive/16 disabled:cursor-not-allowed disabled:opacity-35"
+          className="stage-panic-button inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-lg border border-destructive/45 bg-destructive/10 px-4 tiny-caps text-[11px] text-destructive transition-colors hover:bg-destructive/16 disabled:cursor-not-allowed disabled:opacity-35"
           aria-label="Concert panic recover"
         >
           <ShieldAlert className="size-5" />
           Panic recover
         </button>
 
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="stage-settings-grid grid gap-3 md:grid-cols-2">
           <StageSettingsPanel title="Tap" summary={tapPreview.bpm ? `${tapPreview.bpm} BPM` : `${tapPreview.count} taps`} disabled={controlsLocked}>
             <TapPreview preview={tapPreview} onTap={tap} onSetBpm={onSetBpm} disabled={controlsLocked} />
           </StageSettingsPanel>
@@ -1043,7 +1068,7 @@ function StageClockStrip({
   songLogs: SongDurationLog[];
 }) {
   return (
-    <div className="rounded-lg border border-border bg-background/35 p-2.5">
+    <div className="stage-clock-strip rounded-lg border border-border bg-background/35 p-2.5">
       <div className="grid gap-2 sm:grid-cols-2">
         <StageClockTile label="Concert" value={formatStageDuration(concertElapsedMs)} tone="green" />
         <StageClockTile label="Song" value={formatStageDuration(songElapsedMs)} tone="rose" />
@@ -1167,7 +1192,7 @@ function StageTopPerformanceControls({
   onSetAllAccents: (accent: PulseAccent) => void;
 }) {
   return (
-    <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+    <div className="stage-meter-accent-panel grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
       <StageSettingsPanel title="Time Signature" summary={`${timeSignature.numerator}/${timeSignature.denominator}`} disabled={controlsLocked}>
         <div className="grid grid-cols-2 gap-3">
           <StageStepper

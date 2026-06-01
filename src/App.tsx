@@ -113,7 +113,7 @@ export default function App() {
   }, [analyzerStartDelay, metronome, tab]);
 
   return (
-    <div data-theme={theme} className="app-shell relative min-h-full bg-background text-foreground overflow-x-hidden">
+    <div data-theme={theme} data-active-tab={tab} className="app-shell relative min-h-full bg-background text-foreground overflow-x-hidden">
       {/* Background layers */}
       <div className="warm-glow" aria-hidden />
       <div className="film-grain" aria-hidden />
