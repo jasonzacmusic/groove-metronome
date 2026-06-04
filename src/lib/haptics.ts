@@ -3,6 +3,7 @@ import type { PulseAccent } from "@/lib/metronome-types";
 type CapacitorHapticsModule = typeof import("@capacitor/haptics");
 
 let hapticsModulePromise: Promise<CapacitorHapticsModule> | null = null;
+let tempoSelectionActive = false;
 
 function getHapticsModule() {
   hapticsModulePromise ??= import("@capacitor/haptics");
@@ -33,21 +34,50 @@ export async function triggerMetronomeHaptic(accent: PulseAccent) {
     // Browser vibration is a best-effort fallback for Android/web contexts.
   }
 
-  if ("vibrate" in navigator) {
+  if (typeof navigator !== "undefined" && "vibrate" in navigator) {
     navigator.vibrate(vibrationLength(accent));
+  }
+}
+
+export async function beginTempoScrubHaptics() {
+  try {
+    const { Haptics } = await getHapticsModule();
+    await Haptics.selectionStart();
+    tempoSelectionActive = true;
+  } catch {
+    tempoSelectionActive = false;
   }
 }
 
 export async function triggerTempoScrubHaptic(strength: "light" | "medium" = "light") {
   try {
     const { Haptics, ImpactStyle } = await getHapticsModule();
-    await Haptics.impact({ style: strength === "medium" ? ImpactStyle.Medium : ImpactStyle.Light });
+    if (tempoSelectionActive) {
+      await Haptics.selectionChanged();
+    } else {
+      await Haptics.impact({ style: strength === "medium" ? ImpactStyle.Medium : ImpactStyle.Light });
+      return;
+    }
+    if (strength === "medium") {
+      await Haptics.impact({ style: ImpactStyle.Medium });
+    }
     return;
   } catch {
     // Browser vibration is a best-effort fallback for Android/web contexts.
   }
 
-  if ("vibrate" in navigator) {
+  if (typeof navigator !== "undefined" && "vibrate" in navigator) {
     navigator.vibrate(strength === "medium" ? 18 : 8);
+  }
+}
+
+export async function endTempoScrubHaptics() {
+  if (!tempoSelectionActive) return;
+  tempoSelectionActive = false;
+  try {
+    const { Haptics } = await getHapticsModule();
+    await Haptics.selectionEnd();
+  } catch {
+    // Selection haptics are native-only; silence unsupported contexts.
   }
 }

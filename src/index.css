@@ -660,6 +660,39 @@ body.stage-scroll-locked {
   touch-action: none;
 }
 
+html.tempo-jog-active,
+body.tempo-jog-active {
+  overscroll-behavior: none;
+}
+
+body.tempo-jog-active {
+  touch-action: none;
+}
+
+.tempo-jog-control {
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+
+.tempo-jog-track {
+  position: relative;
+}
+
+.tempo-jog-track::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    hsl(var(--foreground) / 0.22) 0 1px,
+    transparent 1px 10px
+  );
+  opacity: 0.42;
+  pointer-events: none;
+}
+
 .stage-deck-locked {
   border-color: hsl(var(--primary) / 0.62);
   box-shadow:
