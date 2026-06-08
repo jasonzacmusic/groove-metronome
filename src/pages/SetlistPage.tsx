@@ -152,44 +152,74 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
       right: body.style.right,
       width: body.style.width,
       overflow: body.style.overflow,
+      height: body.style.height,
+      touchAction: body.style.touchAction,
+    };
+    const previousRootStyle = {
+      overflow: root.style.overflow,
+      height: root.style.height,
+      overscrollBehavior: root.style.overscrollBehavior,
     };
     let lockedScrollY = window.scrollY;
-    let fixed = false;
-
-    stageDeckRef.current?.scrollIntoView({ block: "start", inline: "nearest", behavior: "smooth" });
+    const canScrollToStage = !document.querySelector(".tempo-jog-control:active");
 
     const freezeStageViewport = () => {
       lockedScrollY = window.scrollY;
       root.classList.add("stage-scroll-locked");
       body.classList.add("stage-scroll-locked");
+      root.style.overflow = "hidden";
+      root.style.height = "100%";
+      root.style.overscrollBehavior = "none";
       body.style.position = "fixed";
       body.style.top = `-${lockedScrollY}px`;
       body.style.left = "0";
       body.style.right = "0";
       body.style.width = "100%";
       body.style.overflow = "hidden";
-      fixed = true;
+      body.style.height = "100%";
+      body.style.touchAction = "none";
     };
 
     const preventTouchScroll = (event: TouchEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest(".tempo-jog-control")) return;
       event.preventDefault();
     };
+    const preventDocumentScroll = (event: Event) => {
+      event.preventDefault();
+    };
+    const keepStagePinned = () => {
+      if (window.scrollY !== lockedScrollY) window.scrollTo(0, lockedScrollY);
+    };
 
-    const timer = window.setTimeout(freezeStageViewport, 180);
-    document.addEventListener("touchmove", preventTouchScroll, { passive: false });
+    if (canScrollToStage) {
+      stageDeckRef.current?.scrollIntoView({ block: "start", inline: "nearest", behavior: "auto" });
+    }
+    freezeStageViewport();
+    document.addEventListener("touchmove", preventTouchScroll, { passive: false, capture: true });
+    document.addEventListener("wheel", preventDocumentScroll, { passive: false, capture: true });
+    document.addEventListener("gesturestart", preventDocumentScroll, { passive: false, capture: true });
+    window.addEventListener("scroll", keepStagePinned, { passive: true });
 
     return () => {
-      window.clearTimeout(timer);
-      document.removeEventListener("touchmove", preventTouchScroll);
+      document.removeEventListener("touchmove", preventTouchScroll, { capture: true });
+      document.removeEventListener("wheel", preventDocumentScroll, { capture: true });
+      document.removeEventListener("gesturestart", preventDocumentScroll, { capture: true });
+      window.removeEventListener("scroll", keepStagePinned);
       root.classList.remove("stage-scroll-locked");
       body.classList.remove("stage-scroll-locked");
+      root.style.overflow = previousRootStyle.overflow;
+      root.style.height = previousRootStyle.height;
+      root.style.overscrollBehavior = previousRootStyle.overscrollBehavior;
       body.style.position = previousBodyStyle.position;
       body.style.top = previousBodyStyle.top;
       body.style.left = previousBodyStyle.left;
       body.style.right = previousBodyStyle.right;
       body.style.width = previousBodyStyle.width;
       body.style.overflow = previousBodyStyle.overflow;
-      if (fixed) window.scrollTo(0, lockedScrollY);
+      body.style.height = previousBodyStyle.height;
+      body.style.touchAction = previousBodyStyle.touchAction;
+      window.scrollTo(0, lockedScrollY);
     };
   }, [active, stageLock]);
 
@@ -755,10 +785,15 @@ function ConcertDeck({
   }, [active, tap]);
 
   const setMeter = (numerator: number, denominator: MeterDenominator) => {
+    if (controlsLocked) return;
     onSetTimeSignature({ numerator, denominator });
   };
 
   const commitBpmDraft = (rawValue = bpmDraft) => {
+    if (controlsLocked) {
+      setBpmDraft(String(Math.round(state.bpm)));
+      return;
+    }
     const next = clamp(Number(rawValue) || state.bpm, 20, 300);
     onSetBpm(next);
     setBpmDraft(String(Math.round(next)));
@@ -886,7 +921,7 @@ function ConcertDeck({
             <span className="tiny-caps text-[10px] text-muted-foreground">Tempo</span>
             <StageTempoNudges disabled={controlsLocked} onAdjustBpm={onAdjustBpm} />
             <div className="mt-3">
-              <TempoScrubBar bpm={state.bpm} onSetBpm={onSetBpm} disabled={controlsLocked} compact />
+              <TempoScrubBar bpm={state.bpm} onSetBpm={onSetBpm} compact />
             </div>
           </div>
         </div>
@@ -905,7 +940,9 @@ function ConcertDeck({
           pattern={state.pattern}
           controlsLocked={controlsLocked}
           onSetMeter={setMeter}
-          onSetAllAccents={onSetAllAccents}
+          onSetAllAccents={(accent) => {
+            if (!controlsLocked) onSetAllAccents(accent);
+          }}
         />
 
         <button
@@ -939,7 +976,9 @@ function ConcertDeck({
                   label={SUBDIVISION_NOTATION[subdivision].label}
                   active={activeSubdivision === subdivision}
                   disabled={controlsLocked}
-                  onPress={() => onSetSubdivision(subdivision)}
+                  onPress={() => {
+                    if (!controlsLocked) onSetSubdivision(subdivision);
+                  }}
                 >
                   <span className="block font-serif text-2xl leading-none">{SUBDIVISION_NOTATION[subdivision].glyph}</span>
                   <span className="tiny-caps mt-1 block text-[9px]">{subdivision}</span>
@@ -956,7 +995,9 @@ function ConcertDeck({
                   label={sound.label}
                   active={state.beatSound === sound.id}
                   disabled={controlsLocked}
-                  onPress={() => onSetBeatSound(sound.id)}
+                  onPress={() => {
+                    if (!controlsLocked) onSetBeatSound(sound.id);
+                  }}
                 >
                   <Volume2 className="size-4" />
                   <span className="tiny-caps text-[9px]">{sound.label}</span>
@@ -964,8 +1005,31 @@ function ConcertDeck({
               ))}
             </div>
             <div className="mt-3 grid grid-cols-2 gap-3">
-              <StageVerticalSlider label="Pitch" value={state.pitch} min={0} max={100} step={1} disabled={controlsLocked} onChange={onSetPitch} onReset={() => onSetPitch(50)} />
-              <StageVerticalSlider label="Swing" value={clamp(state.swing, 0, 70)} min={0} max={70} step={5} disabled={controlsLocked} onChange={onSetSwing} />
+              <StageVerticalSlider
+                label="Pitch"
+                value={state.pitch}
+                min={0}
+                max={100}
+                step={1}
+                disabled={controlsLocked}
+                onChange={(pitch) => {
+                  if (!controlsLocked) onSetPitch(pitch);
+                }}
+                onReset={() => {
+                  if (!controlsLocked) onSetPitch(50);
+                }}
+              />
+              <StageVerticalSlider
+                label="Swing"
+                value={clamp(state.swing, 0, 70)}
+                min={0}
+                max={70}
+                step={5}
+                disabled={controlsLocked}
+                onChange={(swing) => {
+                  if (!controlsLocked) onSetSwing(swing);
+                }}
+              />
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2">
               {(Object.keys(SWING_FEEL_LABELS) as SwingFeel[]).map((feel) => (
@@ -974,7 +1038,9 @@ function ConcertDeck({
                   label={`${SWING_FEEL_LABELS[feel]} swing`}
                   active={state.swingFeel === feel}
                   disabled={controlsLocked}
-                  onPress={() => onSetSwingFeel(feel)}
+                  onPress={() => {
+                    if (!controlsLocked) onSetSwingFeel(feel);
+                  }}
                 >
                   <span className="font-mono text-sm">{SWING_FEEL_LABELS[feel]}</span>
                 </StageTile>
@@ -983,7 +1049,9 @@ function ConcertDeck({
             <StageAccentVolumeControls
               accentVolumes={state.accentVolumes}
               disabled={controlsLocked}
-              onSetAccentVolume={onSetAccentVolume}
+              onSetAccentVolume={(accent, volume) => {
+                if (!controlsLocked) onSetAccentVolume(accent, volume);
+              }}
             />
           </StageSettingsPanel>
 
@@ -993,9 +1061,15 @@ function ConcertDeck({
               tripletMode={state.polyrhythm.tripletMode}
               jazzMode={state.polyrhythm.jazzMode}
               disabled={controlsLocked}
-              onDottedMode={(dottedMode) => onSetPolyrhythm({ dottedMode })}
-              onTripletMode={(tripletMode) => onSetPolyrhythm({ tripletMode })}
-              onJazzMode={(jazzMode) => onSetPolyrhythm({ jazzMode })}
+              onDottedMode={(dottedMode) => {
+                if (!controlsLocked) onSetPolyrhythm({ dottedMode });
+              }}
+              onTripletMode={(tripletMode) => {
+                if (!controlsLocked) onSetPolyrhythm({ tripletMode });
+              }}
+              onJazzMode={(jazzMode) => {
+                if (!controlsLocked) onSetPolyrhythm({ jazzMode });
+              }}
             />
           </StageSettingsPanel>
         </div>
