@@ -803,11 +803,11 @@ function ConcertDeck({
     <section
       ref={stageRef}
       className={
-        "stage-deck rounded-lg border border-border bg-card/70 p-3 md:p-6 " +
+        "stage-deck stage-performance-surface rounded-lg border border-border bg-card/70 p-3 md:p-6 " +
         (controlsLocked ? "stage-deck-locked" : "")
       }
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="stage-performance-topbar flex flex-wrap items-center justify-between gap-3">
         <span className="tiny-caps text-[10px] text-primary">Stage metronome</span>
         <button
           type="button"
@@ -917,7 +917,7 @@ function ConcertDeck({
             </div>
             {nextSong && <div className="mt-3 truncate font-mono text-sm text-muted-foreground">Next: {nextSong.name}</div>}
           </div>
-          <div className="rounded-lg border border-border bg-background/35 p-4">
+          <div className="stage-jog-panel rounded-lg border border-border bg-background/35 p-4">
             <span className="tiny-caps text-[10px] text-muted-foreground">Tempo</span>
             <StageTempoNudges disabled={controlsLocked} onAdjustBpm={onAdjustBpm} />
             <div className="mt-3">
@@ -1219,7 +1219,7 @@ function formatZoneTime(ms: number, timeZone: string): string {
 
 function StageTempoNudges({ disabled, onAdjustBpm }: { disabled?: boolean; onAdjustBpm: (delta: number) => void }) {
   return (
-    <div className="mt-3 grid grid-cols-3 gap-2" aria-label="Stage tempo adjustments">
+    <div className="stage-tempo-nudges mt-3 grid grid-cols-3 gap-2" aria-label="Stage tempo adjustments">
       {[1, 2, 5].map((amount) => (
         <div key={amount} className="grid grid-cols-2 overflow-hidden rounded-lg border border-border bg-background/35">
           <button

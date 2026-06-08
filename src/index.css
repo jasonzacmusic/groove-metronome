@@ -660,6 +660,12 @@ body.stage-scroll-locked {
   touch-action: none;
 }
 
+body.stage-scroll-locked .mobile-masthead,
+body.stage-scroll-locked .app-space-nav-mobile,
+body.stage-scroll-locked footer {
+  display: none !important;
+}
+
 html.tempo-jog-active,
 body.tempo-jog-active {
   overscroll-behavior: none;
@@ -705,6 +711,10 @@ body.tempo-jog-active {
   background:
     radial-gradient(circle at 50% 44%, hsl(var(--primary) / 0.14), transparent 58%),
     linear-gradient(145deg, hsl(var(--primary) / 0.12), hsl(var(--background) / 0.62));
+}
+
+.stage-performance-surface {
+  isolation: isolate;
 }
 
 .app-space-nav-mobile {
@@ -1140,6 +1150,269 @@ body.tempo-jog-active {
   }
 }
 
+@media (max-width: 1023px), (hover: none) and (pointer: coarse) {
+  .stage-deck-locked.stage-performance-surface {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483000;
+    display: grid;
+    height: 100dvh;
+    max-height: 100dvh;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;
+    border: 0;
+    border-radius: 0;
+    padding:
+      max(0.55rem, env(safe-area-inset-top))
+      max(0.55rem, env(safe-area-inset-right))
+      max(0.55rem, env(safe-area-inset-bottom))
+      max(0.55rem, env(safe-area-inset-left));
+    background:
+      radial-gradient(circle at 50% 38%, hsl(var(--primary) / 0.12), transparent 34rem),
+      linear-gradient(180deg, hsl(var(--background)), hsl(var(--ink)));
+    transform: translateZ(0);
+  }
+
+  .stage-deck-locked .stage-performance-topbar {
+    min-height: 2.35rem;
+    align-items: center;
+  }
+
+  .stage-deck-locked .stage-performance-topbar > .tiny-caps {
+    font-size: 0.56rem;
+    letter-spacing: 0.2em;
+  }
+
+  .stage-deck-locked .stage-performance-topbar button {
+    min-height: 2.2rem;
+    padding-inline: 0.62rem;
+    font-size: 0.55rem;
+  }
+
+  .stage-deck-locked .stage-live-core {
+    min-height: 0;
+    height: 100%;
+    margin-top: 0 !important;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "console"
+      "wheel"
+      "jog"
+      "clock";
+    gap: 0.38rem;
+    overflow: hidden;
+  }
+
+  .stage-deck-locked .stage-live-console {
+    grid-area: console;
+    grid-template-columns: minmax(0, 1.15fr) minmax(5.6rem, 0.72fr) minmax(4.6rem, 0.44fr) minmax(4.6rem, 0.44fr);
+    gap: 0.38rem;
+    padding: 0.42rem;
+    border-radius: 0.55rem;
+  }
+
+  .stage-deck-locked .stage-song-display,
+  .stage-deck-locked .stage-readout-tile {
+    min-height: 3.7rem;
+    padding: 0.36rem 0.42rem;
+    border-radius: 0.42rem;
+  }
+
+  .stage-deck-locked .stage-song-name {
+    margin-top: 0.16rem;
+    font-size: clamp(1rem, 4.8vw, 1.55rem);
+  }
+
+  .stage-deck-locked .stage-song-next,
+  .stage-deck-locked .stage-tempo-mark {
+    margin-top: 0.12rem;
+    font-size: 0.52rem;
+  }
+
+  .stage-deck-locked .stage-readout-label {
+    padding: 0.08rem 0.24rem;
+    font-size: 0.47rem;
+    letter-spacing: 0.04em;
+  }
+
+  .stage-deck-locked .stage-readout-tempo .stage-readout-value-row > span[aria-hidden] {
+    display: none;
+  }
+
+  .stage-deck-locked .stage-tempo-input {
+    width: min(4.8rem, 20vw);
+    border-bottom: 0;
+    font-size: clamp(2rem, 9vw, 3.1rem);
+    pointer-events: none;
+  }
+
+  .stage-deck-locked .stage-readout-big,
+  .stage-deck-locked .stage-readout-subdiv {
+    margin-top: 0.2rem;
+    font-size: clamp(1.72rem, 7vw, 2.7rem);
+  }
+
+  .stage-deck-locked .stage-wheel-card {
+    grid-area: wheel;
+    min-height: 0;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    margin: 0;
+    padding: 0.18rem;
+    border-radius: 0.8rem;
+  }
+
+  .stage-deck-locked .stage-wheel-card > div {
+    width: min(96vw, 100%, calc(100dvh - 12.2rem));
+    max-width: none;
+  }
+
+  .stage-deck-locked .stage-wheel-card svg {
+    max-height: none;
+  }
+
+  .stage-deck-locked .stage-info-grid {
+    grid-area: jog;
+    display: block;
+    min-height: 0;
+  }
+
+  .stage-deck-locked .stage-info-grid > div:first-child,
+  .stage-deck-locked .stage-tempo-nudges,
+  .stage-deck-locked .stage-transport-grid,
+  .stage-deck-locked .stage-meter-accent-panel,
+  .stage-deck-locked .stage-settings-grid,
+  .stage-deck-locked .stage-panic-button {
+    display: none;
+  }
+
+  .stage-deck-locked .stage-jog-panel {
+    padding: 0.42rem;
+    border-radius: 0.55rem;
+  }
+
+  .stage-deck-locked .stage-jog-panel > .tiny-caps {
+    display: none;
+  }
+
+  .stage-deck-locked .tempo-jog-control {
+    border-color: hsl(var(--primary) / 0.46);
+    background: hsl(var(--background) / 0.48);
+    padding: 0.46rem;
+  }
+
+  .stage-deck-locked .tempo-jog-control .tiny-caps {
+    font-size: 0.5rem;
+  }
+
+  .stage-deck-locked .tempo-jog-track {
+    height: 0.42rem;
+    margin-top: 0.38rem;
+  }
+
+  .stage-deck-locked .stage-clock-strip {
+    grid-area: clock;
+    min-height: 0;
+    padding: 0.34rem;
+    border-radius: 0.55rem;
+    overflow: hidden;
+  }
+
+  .stage-deck-locked .stage-clock-strip > div:first-child {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.38rem;
+  }
+
+  .stage-deck-locked .stage-clock-strip > div:nth-child(2) {
+    display: none;
+  }
+
+  .stage-deck-locked .stage-clock-strip .rounded-md {
+    padding: 0.3rem 0.46rem;
+  }
+
+  .stage-deck-locked .stage-clock-strip .tiny-caps {
+    font-size: 0.48rem;
+  }
+
+  .stage-deck-locked .stage-clock-strip .font-mono {
+    font-size: clamp(1rem, 4vw, 1.45rem);
+  }
+}
+
+@media (max-width: 1023px) and (orientation: portrait), (hover: none) and (pointer: coarse) and (orientation: portrait) {
+  .stage-deck-locked .stage-live-console {
+    grid-template-columns: minmax(0, 1fr) minmax(4.7rem, 0.42fr) minmax(4.7rem, 0.42fr);
+  }
+
+  .stage-deck-locked .stage-song-display {
+    grid-column: 1 / -1;
+    min-height: 3.4rem;
+  }
+
+  .stage-deck-locked .stage-readout-tempo {
+    grid-column: auto;
+  }
+
+  .stage-deck-locked .stage-wheel-card > div {
+    width: min(97vw, calc(100dvh - 14.4rem));
+  }
+}
+
+@media (max-width: 1023px) and (orientation: landscape), (hover: none) and (pointer: coarse) and (orientation: landscape) {
+  .stage-deck-locked.stage-performance-surface {
+    padding:
+      max(0.45rem, env(safe-area-inset-top))
+      max(0.52rem, env(safe-area-inset-right))
+      max(0.45rem, env(safe-area-inset-bottom))
+      max(0.52rem, env(safe-area-inset-left));
+  }
+
+  .stage-deck-locked .stage-live-core {
+    grid-template-columns: minmax(0, 1fr) clamp(8.5rem, 22vw, 13.5rem);
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "wheel console"
+      "wheel jog"
+      "clock clock";
+    gap: 0.5rem;
+  }
+
+  .stage-deck-locked .stage-live-console {
+    grid-template-columns: 1fr;
+    align-self: start;
+  }
+
+  .stage-deck-locked .stage-song-display,
+  .stage-deck-locked .stage-readout-tile {
+    min-height: 3.15rem;
+  }
+
+  .stage-deck-locked .stage-song-name {
+    font-size: clamp(0.96rem, 2.3vw, 1.35rem);
+  }
+
+  .stage-deck-locked .stage-tempo-input {
+    width: 4.8rem;
+    font-size: clamp(2rem, 5.4vw, 3rem);
+  }
+
+  .stage-deck-locked .stage-readout-big,
+  .stage-deck-locked .stage-readout-subdiv {
+    font-size: clamp(1.62rem, 4.5vw, 2.45rem);
+  }
+
+  .stage-deck-locked .stage-wheel-card > div {
+    width: min(calc(100dvh - 4.1rem), calc(100vw - 15rem));
+  }
+
+  .stage-deck-locked .stage-clock-strip {
+    display: none;
+  }
+}
+
 @media (max-width: 1023px) and (orientation: landscape) and (max-height: 620px) {
   .app-shell[data-active-tab="setlist"] .app-space-nav-mobile {
     display: none;
@@ -1261,6 +1534,85 @@ body.tempo-jog-active {
 
   .stage-settings-grid {
     grid-area: settings;
+  }
+}
+
+@media (max-width: 1023px) and (orientation: landscape), (hover: none) and (pointer: coarse) and (orientation: landscape) {
+  .stage-deck-locked .stage-performance-topbar {
+    position: absolute;
+    left: max(0.52rem, env(safe-area-inset-left));
+    top: max(0.42rem, env(safe-area-inset-top));
+    z-index: 2;
+    min-height: 0;
+  }
+
+  .stage-deck-locked .stage-performance-topbar > .tiny-caps {
+    display: none;
+  }
+
+  .stage-deck-locked .stage-performance-topbar button {
+    min-height: 2rem;
+    background: hsl(var(--background) / 0.72);
+    backdrop-filter: blur(14px);
+  }
+
+  .stage-deck-locked .stage-live-core {
+    height: 100%;
+    grid-template-columns: minmax(0, 1fr) clamp(8.4rem, 18vw, 11rem);
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "wheel console"
+      "wheel jog";
+    align-items: stretch;
+  }
+
+  .stage-deck-locked .stage-live-console {
+    align-self: stretch;
+    grid-template-columns: 1fr;
+    align-content: center;
+    gap: 0.36rem;
+    overflow: hidden;
+  }
+
+  .stage-deck-locked .stage-song-display {
+    display: none;
+  }
+
+  .stage-deck-locked .stage-readout-tile {
+    min-height: 0;
+    padding: 0.34rem 0.36rem;
+  }
+
+  .stage-deck-locked .stage-wheel-card {
+    align-self: stretch;
+  }
+
+  .stage-deck-locked .stage-wheel-card > div {
+    width: min(calc(100dvh - 1.1rem), calc(100vw - 12.4rem));
+    max-width: none;
+  }
+
+  .stage-deck-locked .stage-wheel-card svg {
+    max-height: none;
+    width: 100%;
+  }
+
+  .stage-deck-locked .stage-jog-panel {
+    align-self: end;
+  }
+
+  .stage-deck-locked .stage-info-grid {
+    align-self: end;
+  }
+
+  .stage-deck-locked .stage-clock-strip {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) and (orientation: portrait), (hover: none) and (pointer: coarse) and (orientation: portrait) {
+  .stage-deck-locked .stage-clock-strip {
+    margin-bottom: 0.12rem;
   }
 }
 
