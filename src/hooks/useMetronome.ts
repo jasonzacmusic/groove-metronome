@@ -87,6 +87,30 @@ interface StartOptions {
   delaySeconds?: number;
 }
 
+const INITIAL_TRAINER_CONFIG: TrainerConfig = {
+  phraseBars: 2,
+  mutePercent: 50,
+  randomness: 70,
+};
+
+function normalizeTrainerConfig(config: TrainerConfig): TrainerConfig {
+  return {
+    phraseBars: clamp(Math.round(config.phraseBars || INITIAL_TRAINER_CONFIG.phraseBars), 1, 64),
+    mutePercent: clamp(Math.round(config.mutePercent), 0, 100),
+    randomness: clamp(Math.round(config.randomness), 0, 100),
+  };
+}
+
+function clearAssistPlaybackModes(config: PolyrhythmConfig): PolyrhythmConfig {
+  if (config.dottedMode === "off" && config.tripletMode === "off" && config.jazzMode === "off") return config;
+  return {
+    ...config,
+    dottedMode: "off",
+    tripletMode: "off",
+    jazzMode: "off",
+  };
+}
+
 const VOICE_ACCENT_VOLUME: Record<PulseAccent, number> = {
   accent: 1,
   normal: -3,
@@ -312,8 +336,8 @@ export function useMetronome() {
   });
   const [currentPoly, setCurrentPoly] = useState(-1);
 
-  const [trainerEnabled, setTrainerEnabled] = useState(false);
-  const [trainerConfig, setTrainerConfig] = useState<TrainerConfig>({ phraseBars: 2, mutePercent: 50, randomness: 70 });
+  const [trainerEnabled, setTrainerEnabledState] = useState(false);
+  const [trainerConfig, setTrainerConfigState] = useState<TrainerConfig>(INITIAL_TRAINER_CONFIG);
   const [trainerPhase, setTrainerPhase] = useState<"playing" | "muted">("playing");
 
   const [rampEnabled, setRampEnabled] = useState(false);
@@ -596,11 +620,11 @@ export function useMetronome() {
         if (phraseIndex !== trainerPhraseRef.current.index) {
           const baseChance = clamp(cfg.mutePercent / 100, 0, 1);
           const randomAmount = clamp(cfg.randomness / 100, 0, 1);
-          const jitter = (Math.random() - 0.5) * 0.44 * randomAmount;
+          const jitter = (Math.random() - 0.5) * 0.34 * randomAmount;
           let muteChance = clamp(baseChance + jitter, 0, 1);
 
-          if (trainerPhraseRef.current.mutedRun >= 2) muteChance = Math.min(muteChance, 0.18);
-          if (trainerPhraseRef.current.playRun >= 3 && baseChance > 0.05) muteChance = Math.max(muteChance, 0.72);
+          if (trainerPhraseRef.current.mutedRun >= 2) muteChance = Math.min(muteChance, Math.max(0.06, baseChance * 0.35));
+          if (trainerPhraseRef.current.playRun >= 3 && baseChance > 0.05) muteChance = Math.max(muteChance, Math.min(0.86, baseChance + 0.24));
 
           const nextMuted = baseChance >= 1 ? true : baseChance <= 0 ? false : Math.random() < muteChance;
           trainerPhraseRef.current = {
@@ -814,6 +838,7 @@ export function useMetronome() {
     beatRef.current = 0;
     barCountRef.current = 0;
     trainerPhraseRef.current = { index: -1, muted: false, mutedRun: 0, playRun: 0 };
+    setTrainerPhase("playing");
     setCurrentBeat(-1);
     setCurrentPulse(-1);
 
@@ -1021,14 +1046,34 @@ export function useMetronome() {
     }));
   }, []);
 
+  const clearPracticeAssistPlayback = useCallback(() => {
+    setPolyrhythmState((prev) => clearAssistPlaybackModes(prev));
+  }, []);
+
+  const setTrainerEnabled = useCallback((enabled: boolean) => {
+    trainerEnabledRef.current = enabled;
+    setTrainerEnabledState(enabled);
+    trainerPhraseRef.current = { index: -1, muted: false, mutedRun: 0, playRun: 0 };
+    setTrainerPhase("playing");
+  }, []);
+
+  const setTrainerConfig = useCallback((nextConfig: TrainerConfig) => {
+    const normalized = normalizeTrainerConfig(nextConfig);
+    trainerConfigRef.current = normalized;
+    setTrainerConfigState(normalized);
+    trainerPhraseRef.current = { index: -1, muted: false, mutedRun: 0, playRun: 0 };
+    setTrainerPhase("playing");
+  }, []);
+
   const setBeatSubdivision = useCallback((beatIndex: number, pulses: SubdivisionCount) => {
+    clearPracticeAssistPlayback();
     setPattern((prev) => {
       if (beatIndex < 0 || beatIndex >= prev.length) return prev;
       const next = [...prev];
       next[beatIndex] = withSubdivision(prev[beatIndex], pulses);
       return next;
     });
-  }, []);
+  }, [clearPracticeAssistPlayback]);
 
   const toggleBeatEnabled = useCallback((beatIndex: number) => {
     setPattern((prev) => {
@@ -1048,6 +1093,7 @@ export function useMetronome() {
   }, []);
 
   const cycleBeatSubdivision = useCallback((beatIndex: number) => {
+    clearPracticeAssistPlayback();
     setPattern((prev) => {
       if (beatIndex < 0 || beatIndex >= prev.length) return prev;
       const next = [...prev];
@@ -1058,7 +1104,7 @@ export function useMetronome() {
       next[beatIndex] = withSubdivision(cur, nextPulses);
       return next;
     });
-  }, [bpm]);
+  }, [bpm, clearPracticeAssistPlayback]);
 
   const cyclePulse = useCallback((beatIndex: number, pulseIndex: number) => {
     setPattern((prev) => {
@@ -1113,17 +1159,19 @@ export function useMetronome() {
   }, []);
 
   const applyPatternToBeat = useCallback((beatIndex: number, pat: BeatPattern) => {
+    clearPracticeAssistPlayback();
     setPattern((prev) => {
       if (beatIndex < 0 || beatIndex >= prev.length) return prev;
       const next = [...prev];
       next[beatIndex] = { pulses: pat.pulses, accents: [...pat.accents] };
       return next;
     });
-  }, []);
+  }, [clearPracticeAssistPlayback]);
 
   const applyPatternToAll = useCallback((pat: BeatPattern) => {
+    clearPracticeAssistPlayback();
     setPattern((prev) => prev.map(() => ({ pulses: pat.pulses, accents: [...pat.accents] })));
-  }, []);
+  }, [clearPracticeAssistPlayback]);
 
   const setPolyrhythm = useCallback((cfg: Partial<PolyrhythmConfig>) => {
     if (cfg.jazzMode !== undefined && cfg.jazzMode !== "off") {
@@ -1175,8 +1223,9 @@ export function useMetronome() {
   }, []);
 
   const setGlobalSubdivision = useCallback((pulses: SubdivisionCount) => {
+    clearPracticeAssistPlayback();
     setPattern((prev) => prev.map((beat) => withSubdivision(beat, pulses)));
-  }, []);
+  }, [clearPracticeAssistPlayback]);
 
   const resetAccents = useCallback(() => {
     setPattern((prev) =>
