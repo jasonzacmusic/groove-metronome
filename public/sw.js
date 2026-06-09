@@ -1,4 +1,4 @@
-const CACHE_VERSION = "groove-metronome-v1";
+const CACHE_VERSION = "groove-metronome-v2-ios-audio-stage";
 const CORE_ASSETS = [
   "/",
   "/manifest.webmanifest",
@@ -7,6 +7,12 @@ const CORE_ASSETS = [
   "/metronome-sounds/reapertips/marimba-accent.wav",
   "/metronome-sounds/reapertips/marimba-normal.wav",
   "/metronome-sounds/reapertips/marimba-sub.wav",
+  "/metronome-sounds/reapertips/clave-accent.wav",
+  "/metronome-sounds/reapertips/clave-normal.wav",
+  "/metronome-sounds/reapertips/clave-sub.wav",
+  "/metronome-sounds/reapertips/tight-accent.wav",
+  "/metronome-sounds/reapertips/tight-normal.wav",
+  "/metronome-sounds/reapertips/tight-sub.wav",
 ];
 
 self.addEventListener("install", (event) => {

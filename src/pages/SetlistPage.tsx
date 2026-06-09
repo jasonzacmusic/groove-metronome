@@ -83,7 +83,7 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
   const [setlist, setSetlist] = useState<SetlistState>(() => readSetlist());
   const [songName, setSongName] = useState("New song");
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [stageLock, setStageLock] = useState(false);
+  const [stageLock, setStageLock] = useState(true);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [concertSession, setConcertSession] = useState<ConcertSessionState>(() => readConcertSession());
   const [shareStatus, setShareStatus] = useState("");
@@ -146,11 +146,6 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
     const body = document.body;
     const root = document.documentElement;
     const previousBodyStyle = {
-      position: body.style.position,
-      top: body.style.top,
-      left: body.style.left,
-      right: body.style.right,
-      width: body.style.width,
       overflow: body.style.overflow,
       height: body.style.height,
       touchAction: body.style.touchAction,
@@ -160,21 +155,12 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
       height: root.style.height,
       overscrollBehavior: root.style.overscrollBehavior,
     };
-    let lockedScrollY = window.scrollY;
-    const canScrollToStage = !document.querySelector(".tempo-jog-control:active");
-
     const freezeStageViewport = () => {
-      lockedScrollY = window.scrollY;
       root.classList.add("stage-scroll-locked");
       body.classList.add("stage-scroll-locked");
       root.style.overflow = "hidden";
       root.style.height = "100%";
       root.style.overscrollBehavior = "none";
-      body.style.position = "fixed";
-      body.style.top = `-${lockedScrollY}px`;
-      body.style.left = "0";
-      body.style.right = "0";
-      body.style.width = "100%";
       body.style.overflow = "hidden";
       body.style.height = "100%";
       body.style.touchAction = "none";
@@ -188,38 +174,29 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
     const preventDocumentScroll = (event: Event) => {
       event.preventDefault();
     };
-    const keepStagePinned = () => {
-      if (window.scrollY !== lockedScrollY) window.scrollTo(0, lockedScrollY);
+    const unlockWithEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setStageLock(false);
     };
 
-    if (canScrollToStage) {
-      stageDeckRef.current?.scrollIntoView({ block: "start", inline: "nearest", behavior: "auto" });
-    }
     freezeStageViewport();
     document.addEventListener("touchmove", preventTouchScroll, { passive: false, capture: true });
     document.addEventListener("wheel", preventDocumentScroll, { passive: false, capture: true });
     document.addEventListener("gesturestart", preventDocumentScroll, { passive: false, capture: true });
-    window.addEventListener("scroll", keepStagePinned, { passive: true });
+    window.addEventListener("keydown", unlockWithEscape, { capture: true });
 
     return () => {
       document.removeEventListener("touchmove", preventTouchScroll, { capture: true });
       document.removeEventListener("wheel", preventDocumentScroll, { capture: true });
       document.removeEventListener("gesturestart", preventDocumentScroll, { capture: true });
-      window.removeEventListener("scroll", keepStagePinned);
+      window.removeEventListener("keydown", unlockWithEscape, { capture: true });
       root.classList.remove("stage-scroll-locked");
       body.classList.remove("stage-scroll-locked");
       root.style.overflow = previousRootStyle.overflow;
       root.style.height = previousRootStyle.height;
       root.style.overscrollBehavior = previousRootStyle.overscrollBehavior;
-      body.style.position = previousBodyStyle.position;
-      body.style.top = previousBodyStyle.top;
-      body.style.left = previousBodyStyle.left;
-      body.style.right = previousBodyStyle.right;
-      body.style.width = previousBodyStyle.width;
       body.style.overflow = previousBodyStyle.overflow;
       body.style.height = previousBodyStyle.height;
       body.style.touchAction = previousBodyStyle.touchAction;
-      window.scrollTo(0, lockedScrollY);
     };
   }, [active, stageLock]);
 
@@ -517,9 +494,10 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
               <div
                 key={song.id}
                 className={
-                  "rounded-md border bg-card/45 p-2.5 transition-colors " +
+                  "rounded-md border border-l-[6px] bg-card/45 p-2.5 transition-colors " +
                   (index === selectedIndex ? "border-primary bg-primary/10" : "border-border bg-card/45 hover:border-primary/60")
                 }
+                style={{ borderLeftColor: setlistSongColor(index) }}
               >
                 <div className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-2">
                   <button
@@ -820,7 +798,7 @@ function ConcertDeck({
           }
         >
           {stageLock ? <Lock className="size-4" /> : <Unlock className="size-4" />}
-          {stageLock ? "Locked" : "Ready"}
+          {stageLock ? "Unlock" : "Lock Stage"}
         </button>
       </div>
 
@@ -891,6 +869,8 @@ function ConcertDeck({
             }}
             onTapTempo={tap}
             onToggleTransport={onToggle}
+            enableTempoJog={controlsLocked}
+            onSetBpm={onSetBpm}
           />
           <StageSubdivisionApplyAllTool
             subdivision={controlsLocked ? null : stageApplyAllSubdivision}
@@ -1215,6 +1195,20 @@ function formatZoneTime(ms: number, timeZone: string): string {
   } catch {
     return formatIstTime(ms);
   }
+}
+
+function setlistSongColor(index: number): string {
+  const colors = [
+    "hsl(var(--primary))",
+    "hsl(var(--accent))",
+    "hsl(var(--amber))",
+    "hsl(338 82% 66%)",
+    "hsl(156 62% 48%)",
+    "hsl(210 92% 70%)",
+    "hsl(270 70% 72%)",
+    "hsl(24 92% 62%)",
+  ];
+  return colors[((index % colors.length) + colors.length) % colors.length];
 }
 
 function StageTempoNudges({ disabled, onAdjustBpm }: { disabled?: boolean; onAdjustBpm: (delta: number) => void }) {

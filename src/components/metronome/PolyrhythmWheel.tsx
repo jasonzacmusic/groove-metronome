@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useState, type PointerEvent } from "react";
 
 import {
   PULSE_ACCENT_HEIGHT,
@@ -7,7 +7,8 @@ import {
   type SubdivisionCount,
 } from "@/lib/metronome-types";
 import { useSubdivisionShortcut } from "@/hooks/useSubdivisionShortcut";
-import { getTempoMarking } from "@/lib/utils";
+import { beginTempoScrubHaptics, endTempoScrubHaptics, triggerTempoScrubHaptic } from "@/lib/haptics";
+import { clamp, getTempoMarking } from "@/lib/utils";
 
 interface PolyrhythmWheelProps {
   pattern: BeatPattern[];
@@ -20,6 +21,8 @@ interface PolyrhythmWheelProps {
   onCyclePulseStrength: (beatIndex: number, pulseIndex: number) => void;
   onTapTempo: () => void;
   onToggleTransport?: () => void;
+  enableTempoJog?: boolean;
+  onSetBpm?: (bpm: number) => void;
 }
 
 const VIEW = 440;
@@ -30,6 +33,16 @@ const R_OUTER = 188;
 const R_INNER = 96;
 const R_CORE = 84;
 const R_HAND = 174;
+
+function isTouchTempoDevice() {
+  if (typeof navigator === "undefined" || typeof window === "undefined") return false;
+  const capacitorNative = Boolean((window as typeof window & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.());
+  const coarsePointer = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+  const touchPoints = navigator.maxTouchPoints > 0;
+  const mobileLike = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent);
+  const desktopModeIpad = /\bMacintosh\b/.test(navigator.userAgent) && navigator.maxTouchPoints > 1;
+  return capacitorNative || coarsePointer || touchPoints || mobileLike || desktopModeIpad;
+}
 
 function polar(cx: number, cy: number, r: number, angle: number) {
   return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
@@ -77,10 +90,17 @@ export function PolyrhythmWheel({
   onCyclePulseStrength,
   onTapTempo,
   onToggleTransport,
+  enableTempoJog = false,
+  onSetBpm,
 }: PolyrhythmWheelProps) {
   const numerator = pattern.length;
   const beatSpan = (2 * Math.PI) / Math.max(1, numerator);
   const readSubdivisionShortcut = useSubdivisionShortcut(bpm);
+  const bpmRef = useRef(bpm);
+  const jogRef = useRef<{ pointerId: number; startX: number; startBpm: number; lastBpm: number; moved: boolean } | null>(null);
+  const lastHapticAtRef = useRef(0);
+  const [jogPreview, setJogPreview] = useState<number | null>(null);
+  bpmRef.current = bpm;
 
   const applySubdivisionShortcut = (beatIndex: number) => {
     const shortcutSubdivision = readSubdivisionShortcut();
@@ -100,6 +120,57 @@ export function PolyrhythmWheel({
     return beatStart + pulseSpan * (currentPulse + 0.5);
   }, [currentBeat, currentPulse, isPlaying, pattern, beatSpan, numerator]);
 
+  const canJogTempo = enableTempoJog && Boolean(onSetBpm) && isTouchTempoDevice();
+  const beginJog = (event: PointerEvent<SVGSVGElement>) => {
+    if (!canJogTempo || (event.pointerType !== "touch" && event.pointerType !== "pen")) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("[data-wheel-center='true']")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    jogRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startBpm: Math.round(bpmRef.current),
+      lastBpm: Math.round(bpmRef.current),
+      moved: false,
+    };
+    setJogPreview(Math.round(bpmRef.current));
+    void beginTempoScrubHaptics();
+  };
+
+  const moveJog = (event: PointerEvent<SVGSVGElement>) => {
+    const jog = jogRef.current;
+    if (!jog || jog.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const delta = event.clientX - jog.startX;
+    if (Math.abs(delta) < 5) return;
+    jog.moved = true;
+    const next = clamp(Math.round(jog.startBpm + delta / 3.2), 20, 300);
+    if (next === jog.lastBpm) return;
+    const amount = Math.abs(next - jog.lastBpm);
+    jog.lastBpm = next;
+    setJogPreview(next);
+    onSetBpm?.(next);
+    const now = performance.now();
+    if (now - lastHapticAtRef.current > 80) {
+      lastHapticAtRef.current = now;
+      void triggerTempoScrubHaptic(amount >= 3 ? "medium" : "light");
+    }
+  };
+
+  const endJog = (event: PointerEvent<SVGSVGElement>) => {
+    const jog = jogRef.current;
+    if (!jog || jog.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    jogRef.current = null;
+    window.setTimeout(() => setJogPreview(null), 420);
+    void endTempoScrubHaptics();
+  };
+
   return (
     <div className="relative w-full max-w-[560px] mx-auto select-none">
       <svg
@@ -107,6 +178,10 @@ export function PolyrhythmWheel({
         className="block w-full h-auto touch-none"
         role="group"
         aria-label="Polyrhythm wheel"
+        onPointerDownCapture={beginJog}
+        onPointerMoveCapture={moveJog}
+        onPointerUpCapture={endJog}
+        onPointerCancelCapture={endJog}
       >
         <defs>
           <radialGradient id="wheel-core" cx="50%" cy="50%" r="50%">
@@ -278,6 +353,7 @@ export function PolyrhythmWheel({
       {/* Center BPM readout — overlay so DM Serif Display renders crisply */}
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
         <button
+          data-wheel-center="true"
           type="button"
           onPointerDown={(event) => {
             event.preventDefault();
@@ -302,6 +378,13 @@ export function PolyrhythmWheel({
           <span className="tiny-caps mt-1 block text-[10px] text-muted-foreground/70">{isPlaying ? "Stop" : "Start"}</span>
         </button>
       </div>
+      {canJogTempo && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-8 flex justify-center">
+          <span className="rounded-full border border-primary/45 bg-background/82 px-3 py-1.5 font-mono text-xs text-primary shadow-lg shadow-background/30">
+            {jogPreview ? `${jogPreview} BPM` : "slide wheel"}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

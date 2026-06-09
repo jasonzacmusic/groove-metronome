@@ -56,7 +56,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     private func configurePlaybackAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers, .allowBluetooth, .allowBluetoothA2DP])
+            try session.setPreferredSampleRate(44100)
+            try session.setPreferredIOBufferDuration(0.005)
             try session.setActive(true)
         } catch {
             NSLog("Groove Metronome audio session setup failed: \(error.localizedDescription)")

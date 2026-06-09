@@ -432,6 +432,9 @@ function AudioWorkspace({
   const [lockedPlayback, setLockedPlayback] = useState(false);
   const [selectedBpm, setSelectedBpm] = useState(() => clampBpm(item.result?.bpm ?? metronome.state.bpm));
   const [trackGain, setTrackGain] = useState(1);
+  const [loopEnabled, setLoopEnabled] = useState(true);
+  const [loopRange, setLoopRange] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
+  const [waveformZoom, setWaveformZoom] = useState(1);
   const result = item.result;
 
   const duration = result?.durationSec ?? audioRef.current?.duration ?? 0;
@@ -443,6 +446,19 @@ function AudioWorkspace({
     onUseAsBpm(safe);
     return safe;
   };
+
+  useEffect(() => {
+    if (!result) return;
+    const numerator = result.timeSignature?.numerator ?? 4;
+    const denominator = result.timeSignature?.denominator ?? 4;
+    const beatSec = (60 / clampBpm(result.bpm)) * (4 / denominator);
+    const twoBarSpan = Math.max(0.5, beatSec * numerator * 2);
+    const start = Math.max(0, Math.min(result.downbeatSec, Math.max(0, result.durationSec - 0.05)));
+    const end = Math.min(result.durationSec, Math.max(start + 0.25, start + twoBarSpan));
+    setLoopRange({ start, end });
+    setLoopEnabled(true);
+    setWaveformZoom(1);
+  }, [item.id, result]);
 
   const ensureTrackGainNode = async (nextGain = trackGain) => {
     const audio = audioRef.current;
@@ -511,7 +527,9 @@ function AudioWorkspace({
     onUseAsBpm(bpm);
     lastClickTimeRef.current = -Infinity;
     onAnalyzerStartDelayChange(0);
-    const startAt = Math.max(0, Math.min(result.downbeatSec, Math.max(0, (audio.duration || result.durationSec) - 0.05)));
+    const startAt = loopEnabled
+      ? Math.max(0, Math.min(loopRange.start, Math.max(0, (audio.duration || result.durationSec) - 0.05)))
+      : Math.max(0, Math.min(result.downbeatSec, Math.max(0, (audio.duration || result.durationSec) - 0.05)));
     audio.pause();
     audio.currentTime = startAt;
 
@@ -632,6 +650,17 @@ function AudioWorkspace({
     };
   }, [trackClick, result, selectedBpm]);
 
+  const enforceLoop = (audio: HTMLAudioElement) => {
+    if (!loopEnabled || !result) return false;
+    if (loopRange.end <= loopRange.start + 0.08) return false;
+    if (audio.currentTime < loopRange.end - 0.018) return false;
+    audio.currentTime = loopRange.start;
+    setCurrentTime(loopRange.start);
+    lastClickTimeRef.current = -Infinity;
+    onAnalyzerStartDelayChange(nextOnsetDelay(result.onsets, loopRange.start));
+    return true;
+  };
+
   useEffect(() => {
     return () => {
       if (clickTimerRef.current) window.clearInterval(clickTimerRef.current);
@@ -658,6 +687,7 @@ function AudioWorkspace({
         controls
         className="w-full"
         onTimeUpdate={(e) => {
+          if (enforceLoop(e.currentTarget)) return;
           setCurrentTime(e.currentTarget.currentTime);
           updateAnalyzerDelay();
         }}
@@ -673,6 +703,10 @@ function AudioWorkspace({
           }
         }}
         onEnded={() => {
+          if (audioRef.current && enforceLoop(audioRef.current)) {
+            void audioRef.current.play().catch(() => undefined);
+            return;
+          }
           if (lockedPlayback) {
             metronome.stop();
             setLockedPlayback(false);
@@ -703,11 +737,15 @@ function AudioWorkspace({
         durationSec={duration}
         currentTime={currentTime}
         markers={item.markers}
+        loopEnabled={loopEnabled}
+        loopRange={loopRange}
+        zoom={waveformZoom}
         onSeek={(timeSec) => {
           if (audioRef.current) audioRef.current.currentTime = timeSec;
           setCurrentTime(timeSec);
           updateAnalyzerDelay();
         }}
+        onLoopChange={(range) => setLoopRange(range)}
       />
 
       <div className="flex flex-wrap gap-2">
@@ -735,6 +773,19 @@ function AudioWorkspace({
           >
             {trackClick ? "Guide click on" : "Guide click off"}
           </Button>
+        )}
+        {result && (
+          <>
+            <Button size="sm" variant={loopEnabled ? "default" : "outline"} onClick={() => setLoopEnabled((value) => !value)}>
+              Loop {loopEnabled ? "on" : "off"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setLoopRange(defaultAudioLoopRange(result, selectedBpm))}>
+              Reset loop
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setWaveformZoom((zoom) => (zoom >= 8 ? 1 : zoom * 2))}>
+              Zoom {waveformZoom}x
+            </Button>
+          </>
         )}
         {result?.timeSignature && (
           <Button
@@ -1321,17 +1372,46 @@ function WaveformLane({
   durationSec,
   currentTime,
   markers,
+  loopEnabled,
+  loopRange,
+  zoom,
   onSeek,
+  onLoopChange,
 }: {
   peaks?: number[];
   durationSec: number;
   currentTime: number;
   markers: Marker[];
+  loopEnabled: boolean;
+  loopRange: { start: number; end: number };
+  zoom: number;
   onSeek: (timeSec: number) => void;
+  onLoopChange: (range: { start: number; end: number }) => void;
 }) {
   const laneRef = useRef<HTMLDivElement | null>(null);
+  const dragHandleRef = useRef<"start" | "end" | null>(null);
   const displayPeaks = peaks?.length ? peaks : Array.from({ length: 96 }, (_, i) => 0.15 + Math.abs(Math.sin(i * 0.37)) * 0.35);
   const playhead = durationSec > 0 ? (currentTime / durationSec) * 100 : 0;
+  const loopStart = durationSec > 0 ? (loopRange.start / durationSec) * 100 : 0;
+  const loopEnd = durationSec > 0 ? (loopRange.end / durationSec) * 100 : 0;
+
+  const timeFromPointer = (clientX: number) => {
+    if (!laneRef.current || durationSec <= 0) return 0;
+    const rect = laneRef.current.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left + laneRef.current.scrollLeft) / laneRef.current.scrollWidth));
+    return ratio * durationSec;
+  };
+
+  const updateHandle = (clientX: number) => {
+    const handle = dragHandleRef.current;
+    if (!handle) return;
+    const time = timeFromPointer(clientX);
+    if (handle === "start") {
+      onLoopChange({ start: Math.max(0, Math.min(time, loopRange.end - 0.08)), end: loopRange.end });
+    } else {
+      onLoopChange({ start: loopRange.start, end: Math.min(durationSec, Math.max(time, loopRange.start + 0.08)) });
+    }
+  };
 
   return (
     <div
@@ -1339,12 +1419,29 @@ function WaveformLane({
       className="relative overflow-x-auto rounded-md border border-border bg-background/45 p-3"
       onClick={(event) => {
         if (!laneRef.current || durationSec <= 0) return;
-        const rect = laneRef.current.getBoundingClientRect();
-        const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left + laneRef.current.scrollLeft) / laneRef.current.scrollWidth));
-        onSeek(ratio * durationSec);
+        if ((event.target as HTMLElement).closest("[data-loop-handle]")) return;
+        onSeek(timeFromPointer(event.clientX));
+      }}
+      onPointerMove={(event) => {
+        if (!dragHandleRef.current) return;
+        event.preventDefault();
+        updateHandle(event.clientX);
+      }}
+      onPointerUp={(event) => {
+        if (!dragHandleRef.current) return;
+        event.preventDefault();
+        dragHandleRef.current = null;
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
       }}
     >
-      <div className="relative flex h-28 min-w-[720px] items-center gap-0.5">
+      <div className="relative flex h-28 items-center gap-0.5" style={{ minWidth: `${720 * zoom}px` }}>
+        {loopEnabled && durationSec > 0 && (
+          <span
+            className="absolute inset-y-0 rounded-sm border border-accent/45 bg-accent/10"
+            style={{ left: `${loopStart}%`, width: `${Math.max(0.4, loopEnd - loopStart)}%` }}
+            aria-hidden
+          />
+        )}
         {displayPeaks.map((peak, index) => (
           <span
             key={index}
@@ -1352,6 +1449,26 @@ function WaveformLane({
             style={{ height: `${Math.max(6, peak * 92)}px` }}
           />
         ))}
+        {loopEnabled && durationSec > 0 && (["start", "end"] as const).map((handle) => {
+          const left = handle === "start" ? loopStart : loopEnd;
+          return (
+            <button
+              key={handle}
+              type="button"
+              data-loop-handle
+              className="absolute inset-y-0 z-10 w-4 -translate-x-1/2 cursor-ew-resize touch-none rounded-full border border-accent bg-background/90 shadow-[0_0_12px_hsl(var(--accent)/0.42)]"
+              style={{ left: `${left}%` }}
+              title={`Drag loop ${handle}`}
+              aria-label={`Drag loop ${handle}`}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                dragHandleRef.current = handle;
+                event.currentTarget.parentElement?.parentElement?.setPointerCapture(event.pointerId);
+              }}
+            />
+          );
+        })}
         <span className="absolute inset-y-0 w-px bg-accent shadow-[0_0_10px_hsl(var(--accent))]" style={{ left: `${playhead}%` }} />
         {markers.map((marker) => (
           <span
@@ -1366,6 +1483,7 @@ function WaveformLane({
       </div>
       <div className="mt-2 flex justify-between font-mono text-[10px] text-muted-foreground">
         <span>{formatClock(currentTime)}</span>
+        {loopEnabled && <span>loop {formatClock(loopRange.start)}-{formatClock(loopRange.end)} · {zoom}x</span>}
         <span>{formatClock(durationSec)}</span>
       </div>
     </div>
@@ -1554,6 +1672,16 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function clampBpm(value: number): number {
   return clamp(Math.round(value * 10) / 10, 20, 300);
+}
+
+function defaultAudioLoopRange(result: TempoAnalysisResult, bpm: number): { start: number; end: number } {
+  const numerator = result.timeSignature?.numerator ?? 4;
+  const denominator = result.timeSignature?.denominator ?? 4;
+  const beatSec = (60 / clampBpm(bpm || result.bpm)) * (4 / denominator);
+  const span = Math.max(0.5, beatSec * numerator * 2);
+  const start = Math.max(0, Math.min(result.downbeatSec, Math.max(0, result.durationSec - 0.05)));
+  const end = Math.min(result.durationSec, Math.max(start + 0.25, start + span));
+  return { start, end };
 }
 
 function formatClock(sec: number): string {

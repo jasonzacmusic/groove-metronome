@@ -102,7 +102,7 @@ type ToneContextWithRaw = Tone.Context & {
 const POLYRHYTHM_VOICE_FREQS = [760, 560, 430, 330];
 const POLYRHYTHM_VOICE_OSCILLATORS = ["triangle", "sine", "triangle", "sine"] as const;
 const AUDIO_UNLOCK_TIMEOUT_MS = 160;
-const SAMPLE_START_TIMEOUT_MS = 250;
+const SAMPLE_START_TIMEOUT_MS = 1800;
 
 function shortAudioWait() {
   return new Promise<void>((resolve) => window.setTimeout(resolve, AUDIO_UNLOCK_TIMEOUT_MS));
@@ -510,6 +510,7 @@ export function useMetronome() {
     if (vol === -Infinity) return;
     const players = samplePlayersRef.current;
     const sampleSet = SAMPLE_SOUND_SETS[beatSoundRef.current];
+    if (sampleSet && players && !players.loaded) return;
     const voiceKey = sampleSet?.beatNumbered && voiceToken && players?.has(voiceToken)
       ? voiceToken
       : sampleSet?.beatNumbered

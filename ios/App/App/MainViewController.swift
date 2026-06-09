@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import WebKit
 
 class MainViewController: CAPBridgeViewController {
     override func viewDidLoad() {
@@ -15,6 +16,8 @@ class MainViewController: CAPBridgeViewController {
     private func configureMetronomeWebView() {
         guard let scrollView = webView?.scrollView else { return }
 
+        webView?.configuration.allowsInlineMediaPlayback = true
+        webView?.configuration.mediaTypesRequiringUserActionForPlayback = []
         scrollView.bounces = false
         scrollView.alwaysBounceVertical = false
         scrollView.alwaysBounceHorizontal = false
