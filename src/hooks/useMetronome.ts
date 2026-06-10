@@ -31,6 +31,7 @@ import {
   type TripletAssistMode,
 } from "@/lib/metronome-types";
 import { triggerMetronomeHaptic } from "@/lib/haptics";
+import { ensureSilentAudioKeepalive, pauseSilentAudioKeepalive, recoverFrozenAudioContext } from "@/lib/ios-audio";
 import { clamp } from "@/lib/utils";
 
 export interface RampConfig {
@@ -826,6 +827,9 @@ export function useMetronome() {
   }, []);
 
   const start = useCallback(async (options?: StartOptions) => {
+    // Promote WebKit's audio session to "playback" so the click is audible
+    // even with the iPhone ring/silent switch on. Must run inside the tap.
+    ensureSilentAudioKeepalive();
     await unlockAudio();
     ensureSoundEngine();
     if (samplePlayersRef.current) {
@@ -871,6 +875,7 @@ export function useMetronome() {
     transport.cancel(0);
     transport.position = 0;
     silenceEngine();
+    pauseSilentAudioKeepalive();
     scheduleIdRef.current = null;
     if (practiceIntervalRef.current) {
       clearInterval(practiceIntervalRef.current);
@@ -964,20 +969,28 @@ export function useMetronome() {
   }, [unlockAudio, ensureSoundEngine]);
 
   useEffect(() => {
-    const resumeIfPlaying = () => {
-      if (!isPlayingRef.current || !unlockedOnceRef.current) return;
-      void unlockAudio();
+    const resumeAudio = () => {
+      if (!unlockedOnceRef.current) return;
+      // iOS can leave the context "running" but silently frozen after a call,
+      // Siri, alarm, or notification interruption. Always run the recovery
+      // check on return — not only while the transport is playing — so the
+      // next tap on Play produces sound immediately.
+      void recoverFrozenAudioContext(rawToneContext());
+      if (isPlayingRef.current) {
+        ensureSilentAudioKeepalive();
+        void unlockAudio();
+      }
     };
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") resumeIfPlaying();
+      if (document.visibilityState === "visible") resumeAudio();
     };
     document.addEventListener("visibilitychange", handleVisibility);
-    window.addEventListener("pageshow", resumeIfPlaying);
-    window.addEventListener("focus", resumeIfPlaying);
+    window.addEventListener("pageshow", resumeAudio);
+    window.addEventListener("focus", resumeAudio);
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
-      window.removeEventListener("pageshow", resumeIfPlaying);
-      window.removeEventListener("focus", resumeIfPlaying);
+      window.removeEventListener("pageshow", resumeAudio);
+      window.removeEventListener("focus", resumeAudio);
     };
   }, [unlockAudio]);
 

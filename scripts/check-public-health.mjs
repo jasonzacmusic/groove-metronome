@@ -62,52 +62,84 @@ async function checkRoute(route) {
   }
 }
 
+async function fetchWithHealthReport(route) {
+  const url = `${baseUrl}${route}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(url, {
+      cache: "no-store",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        "Cache-Control": "no-cache",
+      },
+    });
+    return {
+      ok: true,
+      response,
+      vercelId: response.headers.get("x-vercel-id") ?? "",
+    };
+  } catch (error) {
+    failures.push({
+      route,
+      status: "network-error",
+      vercelId: "",
+      excerpt: error instanceof Error ? error.message : String(error),
+    });
+    return {
+      ok: false,
+      response: null,
+      vercelId: "",
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 const results = [];
 for (const route of routes) {
   results.push(await checkRoute(route));
 }
 
-const root = await fetch(`${baseUrl}/`, {
-  cache: "no-store",
-  headers: { "Cache-Control": "no-cache" },
-});
-const html = await root.text();
-const entryAsset = html.match(/\/assets\/index-[A-Za-z0-9_-]+\.js/)?.[0];
-if (!entryAsset) {
-  failures.push({
-    route: "/",
-    status: "missing-entry-asset",
-    vercelId: root.headers.get("x-vercel-id") ?? "",
-    excerpt: "No hashed index asset found in HTML.",
-  });
-} else {
-  const entry = await fetch(`${baseUrl}${entryAsset}`, {
-    cache: "no-store",
-    headers: { "Cache-Control": "no-cache" },
-  });
-  const entryText = await entry.text();
-  const analyzerAsset = entryText.match(/AnalyzerPage-[A-Za-z0-9_-]+\.js/)?.[0];
-  if (!analyzerAsset) {
+const root = await fetchWithHealthReport("/");
+if (root.ok && root.response) {
+  const html = await root.response.text();
+  const entryAsset = html.match(/\/assets\/index-[A-Za-z0-9_-]+\.js/)?.[0];
+  if (!entryAsset) {
     failures.push({
-      route: entryAsset,
-      status: "missing-analyzer-asset",
-      vercelId: entry.headers.get("x-vercel-id") ?? "",
-      excerpt: "No AnalyzerPage chunk reference found.",
+      route: "/",
+      status: "missing-entry-asset",
+      vercelId: root.vercelId,
+      excerpt: "No hashed index asset found in HTML.",
     });
   } else {
-    const analyzer = await fetch(`${baseUrl}/assets/${analyzerAsset}`, {
-      cache: "no-store",
-      headers: { "Cache-Control": "no-cache" },
-    });
-    const analyzerText = await analyzer.text();
-    for (const phrase of ["Play with metronome", "weighted beat-grid", "Downbeat lock"]) {
-      if (!analyzerText.includes(phrase)) {
+    const entry = await fetchWithHealthReport(entryAsset);
+    if (entry.ok && entry.response) {
+      const entryText = await entry.response.text();
+      const analyzerAsset = entryText.match(/AnalyzerPage-[A-Za-z0-9_-]+\.js/)?.[0];
+      if (!analyzerAsset) {
         failures.push({
-          route: `/assets/${analyzerAsset}`,
-          status: "missing-current-build-phrase",
-          vercelId: analyzer.headers.get("x-vercel-id") ?? "",
-          excerpt: `Missing phrase: ${phrase}`,
+          route: entryAsset,
+          status: "missing-analyzer-asset",
+          vercelId: entry.vercelId,
+          excerpt: "No AnalyzerPage chunk reference found.",
         });
+      } else {
+        const analyzer = await fetchWithHealthReport(`/assets/${analyzerAsset}`);
+        if (analyzer.ok && analyzer.response) {
+          const analyzerText = await analyzer.response.text();
+          for (const phrase of ["Play with metronome", "weighted beat-grid", "Downbeat lock"]) {
+            if (!analyzerText.includes(phrase)) {
+              failures.push({
+                route: `/assets/${analyzerAsset}`,
+                status: "missing-current-build-phrase",
+                vercelId: analyzer.vercelId,
+                excerpt: `Missing phrase: ${phrase}`,
+              });
+            }
+          }
+        }
       }
     }
   }

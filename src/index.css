@@ -749,10 +749,6 @@ body.tempo-jog-active {
     min-height: 100dvh;
   }
 
-  .app-shell[data-active-tab="setlist"] .app-space-nav-mobile {
-    display: none;
-  }
-
   .mobile-masthead {
     position: sticky;
     top: 0;
@@ -1432,14 +1428,6 @@ body.tempo-jog-active {
 }
 
 @media (max-width: 1023px) and (orientation: landscape) and (max-height: 620px) {
-  .app-shell[data-active-tab="setlist"] .app-space-nav-mobile {
-    display: none;
-  }
-
-  .app-shell[data-active-tab="setlist"] .mobile-masthead {
-    display: none;
-  }
-
   .setlist-header-card {
     display: none;
   }

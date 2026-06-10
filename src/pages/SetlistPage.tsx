@@ -83,7 +83,7 @@ export function SetlistPage({ metronome, active = true }: SetlistPageProps) {
   const [setlist, setSetlist] = useState<SetlistState>(() => readSetlist());
   const [songName, setSongName] = useState("New song");
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [stageLock, setStageLock] = useState(true);
+  const [stageLock, setStageLock] = useState(false);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [concertSession, setConcertSession] = useState<ConcertSessionState>(() => readConcertSession());
   const [shareStatus, setShareStatus] = useState("");
@@ -787,6 +787,28 @@ function ConcertDeck({
     >
       <div className="stage-performance-topbar flex flex-wrap items-center justify-between gap-3">
         <span className="tiny-caps text-[10px] text-primary">Stage metronome</span>
+        {controlsLocked && (
+          <div className="stage-topbar-songnav inline-flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={onPrev}
+              disabled={songIndex <= 0}
+              aria-label="Previous song"
+              className="inline-flex min-h-10 min-w-12 items-center justify-center rounded-md border border-border bg-card/55 text-foreground transition-colors disabled:opacity-35"
+            >
+              <ChevronLeft className="size-5" />
+            </button>
+            <button
+              type="button"
+              onClick={onNext}
+              disabled={songIndex >= songCount - 1}
+              aria-label="Next song"
+              className="inline-flex min-h-10 min-w-12 items-center justify-center rounded-md border border-border bg-card/55 text-foreground transition-colors disabled:opacity-35"
+            >
+              <ChevronRight className="size-5" />
+            </button>
+          </div>
+        )}
         <button
           type="button"
           onClick={() => onStageLock(!stageLock)}
@@ -907,10 +929,10 @@ function ConcertDeck({
         </div>
 
         <div className="stage-transport-grid grid gap-2 sm:grid-cols-[0.8fr_1.45fr_0.8fr_0.8fr]">
-          <StageButton label="Previous" icon={<ChevronLeft className="size-6" />} disabled={controlsLocked || songIndex <= 0} onClick={onPrev} />
+          <StageButton label="Previous" icon={<ChevronLeft className="size-6" />} disabled={songIndex <= 0} onClick={onPrev} />
           <StagePlayButton playing={state.isPlaying} onToggle={onToggle} />
-          <StageButton label="Next" icon={<ChevronRight className="size-6" />} disabled={controlsLocked || songIndex >= songCount - 1} onClick={onNext} />
-          <StageButton label={tapPreview.bpm ? `${tapPreview.bpm}` : "Tap"} compact disabled={controlsLocked} onClick={tap} />
+          <StageButton label="Next" icon={<ChevronRight className="size-6" />} disabled={songIndex >= songCount - 1} onClick={onNext} />
+          <StageButton label={tapPreview.bpm ? `${tapPreview.bpm}` : "Tap"} compact onClick={tap} />
         </div>
 
         <StageClockStrip concertElapsedMs={concertElapsedMs} songElapsedMs={songElapsedMs} songLogs={songLogs} />
