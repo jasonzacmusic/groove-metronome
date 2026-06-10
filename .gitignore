@@ -12,3 +12,4 @@ plugin/build/
 $CODEX_HOME/
 build/
 .claude/
+android/keystore.properties
