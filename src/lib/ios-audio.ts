@@ -15,6 +15,27 @@
  *    detect the frozen clock and force a suspend/resume cycle.
  */
 
+type NavigatorWithAudioSession = Navigator & {
+  audioSession?: { type: string };
+};
+
+/**
+ * Apple's official switch-proofing: Safari 16.4+ exposes the AudioSession API.
+ * Setting the session type to "playback" makes Web Audio behave like music
+ * playback — it ignores the ring/silent switch entirely. This is the reliable
+ * path on modern iOS; the silent <audio> keep-alive below covers older builds.
+ */
+export function setPlaybackAudioSession(): void {
+  if (typeof navigator === "undefined") return;
+  const nav = navigator as NavigatorWithAudioSession;
+  if (!nav.audioSession) return;
+  try {
+    nav.audioSession.type = "playback";
+  } catch {
+    // Older WebKit builds expose the object but reject assignment.
+  }
+}
+
 function isAppleTouchDevice(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent || "";
@@ -24,9 +45,10 @@ function isAppleTouchDevice(): boolean {
   return classicIos || modernIpad;
 }
 
-function buildSilentWavDataUri(): string {
+function buildSilentWavBlobUrl(): string {
   // 0.08 s of 8 kHz mono 8-bit silence (~640 bytes) built at runtime so we
-  // do not ship a binary asset.
+  // do not ship a binary asset. Served as a blob: URL — iOS WebKit is more
+  // reliable playing blob media than data: URIs in <audio> elements.
   const sampleRate = 8000;
   const sampleCount = Math.round(sampleRate * 0.08);
   const dataSize = sampleCount;
@@ -49,10 +71,7 @@ function buildSilentWavDataUri(): string {
   writeAscii(36, "data");
   view.setUint32(40, dataSize, true);
   for (let i = 0; i < sampleCount; i++) view.setUint8(44 + i, 128); // 8-bit silence midpoint
-  let binary = "";
-  const bytes = new Uint8Array(buffer);
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return `data:audio/wav;base64,${btoa(binary)}`;
+  return URL.createObjectURL(new Blob([buffer], { type: "audio/wav" }));
 }
 
 let keepaliveElement: HTMLAudioElement | null = null;
@@ -63,11 +82,14 @@ let keepaliveElement: HTMLAudioElement | null = null;
  */
 export function ensureSilentAudioKeepalive(): void {
   if (typeof document === "undefined" || !isAppleTouchDevice()) return;
+  setPlaybackAudioSession();
   if (!keepaliveElement) {
     const el = document.createElement("audio");
-    el.src = buildSilentWavDataUri();
+    el.src = buildSilentWavBlobUrl();
     el.loop = true;
     el.preload = "auto";
+    el.muted = false;
+    el.volume = 1;
     el.setAttribute("playsinline", "");
     el.setAttribute("aria-hidden", "true");
     el.style.position = "absolute";

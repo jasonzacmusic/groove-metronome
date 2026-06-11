@@ -31,7 +31,7 @@ import {
   type TripletAssistMode,
 } from "@/lib/metronome-types";
 import { triggerMetronomeHaptic } from "@/lib/haptics";
-import { ensureSilentAudioKeepalive, pauseSilentAudioKeepalive, recoverFrozenAudioContext } from "@/lib/ios-audio";
+import { ensureSilentAudioKeepalive, pauseSilentAudioKeepalive, recoverFrozenAudioContext, setPlaybackAudioSession } from "@/lib/ios-audio";
 import { clamp } from "@/lib/utils";
 
 export interface RampConfig {
@@ -472,6 +472,7 @@ export function useMetronome() {
   }, []);
 
   const unlockAudio = useCallback(async () => {
+    setPlaybackAudioSession();
     await settleAudioUnlock(Tone.start());
     const context = rawToneContext();
     if (context && context.state !== "running") {
@@ -535,7 +536,6 @@ export function useMetronome() {
     if (vol === -Infinity) return;
     const players = samplePlayersRef.current;
     const sampleSet = SAMPLE_SOUND_SETS[beatSoundRef.current];
-    if (sampleSet && players && !players.loaded) return;
     const voiceKey = sampleSet?.beatNumbered && voiceToken && players?.has(voiceToken)
       ? voiceToken
       : sampleSet?.beatNumbered
@@ -859,6 +859,26 @@ export function useMetronome() {
     isPlayingRef.current = true;
     setIsPlaying(true);
     setPracticeSeconds(0);
+
+    // Watchdog: iOS can accept the whole start sequence yet leave the audio
+    // clock frozen (stale interrupted session). Verify the context is really
+    // ticking shortly after start and force a recovery + transport restart.
+    const watchdogContext = rawToneContext();
+    if (watchdogContext) {
+      const timeAtStart = watchdogContext.currentTime;
+      window.setTimeout(() => {
+        if (!isPlayingRef.current) return;
+        if (watchdogContext.state === "running" && watchdogContext.currentTime > timeAtStart) return;
+        void recoverFrozenAudioContext(watchdogContext).then(() => {
+          if (!isPlayingRef.current) return;
+          const t = Tone.getTransport();
+          t.stop();
+          t.position = 0;
+          beatRef.current = 0;
+          t.start("+0.05");
+        });
+      }, 450);
+    }
 
     practiceIntervalRef.current = window.setInterval(() => {
       setPracticeSeconds((s) => s + 1);
