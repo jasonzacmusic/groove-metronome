@@ -9,12 +9,12 @@ need a browser login or one missing credential. Do not rebuild anything.
 - All bug fixes are committed and pushed to `main` of
   `github.com/jasonzacmusic/groove-metronome`; the web app is live at
   https://metronome.nathanielschool.com
-- iOS archive: `~/Documents/Codex/groove-metronome/build/GrooveMetronome-1.0.4-b3.xcarchive`
-  (version 1.0.4, build 3, bundle ID `com.groovelab.metronome`, team `R3UNCZH45H`,
+- iOS archive: `~/Documents/Codex/groove-metronome/build/GrooveMetronome-1.0.4-b4.xcarchive`
+  (version 1.0.4, build 4, bundle ID `com.groovelab.metronome`, team `R3UNCZH45H`,
   signed with "Apple Distribution: Jason Zachariah").
-- Signed App Store IPA: `~/Desktop/Groove Metronome 1.0.4 Release/GrooveMetronome-1.0.4-b3.ipa`
+- Signed App Store IPA: `~/Desktop/Groove Metronome 1.0.4 Release/GrooveMetronome-1.0.4-b4.ipa`
 - Signed Play Store bundle: `~/Desktop/Groove Metronome 1.0.4 Release/GrooveMetronome-1.0.4-playstore.aab`
-  (versionName 1.0.4, versionCode 2, package `com.groovelab.metronome`, signed with the
+  (versionName 1.0.4, versionCode 3, package `com.groovelab.metronome`, signed with the
   upload keystore at `~/.android-keystores/groove-metronome-upload.keystore`;
   passwords in `~/.android-keystores/groove-metronome-upload.passwords.txt`).
 - App Store Connect API key file: `~/.appstoreconnect/private_keys/AuthKey_9BBP996H5K.p8`
@@ -32,11 +32,11 @@ need a browser login or one missing credential. Do not rebuild anything.
    **Issuer ID** at the top of the page.
 3. Upload the build from Terminal (the key file is already in place):
    ```bash
-   xcrun altool --upload-app -f "$HOME/Desktop/Groove Metronome 1.0.4 Release/GrooveMetronome-1.0.4-b3.ipa" \
+   xcrun altool --upload-app -f "$HOME/Desktop/Groove Metronome 1.0.4 Release/GrooveMetronome-1.0.4-b4.ipa" \
      -t ios --apiKey 9BBP996H5K --apiIssuer PASTE_ISSUER_ID_HERE
    ```
    If `altool` complains, fall back to Xcode: open Xcode → Window → Organizer →
-   select the "App" archive dated today (1.0.4 build 3) → Distribute App →
+   select the "App" archive dated today (1.0.4 build 4) → Distribute App →
    App Store Connect → Upload, all defaults.
 4. If NO App Store record exists yet for `com.groovelab.metronome`, create it first:
    App Store Connect → My Apps → "+" → New App → iOS, name **Groove Metronome by NSM**
@@ -82,7 +82,7 @@ need a browser login or one missing credential. Do not rebuild anything.
 
 - Never regenerate or replace `~/.android-keystores/groove-metronome-upload.keystore` —
   losing it would lock us out of Play updates.
-- Do not bump version numbers; 1.0.4 (iOS build 3, Android versionCode 2) is final for
+- Do not bump version numbers; 1.0.4 (iOS build 4, Android versionCode 3) is final for
   this release.
 - If a store rejects over the bundle ID/package name, report back instead of creating
   records under a different ID.
