@@ -891,7 +891,7 @@ function ConcertDeck({
             }}
             onTapTempo={tap}
             onToggleTransport={onToggle}
-            enableTempoJog={controlsLocked}
+            enableTempoJog
             onSetBpm={onSetBpm}
           />
           <StageSubdivisionApplyAllTool

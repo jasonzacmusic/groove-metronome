@@ -97,7 +97,17 @@ export function PolyrhythmWheel({
   const beatSpan = (2 * Math.PI) / Math.max(1, numerator);
   const readSubdivisionShortcut = useSubdivisionShortcut(bpm);
   const bpmRef = useRef(bpm);
-  const jogRef = useRef<{ pointerId: number; startX: number; startBpm: number; lastBpm: number; moved: boolean } | null>(null);
+  const jogRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    lastX: number;
+    lastT: number;
+    bpmFloat: number;
+    lastBpm: number;
+    moved: boolean;
+    pending: { kind: string; beat: number; pulse: number } | null;
+  } | null>(null);
   const lastHapticAtRef = useRef(0);
   const [jogPreview, setJogPreview] = useState<number | null>(null);
   bpmRef.current = bpm;
@@ -121,67 +131,120 @@ export function PolyrhythmWheel({
   }, [currentBeat, currentPulse, isPlaying, pattern, beatSpan, numerator]);
 
   const canJogTempo = enableTempoJog && Boolean(onSetBpm) && isTouchTempoDevice();
-  const beginJog = (event: PointerEvent<SVGSVGElement>) => {
+
+  // Touch gesture model: a finger drag ANYWHERE on the dial (segments, beat
+  // numbers, even the big center readout) jogs tempo. A tap with no movement
+  // performs the element's normal action, deferred to pointer-up so the two
+  // gestures never fight. Mouse input bypasses all of this and hits the
+  // elements' own handlers directly.
+  const beginJog = (event: PointerEvent<HTMLDivElement>) => {
     if (!canJogTempo || (event.pointerType !== "touch" && event.pointerType !== "pen")) return;
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest("[data-wheel-center='true']")) return;
+    const tapEl = target?.closest("[data-wheel-tap]") ?? null;
     event.preventDefault();
     event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Capture is best-effort; the move/up handlers match on pointerId anyway.
+    }
     jogRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
-      startBpm: Math.round(bpmRef.current),
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastT: performance.now(),
+      bpmFloat: bpmRef.current,
       lastBpm: Math.round(bpmRef.current),
       moved: false,
+      pending: tapEl
+        ? {
+            kind: tapEl.getAttribute("data-wheel-tap") ?? "",
+            beat: Number(tapEl.getAttribute("data-beat") ?? -1),
+            pulse: Number(tapEl.getAttribute("data-pulse") ?? -1),
+          }
+        : null,
     };
-    setJogPreview(Math.round(bpmRef.current));
     void beginTempoScrubHaptics();
   };
 
-  const moveJog = (event: PointerEvent<SVGSVGElement>) => {
+  const moveJog = (event: PointerEvent<HTMLDivElement>) => {
     const jog = jogRef.current;
     if (!jog || jog.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
-    const delta = event.clientX - jog.startX;
-    if (Math.abs(delta) < 5) return;
-    jog.moved = true;
-    const next = clamp(Math.round(jog.startBpm + delta / 3.2), 20, 300);
+    if (!jog.moved) {
+      if (Math.hypot(event.clientX - jog.startX, event.clientY - jog.startY) < 7) return;
+      jog.moved = true;
+      jog.lastX = event.clientX;
+      jog.lastT = performance.now();
+      setJogPreview(jog.lastBpm);
+      return;
+    }
+    const now = performance.now();
+    const dx = event.clientX - jog.lastX;
+    const dt = Math.max(1, now - jog.lastT);
+    jog.lastX = event.clientX;
+    jog.lastT = now;
+    // Velocity-sensitive gain: slow drags give fine 1-BPM control, fast
+    // swipes cover the whole range like spinning a real dial.
+    const speed = Math.abs(dx) / dt;
+    const pxPerBpm = speed > 1.4 ? 1.1 : speed > 0.7 ? 1.9 : 3.2;
+    jog.bpmFloat = clamp(jog.bpmFloat + dx / pxPerBpm, 20, 300);
+    const next = Math.round(jog.bpmFloat);
     if (next === jog.lastBpm) return;
     const amount = Math.abs(next - jog.lastBpm);
     jog.lastBpm = next;
     setJogPreview(next);
     onSetBpm?.(next);
-    const now = performance.now();
     if (now - lastHapticAtRef.current > 80) {
       lastHapticAtRef.current = now;
       void triggerTempoScrubHaptic(amount >= 3 ? "medium" : "light");
     }
   };
 
-  const endJog = (event: PointerEvent<SVGSVGElement>) => {
+  const finishJog = (event: PointerEvent<HTMLDivElement>, runPendingTap: boolean) => {
     const jog = jogRef.current;
     if (!jog || jog.pointerId !== event.pointerId) return;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    try {
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+    } catch {
+      // Stale pointer ids are harmless here.
     }
     jogRef.current = null;
+    if (runPendingTap && !jog.moved && jog.pending) {
+      const { kind, beat, pulse } = jog.pending;
+      if (kind === "center") {
+        if (onToggleTransport) onToggleTransport();
+        else onTapTempo();
+      } else if (kind === "beat" && beat >= 0) {
+        if (!applySubdivisionShortcut(beat)) onToggleBeat(beat);
+      } else if (kind === "pulse" && beat >= 0 && pulse >= 0) {
+        if (!applySubdivisionShortcut(beat)) onCyclePulseStrength(beat, pulse);
+      }
+    }
     window.setTimeout(() => setJogPreview(null), 420);
     void endTempoScrubHaptics();
   };
 
+  const endJog = (event: PointerEvent<HTMLDivElement>) => finishJog(event, true);
+  const cancelJog = (event: PointerEvent<HTMLDivElement>) => finishJog(event, false);
+
   return (
-    <div className="relative w-full max-w-[560px] mx-auto select-none">
+    <div
+      className="relative w-full max-w-[560px] mx-auto select-none touch-none"
+      onPointerDownCapture={beginJog}
+      onPointerMoveCapture={moveJog}
+      onPointerUpCapture={endJog}
+      onPointerCancelCapture={cancelJog}
+    >
       <svg
         viewBox={`0 0 ${VIEW} ${VIEW}`}
         className="block w-full h-auto touch-none"
         role="group"
         aria-label="Polyrhythm wheel"
-        onPointerDownCapture={beginJog}
-        onPointerMoveCapture={moveJog}
-        onPointerUpCapture={endJog}
-        onPointerCancelCapture={endJog}
       >
         <defs>
           <radialGradient id="wheel-core" cx="50%" cy="50%" r="50%">
@@ -214,6 +277,9 @@ export function PolyrhythmWheel({
               stroke="hsl(var(--border))"
               strokeWidth="0.5"
               style={{ cursor: "pointer" }}
+              data-wheel-tap="pulse"
+              data-beat={i}
+              data-pulse={0}
               onPointerDown={(event) => {
                 event.preventDefault();
                 if (!applySubdivisionShortcut(i)) onCyclePulseStrength(i, 0);
@@ -249,6 +315,9 @@ export function PolyrhythmWheel({
                   transition: "fill 120ms linear, stroke 120ms linear",
                   filter: active ? "drop-shadow(0 0 6px hsla(36, 84%, 64%, 0.55))" : undefined,
                 }}
+                data-wheel-tap="pulse"
+                data-beat={i}
+                data-pulse={p}
                 onPointerDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -270,6 +339,8 @@ export function PolyrhythmWheel({
             <g
               key={`lbl-${i}`}
               style={{ cursor: "pointer" }}
+              data-wheel-tap="beat"
+              data-beat={i}
               onPointerDown={(event) => {
                 event.preventDefault();
                 if (!applySubdivisionShortcut(i)) onToggleBeat(i);
@@ -354,6 +425,7 @@ export function PolyrhythmWheel({
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
         <button
           data-wheel-center="true"
+          data-wheel-tap="center"
           type="button"
           onPointerDown={(event) => {
             event.preventDefault();
@@ -362,7 +434,7 @@ export function PolyrhythmWheel({
             else onTapTempo();
           }}
           className={
-            "pointer-events-auto rounded-full px-8 py-7 text-center transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary " +
+            "pointer-events-auto touch-none rounded-full px-8 py-7 text-center transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary " +
             (isPlaying ? "bg-primary/10 hover:bg-primary/14" : "hover:bg-primary/5")
           }
           aria-label={isPlaying ? "Stop metronome from wheel center" : "Start metronome from wheel center"}
@@ -378,10 +450,10 @@ export function PolyrhythmWheel({
           <span className="tiny-caps mt-1 block text-[10px] text-muted-foreground/70">{isPlaying ? "Stop" : "Start"}</span>
         </button>
       </div>
-      {canJogTempo && (
+      {canJogTempo && jogPreview !== null && (
         <div className="pointer-events-none absolute inset-x-0 bottom-8 flex justify-center">
           <span className="rounded-full border border-primary/45 bg-background/82 px-3 py-1.5 font-mono text-xs text-primary shadow-lg shadow-background/30">
-            {jogPreview ? `${jogPreview} BPM` : "slide wheel"}
+            {jogPreview} BPM
           </span>
         </div>
       )}

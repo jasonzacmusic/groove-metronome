@@ -55,7 +55,7 @@ function isTouchTempoDevice() {
 
 export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false }: TempoScrubBarProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<{ pointerId: number; startX: number; startBpm: number; lastBpm: number; source: "pointer" | "touch" } | null>(null);
+  const dragRef = useRef<{ pointerId: number; startX: number; lastX: number; lastT: number; bpmFloat: number; lastBpm: number; source: "pointer" | "touch" } | null>(null);
   const unlockScrollRef = useRef<(() => void) | null>(null);
   const bpmRef = useRef(bpm);
   const onSetBpmRef = useRef(onSetBpm);
@@ -113,7 +113,9 @@ export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false
     dragRef.current = {
       pointerId,
       startX: clientX,
-      startBpm: Math.round(bpmRef.current),
+      lastX: clientX,
+      lastT: performance.now(),
+      bpmFloat: bpmRef.current,
       lastBpm: Math.round(bpmRef.current),
       source,
     };
@@ -139,10 +141,18 @@ export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false
   const moveDrag = (clientX: number) => {
     const drag = dragRef.current;
     if (!drag) return;
-    const delta = clientX - drag.startX;
-    if (Math.abs(delta) < 3) return;
-    const next = drag.startBpm + delta / 3.4;
-    const rounded = clamp(Math.round(next), 20, 300);
+    if (Math.abs(clientX - drag.startX) < 3 && drag.lastX === drag.startX) return;
+    const now = performance.now();
+    const dx = clientX - drag.lastX;
+    const dt = Math.max(1, now - drag.lastT);
+    drag.lastX = clientX;
+    drag.lastT = now;
+    // Velocity-sensitive gain: slow drags step 1 BPM at a time, fast swipes
+    // sweep the range like a real jog wheel.
+    const speed = Math.abs(dx) / dt;
+    const pxPerBpm = speed > 1.4 ? 1.1 : speed > 0.7 ? 1.9 : 3.4;
+    drag.bpmFloat = clamp(drag.bpmFloat + dx / pxPerBpm, 20, 300);
+    const rounded = Math.round(drag.bpmFloat);
     if (rounded === Math.round(drag.lastBpm)) return;
     setTempoWithCue(rounded, rounded > drag.lastBpm ? 1 : -1, Math.abs(rounded - drag.lastBpm));
     drag.lastBpm = rounded;
@@ -219,7 +229,11 @@ export function TempoScrubBar({ bpm, onSetBpm, disabled = false, compact = false
         if (!canUsePointer(event)) return;
         event.preventDefault();
         event.stopPropagation();
-        event.currentTarget.setPointerCapture(event.pointerId);
+        try {
+          event.currentTarget.setPointerCapture(event.pointerId);
+        } catch {
+          // Capture is best-effort; move/up handlers match on pointerId anyway.
+        }
         beginDrag(event.clientX, event.pointerId, "pointer");
       }}
       onPointerMove={(event) => {

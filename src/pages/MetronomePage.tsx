@@ -396,6 +396,7 @@ export function MetronomePage({ metronome, view, onViewChange, active = true }: 
             onCyclePulseStrength={cyclePulseStrength}
             onTap={tap}
             onToggle={toggle}
+            onSetBpm={setBpm}
           />
           <SubdivisionApplyAllTool
             subdivision={wheelApplyAllSubdivision}
@@ -818,6 +819,7 @@ function WheelStage({
   onCyclePulseStrength,
   onTap,
   onToggle,
+  onSetBpm,
 }: {
   view: MetronomeView;
   pattern: BeatPattern[];
@@ -832,6 +834,7 @@ function WheelStage({
   onCyclePulseStrength: (beatIndex: number, pulseIndex: number) => void;
   onTap: () => void;
   onToggle: () => void;
+  onSetBpm: (bpm: number) => void;
 }) {
   const activePolymeterLane = view === "polymeter" && polyrhythm.polymeterEnabled
     ? polyrhythm.polymeterLanes[Math.max(0, currentPoly)] ?? polyrhythm.polymeterLanes[0]
@@ -867,6 +870,8 @@ function WheelStage({
           onCyclePulseStrength={onCyclePulseStrength}
           onTapTempo={onTap}
           onToggleTransport={onToggle}
+          enableTempoJog
+          onSetBpm={onSetBpm}
         />
       </div>
       {view === "polymeter" && polyrhythm.polymeterEnabled && (
