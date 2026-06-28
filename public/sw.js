@@ -1,4 +1,4 @@
-const CACHE_VERSION = "groove-metronome-v3-audiosession";
+const CACHE_VERSION = "groove-metronome-v4-mobile-playback";
 const CORE_ASSETS = [
   "/",
   "/manifest.webmanifest",

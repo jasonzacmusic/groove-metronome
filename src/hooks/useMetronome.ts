@@ -127,7 +127,6 @@ type ToneContextWithRaw = Tone.Context & {
 const POLYRHYTHM_VOICE_FREQS = [760, 560, 430, 330];
 const POLYRHYTHM_VOICE_OSCILLATORS = ["triangle", "sine", "triangle", "sine"] as const;
 const AUDIO_UNLOCK_TIMEOUT_MS = 160;
-const SAMPLE_START_TIMEOUT_MS = 1800;
 
 function shortAudioWait() {
   return new Promise<void>((resolve) => window.setTimeout(resolve, AUDIO_UNLOCK_TIMEOUT_MS));
@@ -376,6 +375,8 @@ export function useMetronome() {
   const rampConfigRef = useRef(rampConfig);
   const hapticsEnabledRef = useRef(hapticsEnabled);
   const unlockedOnceRef = useRef(false);
+  const startInFlightRef = useRef(false);
+  const startTokenRef = useRef(0);
 
   useEffect(() => { patternRef.current = pattern; }, [pattern]);
   useEffect(() => { accentVolumesRef.current = accentVolumes; }, [accentVolumes]);
@@ -827,67 +828,83 @@ export function useMetronome() {
   }, []);
 
   const start = useCallback(async (options?: StartOptions) => {
-    // Promote WebKit's audio session to "playback" so the click is audible
-    // even with the iPhone ring/silent switch on. Must run inside the tap.
-    ensureSilentAudioKeepalive();
-    await unlockAudio();
-    ensureSoundEngine();
-    if (samplePlayersRef.current) {
-      await Promise.race([
-        Tone.loaded(),
-        new Promise<void>((resolve) => window.setTimeout(resolve, SAMPLE_START_TIMEOUT_MS)),
-      ]);
-    }
-    void unlockAudio();
-    beatRef.current = 0;
-    barCountRef.current = 0;
-    trainerPhraseRef.current = { index: -1, muted: false, mutedRun: 0, playRun: 0 };
-    setTrainerPhase("playing");
-    setCurrentBeat(-1);
-    setCurrentPulse(-1);
+    if (isPlayingRef.current || startInFlightRef.current) return;
+    startInFlightRef.current = true;
+    const startToken = ++startTokenRef.current;
 
-    const transport = Tone.getTransport();
-    transport.bpm.value = displayBpmToTransportBpm(bpmRef.current, timeSignatureRef.current.denominator);
-    transport.timeSignature = timeSignatureRef.current.numerator;
-    transport.cancel();
-    transport.position = 0;
+    try {
+      // Promote WebKit's audio session to "playback" so the click is audible
+      // even with the iPhone ring/silent switch on. Must run inside the tap.
+      ensureSilentAudioKeepalive();
+      await unlockAudio();
+      if (startToken !== startTokenRef.current) return;
 
-    scheduleLoop();
-    Tone.getContext().lookAhead = 0.02;
-    const delaySeconds = clamp(options?.delaySeconds ?? 0.01, 0.01, 8);
-    transport.start(`+${delaySeconds}`);
-    isPlayingRef.current = true;
-    setIsPlaying(true);
-    setPracticeSeconds(0);
+      ensureSoundEngine();
+      if (samplePlayersRef.current) {
+        void Tone.loaded().catch(() => undefined);
+      }
+      if (startToken !== startTokenRef.current) return;
 
-    // Watchdog: iOS can accept the whole start sequence yet leave the audio
-    // clock frozen (stale interrupted session). Verify the context is really
-    // ticking shortly after start and force a recovery + transport restart.
-    const watchdogContext = rawToneContext();
-    if (watchdogContext) {
-      const timeAtStart = watchdogContext.currentTime;
-      window.setTimeout(() => {
-        if (!isPlayingRef.current) return;
-        if (watchdogContext.state === "running" && watchdogContext.currentTime > timeAtStart) return;
-        void recoverFrozenAudioContext(watchdogContext).then(() => {
+      void unlockAudio();
+      beatRef.current = 0;
+      barCountRef.current = 0;
+      trainerPhraseRef.current = { index: -1, muted: false, mutedRun: 0, playRun: 0 };
+      setTrainerPhase("playing");
+      setCurrentBeat(-1);
+      setCurrentPulse(-1);
+
+      const transport = Tone.getTransport();
+      transport.bpm.value = displayBpmToTransportBpm(bpmRef.current, timeSignatureRef.current.denominator);
+      transport.timeSignature = timeSignatureRef.current.numerator;
+      transport.cancel();
+      transport.position = 0;
+
+      scheduleLoop();
+      Tone.getContext().lookAhead = 0.02;
+      const delaySeconds = clamp(options?.delaySeconds ?? 0.01, 0.01, 8);
+      transport.start(`+${delaySeconds}`);
+      isPlayingRef.current = true;
+      setIsPlaying(true);
+      setPracticeSeconds(0);
+
+      // Watchdog: iOS can accept the whole start sequence yet leave the audio
+      // clock frozen (stale interrupted session). Verify the context is really
+      // ticking shortly after start and force a recovery + transport restart.
+      const watchdogContext = rawToneContext();
+      if (watchdogContext) {
+        const timeAtStart = watchdogContext.currentTime;
+        window.setTimeout(() => {
           if (!isPlayingRef.current) return;
-          const t = Tone.getTransport();
-          t.stop();
-          t.position = 0;
-          beatRef.current = 0;
-          t.start("+0.05");
-        });
-      }, 450);
+          if (watchdogContext.state === "running" && watchdogContext.currentTime > timeAtStart) return;
+          void recoverFrozenAudioContext(watchdogContext).then(() => {
+            if (!isPlayingRef.current) return;
+            const t = Tone.getTransport();
+            t.stop();
+            t.position = 0;
+            beatRef.current = 0;
+            t.start("+0.05");
+          });
+        }, 450);
+      }
+
+      practiceIntervalRef.current = window.setInterval(() => {
+        setPracticeSeconds((s) => s + 1);
+      }, 1000);
+
+      if (rampEnabledRef.current) startRampCycle();
+    } catch {
+      isPlayingRef.current = false;
+      setIsPlaying(false);
+      silenceEngine();
+      pauseSilentAudioKeepalive();
+    } finally {
+      startInFlightRef.current = false;
     }
-
-    practiceIntervalRef.current = window.setInterval(() => {
-      setPracticeSeconds((s) => s + 1);
-    }, 1000);
-
-    if (rampEnabledRef.current) startRampCycle();
-  }, [unlockAudio, ensureSoundEngine, scheduleLoop, startRampCycle]);
+  }, [unlockAudio, ensureSoundEngine, scheduleLoop, startRampCycle, silenceEngine]);
 
   const stop = useCallback(() => {
+    startTokenRef.current++;
+    startInFlightRef.current = false;
     const transport = Tone.getTransport();
     isPlayingRef.current = false;
     setIsPlaying(false);
@@ -915,9 +932,9 @@ export function useMetronome() {
   }, [silenceEngine]);
 
   const toggle = useCallback(() => {
-    if (isPlaying) stop();
+    if (isPlayingRef.current || startInFlightRef.current) stop();
     else void start();
-  }, [isPlaying, start, stop]);
+  }, [start, stop]);
 
   useEffect(() => {
     if (isPlaying && !rampEnabled) {

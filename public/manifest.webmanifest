@@ -9,7 +9,7 @@
   "display_override": ["window-controls-overlay", "standalone", "browser"],
   "background_color": "#e6dbc4",
   "theme_color": "#ad5f30",
-  "orientation": "portrait",
+  "orientation": "any",
   "categories": ["music", "education", "productivity"],
   "icons": [
     { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
